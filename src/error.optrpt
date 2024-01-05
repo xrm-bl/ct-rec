@@ -1,0 +1,74 @@
+
+    レポート: プロシージャー間の最適化 [ipo]
+
+インテル(R) 64 対応インテル(R) C++ コンパイラー (インテル(R) 64 対応アプリケーション用) バージョン 19.0.8.324 ビルド 20200220
+
+コンパイラー・オプション: /O3 /DFloat=float /DWINDOWS /DFilter=Ramachandran /Qopt-report:5 /Qparallel /Qprec-div
+
+    レポート: プロシージャー間の最適化 [ipo]
+
+  プログラム全体 (SAFE) [いずれかのメソッド]: false
+  プログラム全体 (SEEN) [テーブルメソッド]: false
+  プログラム全体 (READ) [オブジェクト・リーダー・メソッド]: false
+
+インライン展開オプション値:
+  -Qinline-factor: 100
+  -Qinline-min-size: 30
+  -Qinline-max-size: 230
+  -Qinline-max-total-size: 2000
+  -Qinline-max-per-routine: 10000
+  -Qinline-max-per-compile: 500000
+
+インライン展開レポートの説明:
+   "sz" はルーチンの "size" を指します。ルーチンのサイズが小さいほど
+      インライン展開の可能性は高くなります。
+   "isz" はルーチンの "inlined size" を指します。これは呼び出した
+      ルーチンがインライン展開された場合の呼び出しルーチンのサイズです。
+      コンパイラーは、一般にルーチンをインライン展開してルーチンのサイズを
+      制限します。
+
+
+最適化レポート開始: Error()
+
+    レポート: プロシージャー間の最適化 [ipo]
+
+インライン展開レポート: (Error()) [21/1=2100.0%] F:\ct-rec\src\error.c(7,1)
+  -> EXTERN: (8,2) fputs(const char *, FILE *)
+  -> EXTERN: (8,12) __acrt_iob_func(unsigned int)
+  -> EXTERN: (8,21) fputc(int, FILE *)
+  -> EXTERN: (8,32) __acrt_iob_func(unsigned int)
+  -> EXTERN: (8,41) exit(int)
+
+
+    レポート: コード生成の最適化 [cg]
+
+F:\ct-rec\src\error.c(7,1):リマーク #34051: レジスター割り当て: [Error] F:\ct-rec\src\error.c:7
+
+    ハードウェア・レジスター
+        予約済み         :    2[ rsp rip]
+        利用可能         :   39[ rax rdx rcx rbx rbp rsi rdi r8-r15 mm0-mm7 zmm0-zmm15]
+        呼び出し先セーブ :   18[ rbx rbp rsi rdi r12-r15 xmm6-xmm15]
+        割り当て済み     :    4[ rax rdx rcx rbx]
+        
+    ルーチンの一時変数
+        合計             :      31
+            グローバル   :       5
+            ローカル     :      26
+        再生成           :       4
+        退避             :       0
+        
+    ルーチンスタック
+        変数             :       0 バイト*
+            読み取り     :       0 [0.00e+000 ~ 0.0%]
+            書き込み     :       0 [0.00e+000 ~ 0.0%]
+        退避             :       0 バイト*
+            読み取り     :       0 [0.00e+000 ~ 0.0%]
+            書き込み     :       0 [0.00e+000 ~ 0.0%]
+    
+    注
+    
+        *オーバーラップしない変数と退避はスタック空間を共有できるため、
+         合計スタックサイズはこれよりも小さくなる可能性があります。
+    
+
+===========================================================================

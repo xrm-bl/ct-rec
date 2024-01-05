@@ -1,0 +1,82 @@
+
+BIN	=../bin
+
+CC	=gcc -O3 -DLZW
+NVCC	=nvcc -O3
+CUDA	=/usr/local/cuda
+SDK	=/usr/local/NVIDIA_CUDA_SDK
+COMMON	=$(SDK)/common
+INCS	=-D_DEBUG -DUNIX -I$(CUDA)/include -I$(COMMON)/inc
+LIBS	=-L$(CUDA)/lib -L$(SDK)/lib -L$(COMMON)/lib/linux \
+	 -lcudart -lcufft -lcutil -lm
+
+ALL	=ct_cbp_cuda_c  ct_cbp_cuda_s  ct_cbp_cuda_r pct_cbp_cuda_c \
+	ct_rec_cuda_c  ct_rec_cuda_s  ct_rec_cuda_r \
+	ct_srec_cuda_c ct_srec_cuda_s ct_srec_cuda_r \
+	ct_srec_cuda_c_tif ct_srec_cuda_s_tif ct_srec_cuda_r_tif
+
+all:	$(ALL)
+
+install:	$(ALL)
+		cp $(ALL) $(BIN)
+		rm -f $(ALL) *.o
+
+clean:
+		rm -f $(ALL) *.o
+
+ECSSC	=error.c cell.h sif.h sif.c cbp.h
+ES	=error.c sif.c
+
+ct_srec_cuda_r_tif:	$(ECSSC) cbp.o ct_rec.c error.c ril.c ril.h cell.h
+	$(CC)  cbp.o ct_srec_tif.c error.c ril.c $(LIBS) -ltiff -o ct_srec_cuda_r_tif -DFilter=Ramachandran
+
+ct_srec_cuda_s_tif:	$(ECSSC) cbp.o ct_rec.c error.c ril.c ril.h cell.h
+	$(CC)  cbp.o ct_srec_tif.c error.c ril.c $(LIBS) -ltiff -o ct_srec_cuda_s_tif -DFilter=Shepp
+
+ct_srec_cuda_c_tif:	$(ECSSC) cbp.o ct_rec.c error.c ril.c ril.h cell.h
+	$(CC)  cbp.o ct_srec_tif.c error.c ril.c $(LIBS) -ltiff -o ct_srec_cuda_c_tif -DFilter=Chesler
+
+ct_srec_cuda_r:	$(ECSSC) cbp.o ct_rec.c error.c
+	$(CC)  cbp.o ct_srec.c error.c $(LIBS) -ltiff -o ct_srec_cuda_r -DFilter=Ramachandran
+
+ct_srec_cuda_s:	$(ECSSC) cbp.o ct_rec.c error.c
+	$(CC)  cbp.o ct_srec.c error.c $(LIBS) -ltiff -o ct_srec_cuda_s -DFilter=Shepp
+
+ct_srec_cuda_c:	$(ECSSC) cbp.o ct_rec.c error.c
+	$(CC)  cbp.o ct_srec.c error.c $(LIBS) -ltiff -o ct_srec_cuda_c -DFilter=Chesler
+
+ct_rec_cuda_r:	$(ECSSC) cbp.o ct_rec.c error.c
+	$(CC)  cbp.o ct_rec.c error.c $(LIBS) -ltiff -o ct_rec_cuda_r -DFilter=Ramachandran
+
+ct_rec_cuda_s:	$(ECSSC) cbp.o ct_rec.c error.c
+	$(CC)  cbp.o ct_rec.c error.c $(LIBS) -ltiff -o ct_rec_cuda_s -DFilter=Shepp
+
+ct_rec_cuda_c:	$(ECSSC) cbp.o ct_rec.c error.c
+	$(CC)  cbp.o ct_rec.c error.c $(LIBS) -ltiff -o ct_rec_cuda_c -DFilter=Chesler
+
+pct_cbp_cuda_c:	$(ECSSC) cbp.o pct_cbp.c
+	$(CC) $(ES) cbp.o pct_cbp.c $(LIBS) -o pct_cbp_cuda_c -DFilter=Chesler
+
+ct_cbp_cuda_c:	$(ECSSC) cbp.o ct_cbp.c
+	$(CC) $(ES) cbp.o ct_cbp.c $(LIBS) -o ct_cbp_cuda_c -DFilter=Chesler
+
+ct_cbp_cuda_s:	$(ECSSC) cbp.o ct_cbp.c
+	$(CC) $(ES) cbp.o ct_cbp.c $(LIBS) -o ct_cbp_cuda_s -DFilter=Shepp
+
+ct_cbp_cuda_r:	$(ECSSC) cbp.o ct_cbp.c
+	$(CC) $(ES) cbp.o ct_cbp.c $(LIBS) -o ct_cbp_cuda_r -DFilter=Ramachandran
+
+cbp.o:	cbp.h cbp.cu
+	$(NVCC) $(INCS) -c cbp.cu -o cbp.o
+
+cbp_wai.o:	cbp.h cbp.cu
+		$(NVCC) $(INCS) -c -DWAI cbp.cu -o cbp_wai.o
+
+hp2tg:	$(ECSSC) cbp_f.o hp2tg.c
+	$(CC) -DFloat=float $(ES) cbp_f.o hp2tg.c $(LIBS) -lm  -o hp2tg
+
+cbp_f.o:	cbp.h cbp.cu
+		$(NVCC) $(INCS) -c -DFloat=float cbp.cu -o cbp_f.o
+
+cbp_wai_f.o:	cbp.h cbp.cu
+		$(NVCC) $(INCS) -c -DWAI -DFloat=float cbp.cu -o cbp_wai_f.o

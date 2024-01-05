@@ -1,0 +1,190 @@
+
+BIN	=../bin
+
+CC	=gcc -O3 -D_GNU_SOURCE
+CC0	=gcc -O0 -D_GNU_SOURCE
+
+ALL	= ct_rec_t_c ct_rec_t_s ct_rec_t_r \
+	hp_tg_t_c hp_tg_t_s hp_tg_t_r \
+	p_rec_t_c p_rec_t_s p_rec_t_r \
+	sf_rec_t_c sf_rec_t_s sf_rec_t_r \
+	ofct_srec_t_c ofct_srec_t_s ofct_srec_t_r \
+	ofct_xy \
+	tif_f2i sinog pid stop_watch img_ave spl \
+	his_spl_K his_spl_E rec_stk his2img ct_prj_f \
+	ct_sub_f ct_prj_fc ict_prj_fc his_spl_tif\
+	rec_gf si_rar si_sir si_sir_a si_sir_s si_gf \
+	chk-rc set-rc tif_ave hp2DO his_ave \
+	act_spl tf_prj_f rec_crop gf_sd his2ti6
+
+all:	$(ALL)
+
+install:	$(ALL)
+		cp $(ALL) $(BIN)
+		rm -f $(ALL) *.o
+
+clean:
+		rm -f $(ALL) *.o
+
+ECSSC	=error.c cell.h sif.h sif.c cbp.h
+ES		=error.c sif.c
+ESF		=error.c sif_f_fast.c
+CBP		=cbp_thread_int.c
+CBPd	=cbp_thread_nai.c
+LPTM	=-lpthread -ltiff -lm
+LP		=-lpthread
+
+
+ct_rec_t_r:	$(ESF) $(CBP) ct_rec.c error.c
+	$(CC)  $(CBP) ct_rec.c -lm $(ESF) $(LP) -o ct_rec_t_r -DFilter=Ramachandran
+
+ct_rec_t_s:	$(ESF) $(CBP) ct_rec.c error.c
+	$(CC)  $(CBP) ct_rec.c -lm $(ESF) $(LP) -o ct_rec_t_s -DFilter=Shepp
+
+ct_rec_t_c:	$(ESF) $(CBP) ct_rec.c error.c
+	$(CC)  $(CBP) ct_rec.c -lm $(ESF) $(LP) -o ct_rec_t_c -DFilter=Chesler
+
+tf_rec_t_r:	$(ESF) $(CBP) tf_rec.c error.c
+	$(CC)  $(CBP) tf_rec.c -lm $(ESF) $(LP) -ltiff -o tf_rec_t_r -DFilter=Ramachandran
+
+tf_rec_t_s:	$(ESF) $(CBP) tf_rec.c error.c
+	$(CC)  $(CBP) tf_rec.c -lm $(ESF) $(LP) -ltiff -o tf_rec_t_s -DFilter=Shepp
+
+tf_rec_t_c:	$(ESF) $(CBP) tf_rec.c error.c
+	$(CC)  $(CBP) tf_rec.c -lm $(ESF) $(LP) -ltiff -o tf_rec_t_c -DFilter=Chesler
+
+hp_tg_t_r:	error.c $(CBP) hp_tg_ku.c
+	$(CC) -DFloat=float error.c $(CBP) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_r -DFilter=Ramachandran
+
+hp_tg_t_s:	error.c $(CBP) hp_tg_ku.c
+	$(CC) -DFloat=float error.c $(CBP) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_s -DFilter=Shepp
+
+hp_tg_t_c:	error.c $(CBP) hp_tg_ku.c
+	$(CC) -DFloat=float error.c $(CBP) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_c -DFilter=Chesler
+
+p_rec_t_r:	error.c $(CBP) p_rec.c
+	$(CC) -DFloat=float error.c $(CBP) p_rec.c $(LPTM) -o p_rec_t_r -DFilter=Ramachandran
+
+p_rec_t_s:	error.c $(CBP) p_rec.c
+	$(CC) -DFloat=float error.c $(CBP) p_rec.c $(LPTM) -o p_rec_t_s -DFilter=Shepp
+
+p_rec_t_c:	error.c $(CBP) p_rec.c
+	$(CC) -DFloat=float error.c $(CBP) p_rec.c $(LPTM) -o p_rec_t_c -DFilter=Chesler
+
+sf_rec_t_r:	$(CBPd) sf_rec.c error.c rl.c cbp_thread_nai.c
+	$(CC)  sf_rec.c error.c $(CBPd) $(LPTM) -o sf_rec_t_r -DFloat=double -DFilter=Ramachandran
+
+sf_rec_t_s:	$(CBPd) sf_rec.c error.c rl.c cbp_thread_nai.c
+	$(CC)  sf_rec.c error.c $(CBPd) $(LPTM) -o sf_rec_t_s -DFloat=double -DFilter=Shepp
+
+sf_rec_t_c:	$(CBPd) sf_rec.c error.c rl.c cbp_thread_nai.c
+	$(CC)  sf_rec.c error.c $(CBPd) $(LPTM) -o sf_rec_t_c -DFloat=double -DFilter=Chesler
+
+ofct_srec_t_r:	$(CBP) ofct_srec.c error.c rl.c rhp.c
+	$(CC)  ofct_srec.c rhp.c rl.c error.c $(CBP) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_r -DFilter=Ramachandran
+
+ofct_srec_t_s:	$(CBP) ofct_srec.c error.c rl.c rhp.c
+	$(CC)  ofct_srec.c rhp.c rl.c error.c $(CBP) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_s -DFilter=Shepp
+
+ofct_srec_t_c:	$(CBP) ofct_srec.c error.c rl.c rhp.c
+	$(CC)  ofct_srec.c rhp.c rl.c error.c $(CBP) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_c -DFilter=Chesler
+
+ofct_xy:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_xy.c sif_f.h
+	$(CC) oct_xy.c rhp.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o ofct_xy
+
+tif_f2i:	tif_f2i.c rif_f.c
+	$(CC) tif_f2i.c rif_f.c -ltiff -lm -o tif_f2i
+
+rec_crop:	rec_crop.c rif_f.c
+	$(CC) rec_crop.c rif_f.c -ltiff -lm -o rec_crop
+
+sinog:	sinog.c $(ESF)
+	$(CC) sinog.c $(ESF) -lm -o sinog
+
+pid:	pid.c
+	$(CC) pid.c -lm -o pid
+
+stop_watch:	stop_watch.c
+	$(CC) stop_watch.c -lm -o stop_watch
+
+img_ave:	img_ave.c
+	$(CC) img_ave.c -lm -o img_ave
+
+spl:		spl.c
+	$(CC) spl.c -lm -o spl
+
+his_spl_K:	his_spl_K.c
+	$(CC0) his_spl_K.c -lm -o his_spl_K
+
+his_spl_E:	his_spl_E.c
+	$(CC0) his_spl_E.c -lm -o his_spl_E
+
+his_spl_tif:	his_spl_tif.c
+	$(CC0) his_spl_tif.c -lm -ltiff -o his_spl_tif
+
+rec_stk:	rec_stk.c
+	$(CC) rec_stk.c -lm -o rec_stk
+
+chk-rc:	chk-rc.c
+	$(CC) chk-rc.c -lm -o chk-rc
+
+set-rc:	set-rc.c
+	$(CC) set-rc.c -lm -o set-rc
+
+his2img:	his2img.c
+	$(CC0) his2img.c -lm -o his2img
+
+ct_prj_f:	ct_prj_f.c
+	$(CC) ct_prj_f.c -lm -ltiff -o ct_prj_f
+
+ct_sub_f:	ct_sub_f.c
+	$(CC) ct_sub_f.c -lm -ltiff -o ct_sub_f
+
+ict_prj_fc:	ict_prj_fc.c
+	$(CC) ict_prj_fc.c -lm -ltiff -o ict_prj_fc
+
+ct_prj_fc:	ct_prj_fc.c
+	$(CC) ct_prj_fc.c -lm -ltiff -o ct_prj_fc
+
+tf_prj_f:	tf_prj_f.c rif.c
+	$(CC) tf_prj_f.c rif.c -lm -ltiff -o tf_prj_f
+
+rec_gf:	rec_gf.c fft.c rif_f.c
+	$(CC) rec_gf.c fft.c rif_f.c -lm -ltiff -o rec_gf
+
+si_rar: si_rar.c error.c rif.c csi.c rsi.c sif.c
+	$(CC) si_rar.c error.c rif.c csi.c rsi.c sif.c -lm -ltiff -o si_rar
+
+si_sir: si_sir.c error.c rif.c csi.c rsi.c sif.c
+	$(CC) si_sir.c error.c rif.c csi.c rsi.c sif.c -lm -ltiff -o si_sir
+
+si_sir_a: si_sir_a.c error.c rif.c csi.c rsi.c
+	$(CC) si_sir_a.c error.c rif.c csi.c rsi.c -lm -ltiff -o si_sir_a
+
+si_sir_s: si_sir_s.c error.c rif.c csi.c rsi.c
+	$(CC) si_sir_s.c error.c rif.c csi.c rsi.c -lm -ltiff -o si_sir_s
+
+si_gf:	error.c fft.h fft.c csi.h csi.c cell.h rif.h rif.c sif.h sif.c si_gf.c
+	$(CC) error.c fft.c csi.c rif.c sif.c si_gf.c -lm -o si_gf
+
+tif_ave:	tif_ave.c rif.c
+	$(CC) tif_ave.c rif.c -lm -ltiff -o tif_ave
+
+his_ave:	his_ave.c sif.c
+	$(CC) his_ave.c sif.c -lm -o his_ave
+
+hp2DO:	cell.h sif.h sif.c hp2DO.c
+	$(CC)  hp2DO.c sif.c -O3 -fopenmp -lm -o hp2DO
+
+act_spl:	act_spl.c
+	$(CC) act_spl.c -lm -o act_spl
+
+gf_sd:	error.c cell.h rif.h rif.c sif.h sif.c gf_sd.c
+	$(CC) error.c rif.c sif.c gf_sd.c -lm -o gf_sd
+
+gf_fd:	error.c fft.h fft.c cell.h rif.h rif.c sif.h sif.c gf_fd.c
+	$(CC) error.c fft.c rif.c sif.c gf_fd.c -lm -o gf_fd
+
+his2tif6:	his2tif6.c
+	$(CC) his2tif6.cc -lm -ltiff -o his2tif6
+

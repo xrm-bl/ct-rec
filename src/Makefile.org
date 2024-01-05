@@ -1,0 +1,51 @@
+
+CC	=gcc -O3 -DLZW
+NVCC	=nvcc -O3
+CUDA	=/usr/local/cuda
+SDK	=${HOME}/NVIDIA_CUDA_SDK
+COMMON	=$(SDK)/common
+INCS	=-D_DEBUG -DUNIX -I$(CUDA)/include -I$(COMMON)/inc
+LIBS	=-L$(CUDA)/lib -L$(SDK)/lib -L$(COMMON)/lib/linux \
+	 -lcudart -lcufft -lcutil -lm
+
+all:	sg2tg sg2tgs sgs2tgs sg2tg_wai sg2tgs_wai sgs2tgs_wai hp2tg hp2tg_wai
+
+ECSSC	=error.c cell.h sif.h sif.c cbp.h
+ES	=error.c sif.c
+
+sg2tg:	$(ECSSC) cbp.o sg2tg.c
+	$(CC) $(ES) cbp.o sg2tg.c $(LIBS) -o sg2tg
+
+sg2tgs:	$(ECSSC) cbp.o sg2tgs.c
+	$(CC) $(ES) cbp.o sg2tgs.c $(LIBS) -o sg2tgs
+
+sgs2tgs:	$(ECSSC) cbp.o sgs2tgs.c
+		$(CC) $(ES) cbp.o sgs2tgs.c $(LIBS) -o sgs2tgs
+
+cbp.o:	cbp.h cbp.cu
+	$(NVCC) $(INCS) -c cbp.cu -o cbp.o
+
+sg2tg_wai:	$(ECSSC) cbp_wai.o sg2tg.c
+		$(CC) $(ES) cbp_wai.o sg2tg.c $(LIBS) -o sg2tg_wai
+
+sg2tgs_wai:	$(ECSSC) cbp_wai.o sg2tgs.c
+		$(CC) $(ES) cbp_wai.o sg2tgs.c $(LIBS) -o sg2tgs_wai
+
+sgs2tgs_wai:	$(ECSSC) cbp_wai.o sgs2tgs.c
+		$(CC) $(ES) cbp_wai.o sgs2tgs.c $(LIBS) -o sgs2tgs_wai
+
+cbp_wai.o:	cbp.h cbp.cu
+		$(NVCC) $(INCS) -c -DWAI cbp.cu -o cbp_wai.o
+
+hp2tg:	$(ECSSC) cbp_f.o hp2tg.c
+	$(CC) -DFloat=float $(ES) cbp_f.o hp2tg.c $(LIBS) -lm  -o hp2tg
+
+cbp_f.o:	cbp.h cbp.cu
+		$(NVCC) $(INCS) -c -DFloat=float cbp.cu -o cbp_f.o
+
+hp2tg_wai:	$(ECSSC) cbp_wai_f.o hp2tg.c
+		$(CC) -DFloat=float \
+		      $(ES) cbp_wai_f.o hp2tg.c $(LIBS) -lm -o hp2tg_wai
+
+cbp_wai_f.o:	cbp.h cbp.cu
+		$(NVCC) $(INCS) -c -DWAI -DFloat=float cbp.cu -o cbp_wai_f.o
