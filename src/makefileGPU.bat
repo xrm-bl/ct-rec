@@ -10,6 +10,7 @@ set    CUFFT="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\lib\x64\c
 set CUDAINCL="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include"
 
 
+
 rem normal CT reconstruction
 rem GPU
 nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Ramachandran
