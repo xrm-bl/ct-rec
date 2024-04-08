@@ -13,6 +13,7 @@ LP	=-lpthread
 
 ALL	= ct_rec_g_c ct_rec_g_s ct_rec_g_r \
 	tf_rec_g_c tf_rec_g_s tf_rec_g_r \
+	otf_rec_g_c otf_rec_g_s otf_rec_g_r \
 	hp_tg_g_c hp_tg_g_s hp_tg_g_r \
 	p_rec_g_c p_rec_g_s p_rec_g_r \
 	ofct_srec_g_c ofct_srec_g_s ofct_srec_g_r \
@@ -75,6 +76,15 @@ ofct_srec_g_s:	cbp_s.o ofct_srec.c rhp.c rl.c error.c
 
 ofct_srec_g_c:	cbp_c.o ofct_srec.c rhp.c rl.c error.c 
 	$(CC) ofct_srec.c rhp.c rl.c error.c cbp_c.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o ofct_srec_g_c -DFilter=Chesler
+
+otf_rec_g_r:	$(ESF) cbp_r.o otf_rec.c error.c
+	$(CC) otf_rec.c $(ESF) cbp_r.o $(LIBS) -ltiff -o otf_rec_g_r -DFilter=Ramachandran
+
+otf_rec_g_s:	$(ESF) cbp_s.o otf_rec.c error.c
+	$(CC) otf_rec.c $(ESF) cbp_s.o $(LIBS) -ltiff -o otf_rec_g_s -DFilter=Shepp
+
+otf_rec_g_c:	$(ESF) cbp_c.o otf_rec.c error.c
+	$(CC) otf_rec.c $(ESF) cbp_c.o $(LIBS) -ltiff -o otf_rec_g_c -DFilter=Chesler
 
 cbp_r.o:	cu.h cbp.h cbp.cu
 	$(NVCC) $(INCS) -c -use_fast_math cbp.cu -o cbp_r.o -DFilter=Ramachandran

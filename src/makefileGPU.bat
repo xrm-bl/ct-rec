@@ -10,7 +10,6 @@ set    CUFFT="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\lib\x64\c
 set CUDAINCL="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include"
 
 
-
 rem normal CT reconstruction
 rem GPU
 nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Ramachandran
@@ -53,6 +52,16 @@ nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Sh
 
 nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Chesler
 %CC2% /Feofct_srec_g_c.exe ofct_srec.c error.c rhp.c rl.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
+
+nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Ramachandran
+%CC2% /Feotf_rec_g_r.exe otf_rec.c error.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
+nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Shepp
+%CC2% /Feotf_rec_g_s.exe  otf_rec.c error.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
+nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Chesler
+%CC2% /Feotf_rec_g_c.exe  otf_rec.c error.c libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
 rem p image CT reconstruction

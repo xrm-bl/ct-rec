@@ -30,6 +30,9 @@ rem CPU
 %CC2% /Feofct_srec_t_s.exe /DFloat=float /DONLY_CT_VIEWS error.c rhp.c rl.c %CBP% libtiff.lib ofct_srec.c /DFilter=Shepp
 %CC2% /Feofct_srec_t_c.exe /DFloat=float /DONLY_CT_VIEWS error.c rhp.c rl.c %CBP% libtiff.lib ofct_srec.c /DFilter=Chesler
 
+%CC2% /Feotf_rec_t_r.exe otf_rec.c error.c libtiff.lib %CBP% /DFilter=Ramachandran
+%CC2% /Feotf_rec_t_s.exe otf_rec.c error.c libtiff.lib %CBP% /DFilter=Shepp
+%CC2% /Feotf_rec_t_c.exe otf_rec.c error.c libtiff.lib %CBP% /DFilter=Chesler
 
 rem guess rotation center for offset CT
 %CC2% /Feofct_xy.exe /DONLY_CT_VIEWS error.c rhp.c msd.c %SIF_F% oct_xy.c

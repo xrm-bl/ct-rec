@@ -5,6 +5,8 @@ CC	=gcc -O3 -D_GNU_SOURCE
 CC0	=gcc -O0 -D_GNU_SOURCE
 
 ALL	= ct_rec_t_c ct_rec_t_s ct_rec_t_r \
+	tf_rec_t_c tf_rec_t_s tf_rec_t_r \
+	otf_rec_t_c otf_rec_t_s otf_rec_t_r \
 	hp_tg_t_c hp_tg_t_s hp_tg_t_r \
 	p_rec_t_c p_rec_t_s p_rec_t_r \
 	sf_rec_t_c sf_rec_t_s sf_rec_t_r \
@@ -15,7 +17,7 @@ ALL	= ct_rec_t_c ct_rec_t_s ct_rec_t_r \
 	ct_sub_f ct_prj_fc ict_prj_fc his_spl_tif\
 	rec_gf si_rar si_sir si_sir_a si_sir_s si_gf \
 	chk-rc set-rc tif_ave hp2DO his_ave \
-	act_spl tf_prj_f rec_crop gf_sd his2ti6
+	act_spl tf_prj_f rec_crop gf_sd his2tif6
 
 all:	$(ALL)
 
@@ -91,6 +93,15 @@ ofct_srec_t_c:	$(CBP) ofct_srec.c error.c rl.c rhp.c
 
 ofct_xy:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_xy.c sif_f.h
 	$(CC) oct_xy.c rhp.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o ofct_xy
+
+otf_rec_t_r:	$(ESF) $(CBP) otf_rec.c error.c
+	$(CC)  $(CBP) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_r -DFilter=Ramachandran
+
+otf_rec_t_s:	$(ESF) $(CBP) otf_rec.c error.c
+	$(CC)  $(CBP) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_s -DFilter=Shepp
+
+otf_rec_t_c:	$(ESF) $(CBP) otf_rec.c error.c
+	$(CC)  $(CBP) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_c -DFilter=Chesler
 
 tif_f2i:	tif_f2i.c rif_f.c
 	$(CC) tif_f2i.c rif_f.c -ltiff -lm -o tif_f2i
@@ -186,5 +197,5 @@ gf_fd:	error.c fft.h fft.c cell.h rif.h rif.c sif.h sif.c gf_fd.c
 	$(CC) error.c fft.c rif.c sif.c gf_fd.c -lm -o gf_fd
 
 his2tif6:	his2tif6.c
-	$(CC) his2tif6.cc -lm -ltiff -o his2tif6
+	$(CC) his2tif6.c -lm -ltiff -o his2tif6
 

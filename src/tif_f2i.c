@@ -129,7 +129,7 @@ void Read32TiffFile(char* rname, int iHead)
 
 int	main(int argc, char *argv[])
 {
-	int		dBPS, x1, y1, x2, y2, x, y, x0, y0, cNx, cNy;
+	int		dBPS, x1, y1, x2, y2, x, y, x0, y0, cNx, cNy, Nx_min, Ny_min;
 	long	i, j, dml;
 	long	l_sta, l_dst;
 	double	d_min, d_max, ccc, dmd, dmmin, dmmax;
@@ -144,17 +144,27 @@ int	main(int argc, char *argv[])
 
 	
 	//	printf("%d\n", argc);
-	if (argc == 4 || argc == 6 || argc == 10) {
+	if (argc == 4 || argc == 6 || argc == 8 || argc == 10) {
 		l_sta = -1;
 		l_dst = -1;
 		d_min = 10000.;
 		d_max = -10000.;
-		for (i = 0; i<99999; i++) {
+		Nx_min=100000;
+		Ny_min=100000;
+		int s_layer = 0;
+		int e_layer = 99999;
+		if (argc == 8) {
+			s_layer = atoi(argv[6]);
+			e_layer = atoi(argv[7]);
+		}
+		//for (i = 0; i<99999; i++) {
+		for (i = s_layer; i<=e_layer; i++) {
 			sprintf(fh, "%s/rec%05ld.tif", argv[2], i);
 //						fprintf(stderr,"%s\r",fh);
 			if (existFile(fh)) {
 				if (l_sta == -1) {
 					l_sta = i;
+					l_dst = i;
 				}
 				else {
 					l_dst = i;
@@ -163,6 +173,8 @@ int	main(int argc, char *argv[])
 				if (ReadImageFile_Float(fh,&Nx,&Ny,NULL,&desc))
 	    			(void)fprintf(stderr, "%s : containing non-float pixel values (warning).\n", fh);
 				sscanf(desc, "%f\t%f\t%d\t%f\t%lf\t%lf", &dmd, &dmd, &dml, &dmd, &dmmin, &dmmax);
+				if (Nx_min>Nx) Nx_min = Nx;
+				if (Ny_min>Ny) Ny_min = Ny;
 				if (d_min>dmmin) d_min = dmmin;
 				if (d_max<dmmax) d_max = dmmax;
 				fprintf(stderr, "%s\r", fh);
@@ -173,9 +185,9 @@ int	main(int argc, char *argv[])
 		//	fprintf(stderr,"%d\t%d\t%lf\t%lf\n", l_sta, l_dst, d_min, d_max);
 		x1 = 0;
 		y1 = 0;
-		x2 = Nx-1;
-		y2 = Ny-1;
-		if (argc == 6) {
+		x2 = Nx_min-1;
+		y2 = Ny_min-1;
+		if (argc == 6 || argc == 8) {
 			d_min = atof(argv[4]);
 			d_max = atof(argv[5]);
 			if (d_min>d_max) Error("d range");
@@ -192,7 +204,7 @@ int	main(int argc, char *argv[])
 		}
 	}
 	else {
-		fputs("usage : tif_f2i bit rec/ out/ (LACmin LACmax) (x1 y1 x2 y2)\n", stderr);
+		fputs("usage : tif_f2i bit rec/ out/ ((LACmin LACmax) || (LACmin LACmax start-layer end-layer) || (LACmin LACmax) (x1 y1 x2 y2))\n", stderr);
 		exit(1);
 	}
 
