@@ -18,8 +18,8 @@
 #define M_PI				3.1415926535897932385
 #endif
 #define INTEL
-#define MAX_SHOT			10010
-#define MAXPIXL				18001
+#define MAX_SHOT			50010
+#define MAXPIXL				25001
 
 /*----------------------------------------------------------------------*/
 
@@ -184,6 +184,7 @@ int read_log()
 	fclose(f);
 	if(n_total<1000) iFlag = 0;
 	if(n_total>=1000) iFlag = 1;
+	if(n_total>=10000) iFlag = 2;
 	if(n_total>MAX_SHOT){
 		fprintf(stderr, "Too many projections!");
 		return(1);
@@ -225,6 +226,7 @@ long		ln;
 //IIO[j] and IIO[j+1] are opened
 		if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, II0[j]);
 		if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, II0[j]);
+		if(iFlag==2) sprintf(fname, "%s%05d.tif", flhead, II0[j]);
 		if ((i = Read16TiffFileLine(fname, 0)) != 0){
 			printf("something wrong -- return value is %d(II01)", i);
 			return -1;
@@ -233,6 +235,7 @@ long		ln;
 //		printf("\n");
 		if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, II0[j+1]);
 		if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, II0[j+1]);
+		if(iFlag==2) sprintf(fname, "%s%05d.tif", flhead, II0[j+1]);
 		if ((i = Read16TiffFileLine(fname, 0)) != 0){
 			printf("something wrong -- return value is %d(II02)", i);
 			return -1;
@@ -254,6 +257,7 @@ long		ln;
 			// obtain p(x) from a[jx], b[jx] using shottime[k]
 			if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, k);
 			if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, k);
+			if(iFlag==2) sprintf(fname, "%s%05d.tif", flhead, k);
 			if ((i = Read16TiffFileLine(fname, 0)) != 0){
 				printf("something wrong -- return value is %d(I)", i);
 				return -1;
@@ -339,6 +343,7 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 //I_0 file
 	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, 1);
 	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, 1);
+	if(iFlag==2) sprintf(fname, "%s%05d.tif", flhead, 1);
 	if ((i = Read16TiffFileLine(fname, 0)) != 0){
 		printf("something wrong -- return value is %d(II01)", i);
 		return -1;
@@ -348,6 +353,7 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 // zero degree file(transmitted)
 	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, 2);
 	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, 2);
+	if(iFlag==2) sprintf(fname, "%s%05d.tif", flhead, 2);
 	if ((i = Read16TiffFileLine(fname, 0)) != 0){
 		printf("something wrong -- return value is %d(II01)", i);
 		return -1;
@@ -357,6 +363,7 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 //I_0 file
 	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, n_total-1);
 	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, n_total-1);
+	if(iFlag==2) sprintf(fname, "%s%05d.tif", flhead, n_total-1);
 	if ((i = Read16TiffFileLine(fname, 0)) != 0){
 		printf("something wrong -- return value is %d(II01)", i);
 		return -1;
@@ -366,6 +373,7 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 //  180 degree file(transmitted)
 	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, n_total);
 	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, n_total);
+	if(iFlag==2) sprintf(fname, "%s%05d.tif", flhead, n_total);
 	if ((i = Read16TiffFileLine(fname, 0)) != 0){
 		printf("something wrong -- return value is %d(II01)", i);
 		return -1;

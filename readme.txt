@@ -197,7 +197,10 @@
       カッコ内の引数指定にてcropが可能
       
    h. 180deg スキャンから投影像を作成
-      ct_prj_f HiPic/ prj/
+      1. 普通の規格化の場合
+         ct_prj_f HiPic/ prj/
+      2. トロトロスキャン(インテリア、ローカル、トラバターとも)の場合
+         ict_prj_fc HiPic/ prj/
 
    i. 32bit tiff からヒストグラム
       tif2hst rec/ (x1 y1 x2 y2)

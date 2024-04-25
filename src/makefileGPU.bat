@@ -5,9 +5,9 @@ set   CC2=cl /DWINDOWS /O2
 set   CCX=cl /DWINDOWS /Ox
 set   CBP=cbp_thread_int.c
 set SIF_F=sif_f_fast.c
-set   CUDART="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\lib\x64\cudart.lib"
-set    CUFFT="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\lib\x64\cufft.lib"
-set CUDAINCL="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\include"
+set   CUDART="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64\cudart.lib"
+set    CUFFT="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\lib\x64\cufft.lib"
+set CUDAINCL="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\include"
 
 
 rem normal CT reconstruction

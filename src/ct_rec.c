@@ -99,6 +99,7 @@ int read_hipic(int nfq, short *data, Header *h, long ln)
 	else{
 		if(iFlag==0) sprintf(fname, "%s%03d.img", flhead, nfq);
 		if(iFlag==1) sprintf(fname, "%s%04d.img", flhead, nfq);
+		if(iFlag==2) sprintf(fname, "%s%05d.img", flhead, nfq);
 	}
 	
 //open input files
@@ -220,6 +221,7 @@ int read_log()
 	fclose(f);
 	if(n_total<1000) iFlag = 0;
 	if(n_total>=1000) iFlag = 1;
+	if(n_total>=10000) iFlag = 2;
 	if(n_total>MAX_SHOT){
 		fprintf(stderr, "Too many projections!");
 		return(1);

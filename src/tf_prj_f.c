@@ -132,6 +132,7 @@ int read_log(char *dirin)
 	fclose(f);
 	if(n_total<1000) iFlag = 0;
 	if(n_total>=1000) iFlag = 1;
+	if(n_total>=10000) iFlag = 2;
 	if(n_total>MAX_SHOT){
 		fprintf(stderr, "Too many projections!");
 		return(1);

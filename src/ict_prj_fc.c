@@ -18,7 +18,7 @@
 #endif
 #define INTEL
 #define HiPic_Header_Size	64
-#define MAX_SHOT			20010
+#define MAX_SHOT			50010
 
 /*----------------------------------------------------------------------*/
 struct HiPic_Header{
@@ -224,6 +224,7 @@ int read_log(char *dirin)
 	fclose(f);
 	if(n_total<1000) iFlag = 0;
 	if(n_total>=1000) iFlag = 1;
+	if(n_total>=10000) iFlag = 2;
 	if(n_total>MAX_SHOT){
 		fprintf(stderr, "Too many projections!");
 		return(1);
@@ -271,6 +272,7 @@ int StoreProjection(char *dirin, char *dirout)
 		for ( k = II0[j] + 1; k < II0[j+1]; ++k){
 			if(iFlag==0) sprintf(fname, "%s/q%03d.img", dirin, k);
 			if(iFlag==1) sprintf(fname, "%s/q%04d.img", dirin, k);
+			if(iFlag==2) sprintf(fname, "%s/q%05d.img", dirin, k);
 			if ((i = read_hipic(fname, &h)) != 0){
 				printf("something wrong -- return value is %d(II01)", i);
 				return(-1);
@@ -290,6 +292,7 @@ int StoreProjection(char *dirin, char *dirout)
 		for ( k = II0[j] + 1; k < II0[j+1]; ++k){
 			if(iFlag==0) sprintf(fname, "%s/q%03d.img", dirin, k);
 			if(iFlag==1) sprintf(fname, "%s/q%04d.img", dirin, k);
+			if(iFlag==2) sprintf(fname, "%s/q%05d.img", dirin, k);
 			if ((i = read_hipic(fname, &h)) != 0){
 				printf("something wrong -- return value is %d(II01)", i);
 				return(-1);
