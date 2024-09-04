@@ -17,7 +17,7 @@
 
 ## Step 1: Prerequisites for MacOS
 ### Brew
-- It's recommended to use brew for installing packages. https://brew.sh/ja/
+- It's recommended to use brew for installing packages. https://brew.sh/
 ### gcc
 - Default compiler (clang) will cause errors. Instead, we use gcc.
 - Install gcc ver.13.
