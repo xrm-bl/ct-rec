@@ -71,7 +71,7 @@ ofct_DO:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_DO.c sif_f.h
 ```
 ### ct-rec/src/oct_DO.c
 - Add declaration in function `Scan`. (`HiPic		hp;`)
-oct_DO.c```
+```oct_DO.c
 static void	Scan(int Ox1,int Oy1,int Ox2,int Oy2,FOM *D,FOM *S,int m)
 {
 	int	y,x,
@@ -83,7 +83,7 @@ static void	Scan(int Ox1,int Oy1,int Ox2,int Oy2,FOM *D,FOM *S,int m)
 
 ### ct-rec/src/rec_stk.c
 - Comment out (or delete) `#include <malloc.h>`.
-rec_stk.c```
+```rec_stk.c
 //	program cthist
 //	usage 'bmake > output_file'
 
