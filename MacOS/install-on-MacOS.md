@@ -2,7 +2,7 @@
 - You should make some modifications on Makefile and scripts for MacOS (both M1 and intel chips).
 - Some essential points for modifications are described here.
 - You can also refer modified src and bin files in this directory.
-- This instruction and files were made by Macbook Air (2024, Apple M3 chip (8 cores CPU, 10 cores GPU, 16 cores Neural Engine), 24GB unified memory).
+- This instruction and files were made by Macbook Air (2024, Apple M3 chip (8 cores CPU, 10 cores GPU, 16 cores Neural Engine), 24GB unified memory, Sonoma 14.5).
 
 ## Step 0: Check your architecture
 - Launch Terminal.
