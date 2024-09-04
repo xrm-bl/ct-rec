@@ -19,7 +19,7 @@
 ### Brew
 - It's recommended to use brew for installing packages. https://brew.sh/ja/
 ### gcc
-- Default compiler (clang) will cause errors in compiling. Instead, we use gcc.
+- Default compiler (clang) will cause errors. Instead, we use gcc.
 - Install gcc ver.13.
 ```
 brew install gcc@13
