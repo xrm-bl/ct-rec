@@ -47,7 +47,7 @@ brew install libtiff
 - Edit the first part of the file.   
 
 For M1(`arm64`),
-```
+```.mk
 INCLUDE	=-I/opt/homebrew/include
 LIB	=-L/opt/homebrew/lib
 BIN	=../bin
@@ -56,7 +56,7 @@ CC	=gcc -O3 -D_GNU_SOURCE $(INCLUDE) $(LIB)
 CC0	=gcc -O0 -D_GNU_SOURCE $(INCLUDE) $(LIB)
 ```
 For intel(`x86_64`), 
-```
+```.mk
 INCLUDE	=-I/usr/local/include
 LIB	=-L/usr/local/lib
 BIN	=../bin
@@ -65,7 +65,7 @@ CC	=gcc -O3 -D_GNU_SOURCE $(INCLUDE) $(LIB)
 CC0	=gcc -O0 -D_GNU_SOURCE $(INCLUDE) $(LIB)
 ```
 - Edit `ofct_DO` part. (`ofct_DO.c` -> `oct_DO.c`)
-```
+```.mk
 ofct_DO:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_DO.c sif_f.h
 	$(CC) oct_DO.c rhp.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o ofct_DO
 ```
@@ -97,7 +97,7 @@ static void	Scan(int Ox1,int Oy1,int Ox2,int Oy2,FOM *D,FOM *S,int m)
 
 ## Step 3: Make and install
 - Make and install with `MakefileCPU`.
-```
+```.sh
 cd ct-rec/src
 make -f MakefileCPU all
 mkdir ../bin
