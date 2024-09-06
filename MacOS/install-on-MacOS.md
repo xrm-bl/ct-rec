@@ -43,6 +43,9 @@ brew install libtiff
 - This instruction was made with libtiff ver. 4.6.0.
 
 ## Step 2: Modify scripts
+### ct-rec/src/oct_DO.c
+- Change the file name into "ofct_DO.c". (`mv oct_DO.c ofct_DO.c`) 
+
 ### ct-rec/src/MakefileCPU
 - Edit the first part of the file.   
 
@@ -64,11 +67,7 @@ BIN	=../bin
 CC	=gcc -O3 -D_GNU_SOURCE $(INCLUDE) $(LIB)
 CC0	=gcc -O0 -D_GNU_SOURCE $(INCLUDE) $(LIB)
 ```
-- Edit `ofct_DO` part. (`ofct_DO.c` -> `oct_DO.c`)
-```.mk
-ofct_DO:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_DO.c sif_f.h
-	$(CC) oct_DO.c rhp.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o ofct_DO
-```
+
 ### ct-rec/src/oct_DO.c
 - Add declaration in function `Scan`. (`HiPic		hp;`)
 ```oct_DO.c
