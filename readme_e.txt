@@ -170,8 +170,10 @@ K. Uesugi
       
    b. make sinogram
       sinog layer {skip}
+      of_sinog layer Rc {skip}
       32bit tiff output. Maximum and minimum values are described in tags.
       If "skip" is specified, the number of projections is set to 1/skip and output.
+      Set "Rotation center" for offset CT(of_sinog)
 
    c. Reconstructed from the synogram of b
       sf_rec_P_F input output {Dr RC RA0}

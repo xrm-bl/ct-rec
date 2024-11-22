@@ -169,6 +169,8 @@
       sinog layer {skip}
       32bit tiff にて出力。タグには最大と最小値のみ入る。
       skip を指定すると、投影数をskip分の1にして出力する。
+      of_sinog layer Rc {skip}
+      オフセットCTの場合は、回転中心を指定すること
 
    c. b のシノグラムから再構成
       sf_rec_P_F input output {Dr RC RA0}
