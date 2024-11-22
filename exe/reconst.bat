@@ -6,11 +6,11 @@ if "%1" =="" goto err
 
 @echo on
 ct_rec_g_c %1 %2 %3 %4
-@echo off
 rem ct_sino %1 
 rem sino_conv %2
 rem ct_cbp %4
 rem rec2tif 16 %3
+@echo off
 rem rec2img
 goto fin
 

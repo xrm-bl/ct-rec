@@ -59,6 +59,7 @@ rem rec crop
 
 rem sinogram
 %CC2% /Fesinog.exe sinog.c %SIF_F%
+%CC2% /Feof_sinog.exe of_sinog.c %SIF_F%
 
 rem print image discription
 %CC2% /Fepid.exe pid.c

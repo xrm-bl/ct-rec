@@ -37,7 +37,7 @@ if (INIT_THREAD(T,F,A)) Error(#F " : multi-threading initialization error.")
 #define TERM_MT(T,F)	\
 	if (TERM_THREAD(T)) Error(#F " : multi-threading termination error.")
 
-static int	Threads=4,
+static int	Threads=8,
 		Swapped=0;
 static MSD	*msd;
 static FOM	***G,***H;
@@ -64,7 +64,8 @@ static void	Scan(int Ox1,int Oy1,int Ox2,int Oy2,FOM *D,FOM *S,int m)
 	    }
 	    *(S++)+=(*(D++));
 	}
-	(void)printf("%d\t%d\t%d\t%le\r",m,X,Y,d);
+//	(void)printf("%d\t%d\t%d\t%le\r",m,X,Y,d);
+	(void)fprintf(stderr,"%d\t%d\t%d\t%le\n",m,(hp.Nx+X+Ox1)/2,Y+Oy1,d);
 }
 
 static double	Log(double d)
@@ -83,8 +84,10 @@ int	main(int argc,char **argv)
 	size_t		i;
 	double		s;
 
-	if ((argc!=2 && argc!=3 && argc!=6 && argc!=7))
-	    	Error("usage : oct_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}");
+//	if ((argc!=2 && argc!=3 && argc!=6 && argc!=7))
+//	    	Error("usage : oct_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}");
+	if (argc!=2 )
+	    	Error("usage : ofct_DO HiPic/ ");
 
 	if ((env=getenv("THREADS"))!=NULL &&
 	    (Threads=atoi(env))<=0) Error("bad number of THREADS.");
@@ -171,7 +174,6 @@ int	main(int argc,char **argv)
 
 	    Scan(Ox1,Oy1,Ox2,Oy2,msd[t].D,*S,m0+t);
 	}
-	(void)printf("\n");
 	for (t=0; t<Threads; t++) TermMSD(msd+t);
 
 	s=S[Y=0][X=0];
@@ -182,17 +184,18 @@ int	main(int argc,char **argv)
 	    }
 	    S[y][x]/=(double)M;
 	}
-//	(void)fprintf(stderr,"%d\t%d\t%le\n",+X+Ox1,Y+Oy1,s/(double)M);
-	(void)fprintf(stderr,"%d\t%d\t%le\n",(hp.Nx+X+Ox1)/2,Y+Oy1,s/(double)M);
+//	(void)fprintf(stderr,"%d\t%d\t%le\n",X+Ox1,Y+Oy1,s/(double)M);
+//	(void)fprintf(stderr,"%d\t%d\t%le\n",(hp.Nx+X+Ox1)/2,Y+Oy1,s/(double)M);
+	(void)fprintf(stderr,"try: ofct_srec_g_c raw %d %d %d 1.0 0.0 rec\n",(hp.Nx+X+Ox1)/2,Y+Oy1, hp.Ny/2);
 
-	if (argc==3){
-		StoreImageFile_Float(argv[2],Ox,Oy,S,SIF_F_desc);
-		(void)fprintf(stderr,"store(%d,%d): %s\n",(hp.Nx-X+Ox1)/2,Oy1,argv[2]);
-	}
-	if (argc==7){
-		StoreImageFile_Float(argv[6],Ox,Oy,S,SIF_F_desc);
-		(void)fprintf(stderr,"store(%d,%d): %s\n",(hp.Nx-X+Ox1)/2,Oy1,argv[6]);
-	}
+//	if (argc==3){
+//		StoreImageFile_Float(argv[2],Ox,Oy,S,SIF_F_desc);
+//		(void)fprintf(stderr,"store(%d,%d): %s\n",(hp.Nx-X+Ox1)/2,Oy1,argv[2]);
+//	}
+//	if (argc==7){
+//		StoreImageFile_Float(argv[6],Ox,Oy,S,SIF_F_desc);
+//		(void)fprintf(stderr,"store(%d,%d): %s\n",(hp.Nx-X+Ox1)/2,Oy1,argv[6]);
+//	}
 
 	free(*S); free(S);
 	free(**H); free(*H); free(H);

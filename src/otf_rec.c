@@ -200,7 +200,6 @@ int read_log()
 	fclose(f);
 	if(n_total<1000) iFlag = 0;
 	if(n_total>=1000) iFlag = 1;
-	if(n_total>=10000) iFlag = 2;
 	if(n_total>MAX_SHOT){
 		fprintf(stderr, "Too many projections!");
 		return(1);
@@ -248,7 +247,6 @@ long		ln;
 // open IIO[j] and IIO[j+1] 
 		if(iFlag==0) sprintf(ffi01, "%s%03d.tif", flhead, II0[j]);
 		if(iFlag==1) sprintf(ffi01, "%s%04d.tif", flhead, II0[j]);
-		if(iFlag==2) sprintf(ffi01, "%s%05d.tif", flhead, II0[j]);
 		if ((i = Read16TiffFileLine(ffi01, 0)) != 0){
 			printf("something wrong -- return value is %d(II01)", i);
 			return -1;
@@ -256,7 +254,6 @@ long		ln;
 		for(i=0;i<N;++i) II01[i]=data[i];
 		if(iFlag==0) sprintf(ffi02, "%s%03d.tif", flhead, II0[j+1]);
 		if(iFlag==1) sprintf(ffi02, "%s%04d.tif", flhead, II0[j+1]);
-		if(iFlag==2) sprintf(ffi02, "%s%05d.tif", flhead, II0[j+1]);
 		if ((i = Read16TiffFileLine(ffi02, 0)) != 0){
 			printf("something wrong -- return value is %d(II02)", i);
 			return -1;
@@ -277,7 +274,6 @@ long		ln;
 // a[jx], b[jx] ‚©‚ç shottime[k] ‚ð—p‚¢‚Ä p(x) ‚ð‹‚ß‚éB
 			if(iFlag==0) sprintf(fii, "%s%03d.tif", flhead, k);
 			if(iFlag==1) sprintf(fii, "%s%04d.tif", flhead, k);
-			if(iFlag==2) sprintf(fii, "%s%05d.tif", flhead, k);
 //			if ((i = read_tiff_line(fii, &I[0], ln)) != 0){
 //				printf("something wrong -- return value is %d(II01)", i);
 //				exit(-1);
