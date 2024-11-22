@@ -110,7 +110,7 @@ int read_hipic(int nfq, unsigned short *data, Header *h, long ln)
 		if(iFlag==2) sprintf(fname, "%s%05d.img", flhead, nfq);
 	}
 	
-	printf("%d\r",nfq);
+//	printf("%d\r",nfq);
 //open input files
 	if((fi = fopen(fname,"rb")) == NULL){
 		printf("can not open %s for input\n", fname);
@@ -227,7 +227,6 @@ int read_log()
 		}
 	}
 	n_total = (short)(nnn + 2);
-	fprintf(stderr, " nshot = %d, NI0 = %d, total = %d \n", NST, NI0, n_total);
 	fclose(f);
 	if(n_total<1000) iFlag = 0;
 	if(n_total>=1000) iFlag = 1;
@@ -242,6 +241,7 @@ int read_log()
 		return 1;
 	}
 	NNST=NST/2;
+	fprintf(stderr, " nshot = %d, NI0 = %d, total = %d \n", NNST, NI0, n_total);
 	return(0);
 }
 
@@ -585,11 +585,11 @@ char	**argv;
 		return(1);
 	}
 	
-	NST=NST*ndiv;
-	TAM=TA1/NST;
-	TASD=sqrt(TA2/NST-TAM*TAM);
-	fprintf(stderr," TA mean\t%lf\tTASD\t%lf\n", TAM, TASD);
-	fprintf(stderr," TASD/TA mean\t%lf\n", TASD/TAM);
+	NNST=NNST*ndiv;
+	TAM=TA1/NNST;
+	TASD=sqrt(TA2/NNST-TAM*TAM);
+//	fprintf(stderr," TA mean\t%lf\tTASD\t%lf\n", TAM, TASD);
+//	fprintf(stderr," TASD/TA mean\t%lf\n", TASD/TAM);
 //	fprintf(stderr," Store Sinogram \t%lf / sec\n",CLOCK()-Clock);
 //	fprintf(stderr, "output file name = %s \n", fn);
 
@@ -598,13 +598,22 @@ char	**argv;
 		printf("can not open %s for output\n", fn);
 		return(1);
 	}
-	fprintf(fo, "%d\n", h.width);
-	fprintf(fo, "%d\n", NST);
+	fprintf(fo, "%d\n", NN);
+	fprintf(fo, "%d\n", NNST);
 	fprintf(fo, "%04ld\n", s_layer);
-	fprintf(fo, "%f\n", calc_center());
+	fprintf(fo, "%f\n", dcnt);
 	fprintf(fo, "%lf\n", TAM); // Mean of Total Absorption from sinogram
 	fprintf(fo, "%lf\n", TASD); // SD of Total Absorption from sinogram
 	fclose(fo);
+
+// append to log file
+	FILE		*ff;
+	if((ff = fopen("../cmd-hst.log","a")) == NULL){
+		return(-10);
+	}
+	for(i=0;i<argc;++i) fprintf(ff,"%s ",argv[i]);
+	fprintf(ff,"\n");
+	fclose(ff);
 
 	return 0;
 }

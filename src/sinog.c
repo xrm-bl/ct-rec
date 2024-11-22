@@ -552,5 +552,14 @@ char	**argv;
 	fprintf(fo, "%lf\n", TASD); // SD of Total Absorption from sinogram
 	fclose(fo);
 
+// append to log file
+	FILE		*ff;
+	if((ff = fopen("../cmd-hst.log","a")) == NULL){
+		return(-10);
+	}
+	for(i=0;i<argc;++i) fprintf(ff,"%s ",argv[i]);
+	fprintf(ff,"\n");
+	fclose(ff);
+
 	return 0;
 }
