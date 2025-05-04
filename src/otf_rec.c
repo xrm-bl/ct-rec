@@ -496,6 +496,12 @@ char	**argv;
 			}
 		}
 	}
+	if(P[0][100]==0.0){
+		for(j=0;j<N;++j){
+			P[0][i]=P[1][i];
+		}
+	}
+
 /* ----------------  ring removal start ---------------- */
 /*                                                       */
     int kernel_size = 5; // Default kernel size
