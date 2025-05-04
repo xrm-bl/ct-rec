@@ -16,7 +16,7 @@ ALL	= ct_rec_t_c ct_rec_t_s ct_rec_t_r \
 	ct_sub_f ct_prj_fc ict_prj_fc his_spl_tif\
 	rec_gf si_rar si_sir si_sir_a si_sir_s si_gf \
 	chk-rc set-rc tif_ave hp2DO his_ave \
-	act_spl tf_prj_f rec_crop gf_sd his2tif6
+	act_spl tf_prj_f rec_crop gf_sd his2tif6 ofsfa
 
 all:	$(ALL)
 
@@ -200,4 +200,7 @@ gf_fd:	error.c fft.h fft.c cell.h rif.h rif.c sif.h sif.c gf_fd.c
 
 his2tif6:	his2tif6.c
 	$(CC) his2tif6.c -lm -ltiff -o his2tif6
-	
+
+ofsfa:	ofsfa.c
+	$(CC) ofsfa.c -lm -o ofsfa
+

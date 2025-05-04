@@ -135,7 +135,7 @@ rem q3_ave, q4_ave
 %CC2% /Feq4_ave.exe q4_ave.c
 
 rem act_spl
-rem %CC2% /Feact_spl.exe act_spl.c
+%CC2% /Feact_spl.exe act_spl.c
 
 rem gf_sd fd
 %CC2% /Fegf_sd.exe error.c rif.c sif.c gf_sd.c
@@ -143,6 +143,9 @@ rem gf_sd fd
 
 rem his2tif6
 %CC2% /Fehis2tif6.exe his2tif6.c libtiff.lib
+
+rem ofsfa
+%CC2% /Feofsfa.exe ofsfa.c
 
 move *.exe ..\exe
 del *.obj
