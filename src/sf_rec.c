@@ -251,7 +251,7 @@ int	main(int argc, char *argv[])
 
 	for (j=0; j<Nt; j++){
 		for (i=0; i<Nx; i++){
-			*(image_data+N*j+i)=P[j][i];
+			*(image_data+Nx*j+i)=P[j][i];
 		}
 	}
 	// Execute OpenMP image processing

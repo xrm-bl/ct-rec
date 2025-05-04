@@ -1,23 +1,35 @@
-
+# Directory path settings
 BIN	=../bin
 
-CC	=gcc -O3 -D_GNU_SOURCE -fopenmp -std=c89 sort_filter_omp.c 
+# Compiler and basic options
+CC	=gcc -O3 -D_GNU_SOURCE -fopenmp
 NVCC	=nvcc -O3
+
+# CUDA related settings
 CUDA	=/usr/local/cuda
 INCS	=-I$(CUDA)/include
-
-#LIBS	=-L$(CUDA)/lib -lcudart -lcufft -lm
 LIBS	=-L$(CUDA)/lib64 -lcudart -lcufft -lm
 
+# Common libraries and options
 LP	=-lpthread
+LPTM	=-lpthread -ltiff -lm
 
+# Common source files
+COMMON_SRC = sort_filter_omp.c
+ESF	=error.c sif_f_fast.c
+ES	=error.c sif.c
+ECSSC	=error.c cell.h sif.h sif.c cbp.h
+SIF_F   =sif_f_fast.c
+
+# Build target list
 ALL	= ct_rec_g_c ct_rec_g_s ct_rec_g_r \
 	tf_rec_g_c tf_rec_g_s tf_rec_g_r \
 	otf_rec_g_c otf_rec_g_s otf_rec_g_r \
 	hp_tg_g_c hp_tg_g_s hp_tg_g_r \
 	p_rec_g_c p_rec_g_s p_rec_g_r \
-	ofct_srec_g_c ofct_srec_g_s ofct_srec_g_r \
+	ofct_srec_g_c ofct_srec_g_s ofct_srec_g_r
 
+# Basic targets
 all:	$(ALL)
 
 install:	$(ALL)
@@ -27,65 +39,7 @@ install:	$(ALL)
 clean:
 		rm -f $(ALL) *.o
 
-ECSSC	=error.c cell.h sif.h sif.c cbp.h
-ES		=error.c sif.c
-ESF		=error.c sif_f_fast.c
-LPTM	=-lpthread -ltiff -lm
-
-ct_rec_g_r:	$(ESF) cbp_r.o ct_rec.c error.c
-	$(CC) ct_rec.c $(ESF) cbp_r.o $(LIBS) -o ct_rec_g_r -DFilter=Ramachandran
-
-ct_rec_g_s:	$(ESF) cbp_s.o ct_rec.c error.c
-	$(CC) ct_rec.c $(ESF) cbp_s.o $(LIBS) -o ct_rec_g_s -DFilter=Shepp
-
-ct_rec_g_c:	$(ESF) cbp_c.o ct_rec.c error.c
-	$(CC) ct_rec.c $(ESF) cbp_c.o $(LIBS) -o ct_rec_g_c -DFilter=Chesler
-
-tf_rec_g_r:	$(ESF) cbp_r.o tf_rec.c error.c
-	$(CC) tf_rec.c $(ESF) cbp_r.o $(LIBS) -ltiff -o tf_rec_g_r -DFilter=Ramachandran
-
-tf_rec_g_s:	$(ESF) cbp_s.o tf_rec.c error.c
-	$(CC) tf_rec.c $(ESF) cbp_s.o $(LIBS) -ltiff -o tf_rec_g_s -DFilter=Shepp
-
-tf_rec_g_c:	$(ESF) cbp_c.o tf_rec.c error.c
-	$(CC) tf_rec.c $(ESF) cbp_c.o $(LIBS) -ltiff -o tf_rec_g_c -DFilter=Chesler
-
-hp_tg_g_r:	cbp_f_r.o hp_tg_ku.c rhp.c error.c
-	$(CC) hp_tg_ku.c rhp.c error.c cbp_f_r.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o hp_tg_g_r -DFilter=Ramachandran
-
-hp_tg_g_s:	cbp_f_s.o hp_tg_ku.c rhp.c error.c
-	$(CC) hp_tg_ku.c rhp.c error.c cbp_f_s.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o hp_tg_g_s -DFilter=Shepp
-
-hp_tg_g_c:	cbp_f_c.o hp_tg_ku.c rhp.c error.c
-	$(CC) hp_tg_ku.c rhp.c error.c cbp_f_c.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o hp_tg_g_c -DFilter=Chesler
-
-p_rec_g_r:	cbp_f_r.o p_rec.c error.c
-	$(CC) p_rec.c error.c cbp_f_r.o -DFloat=float $(LPTM) $(LIBS) -o p_rec_g_r -DFilter=Ramachandran
-
-p_rec_g_s:	cbp_f_s.o p_rec.c error.c
-	$(CC) p_rec.c error.c cbp_f_s.o -DFloat=float $(LPTM) $(LIBS) -o p_rec_g_s -DFilter=Shepp
-
-p_rec_g_c:	cbp_f_c.o p_rec.c error.c
-	$(CC) p_rec.c error.c cbp_f_c.o -DFloat=float $(LPTM) $(LIBS) -o p_rec_g_c -DFilter=Chesler
-
-ofct_srec_g_r:	cbp_r.o ofct_srec.c rhp.c rl.c error.c 
-	$(CC) ofct_srec.c rhp.c rl.c error.c cbp_r.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o ofct_srec_g_r -DFilter=Ramachandran
-
-ofct_srec_g_s:	cbp_s.o ofct_srec.c rhp.c rl.c error.c 
-	$(CC) ofct_srec.c rhp.c rl.c error.c cbp_s.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o ofct_srec_g_s -DFilter=Shepp
-
-ofct_srec_g_c:	cbp_c.o ofct_srec.c rhp.c rl.c error.c 
-	$(CC) ofct_srec.c rhp.c rl.c error.c cbp_c.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o ofct_srec_g_c -DFilter=Chesler
-
-otf_rec_g_r:	$(ESF) cbp_r.o otf_rec.c error.c
-	$(CC) otf_rec.c $(ESF) cbp_r.o $(LIBS) -ltiff -o otf_rec_g_r -DFilter=Ramachandran
-
-otf_rec_g_s:	$(ESF) cbp_s.o otf_rec.c error.c
-	$(CC) otf_rec.c $(ESF) cbp_s.o $(LIBS) -ltiff -o otf_rec_g_s -DFilter=Shepp
-
-otf_rec_g_c:	$(ESF) cbp_c.o otf_rec.c error.c
-	$(CC) otf_rec.c $(ESF) cbp_c.o $(LIBS) -ltiff -o otf_rec_g_c -DFilter=Chesler
-
+# Build rules for CUDA .o files
 cbp_r.o:	cu.h cbp.h cbp.cu
 	$(NVCC) $(INCS) -c -use_fast_math cbp.cu -o cbp_r.o -DFilter=Ramachandran
 
@@ -110,4 +64,62 @@ cbp_f_c.o:	cu.h cbp.h cbp.cu
 cbp_wai_f.o:	cu.h cbp.h cbp.cu
 	$(NVCC) $(INCS) -c -DWAI -DFloat=float cbp.cu -o cbp_wai_f.o
 
+# ct_rec targets
+ct_rec_g_r:	$(ESF) cbp_r.o ct_rec.c error.c $(COMMON_SRC)
+	$(CC) ct_rec.c $(ESF) $(COMMON_SRC) cbp_r.o $(LIBS) -o ct_rec_g_r -DFilter=Ramachandran
 
+ct_rec_g_s:	$(ESF) cbp_s.o ct_rec.c error.c $(COMMON_SRC)
+	$(CC) ct_rec.c $(ESF) $(COMMON_SRC) cbp_s.o $(LIBS) -o ct_rec_g_s -DFilter=Shepp
+
+ct_rec_g_c:	$(ESF) cbp_c.o ct_rec.c error.c $(COMMON_SRC)
+	$(CC) ct_rec.c $(ESF) $(COMMON_SRC) cbp_c.o $(LIBS) -o ct_rec_g_c -DFilter=Chesler
+
+# tf_rec targets
+tf_rec_g_r:	$(ESF) cbp_r.o tf_rec.c error.c $(COMMON_SRC)
+	$(CC) tf_rec.c $(ESF) $(COMMON_SRC) cbp_r.o $(LIBS) -ltiff -o tf_rec_g_r -DFilter=Ramachandran
+
+tf_rec_g_s:	$(ESF) cbp_s.o tf_rec.c error.c $(COMMON_SRC)
+	$(CC) tf_rec.c $(ESF) $(COMMON_SRC) cbp_s.o $(LIBS) -ltiff -o tf_rec_g_s -DFilter=Shepp
+
+tf_rec_g_c:	$(ESF) cbp_c.o tf_rec.c error.c $(COMMON_SRC)
+	$(CC) tf_rec.c $(ESF) $(COMMON_SRC) cbp_c.o $(LIBS) -ltiff -o tf_rec_g_c -DFilter=Chesler
+
+# hp_tg targets
+hp_tg_g_r:	cbp_f_r.o hp_tg_ku.c rhp.c error.c $(COMMON_SRC)
+	$(CC) hp_tg_ku.c rhp.c error.c $(COMMON_SRC) cbp_f_r.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o hp_tg_g_r -DFilter=Ramachandran
+
+hp_tg_g_s:	cbp_f_s.o hp_tg_ku.c rhp.c error.c $(COMMON_SRC)
+	$(CC) hp_tg_ku.c rhp.c error.c $(COMMON_SRC) cbp_f_s.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o hp_tg_g_s -DFilter=Shepp
+
+hp_tg_g_c:	cbp_f_c.o hp_tg_ku.c rhp.c error.c $(COMMON_SRC)
+	$(CC) hp_tg_ku.c rhp.c error.c $(COMMON_SRC) cbp_f_c.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o hp_tg_g_c -DFilter=Chesler
+
+# p_rec targets
+p_rec_g_r:	cbp_f_r.o p_rec.c error.c $(COMMON_SRC)
+	$(CC) p_rec.c error.c $(COMMON_SRC) cbp_f_r.o -DFloat=float $(LPTM) $(LIBS) -o p_rec_g_r -DFilter=Ramachandran
+
+p_rec_g_s:	cbp_f_s.o p_rec.c error.c $(COMMON_SRC)
+	$(CC) p_rec.c error.c $(COMMON_SRC) cbp_f_s.o -DFloat=float $(LPTM) $(LIBS) -o p_rec_g_s -DFilter=Shepp
+
+p_rec_g_c:	cbp_f_c.o p_rec.c error.c $(COMMON_SRC)
+	$(CC) p_rec.c error.c $(COMMON_SRC) cbp_f_c.o -DFloat=float $(LPTM) $(LIBS) -o p_rec_g_c -DFilter=Chesler
+
+# ofct_srec targets
+ofct_srec_g_r:	cbp_r.o ofct_srec.c rhp.c rl.c error.c $(COMMON_SRC)
+	$(CC) ofct_srec.c rhp.c rl.c error.c $(COMMON_SRC) cbp_r.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o ofct_srec_g_r -DFilter=Ramachandran
+
+ofct_srec_g_s:	cbp_s.o ofct_srec.c rhp.c rl.c error.c $(COMMON_SRC)
+	$(CC) ofct_srec.c rhp.c rl.c error.c $(COMMON_SRC) cbp_s.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o ofct_srec_g_s -DFilter=Shepp
+
+ofct_srec_g_c:	cbp_c.o ofct_srec.c rhp.c rl.c error.c $(COMMON_SRC)
+	$(CC) ofct_srec.c rhp.c rl.c error.c $(COMMON_SRC) cbp_c.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o ofct_srec_g_c -DFilter=Chesler
+
+# otf_rec targets
+otf_rec_g_r:	$(ESF) cbp_r.o otf_rec.c error.c $(COMMON_SRC)
+	$(CC) otf_rec.c $(ESF) $(COMMON_SRC) cbp_r.o $(LIBS) -ltiff -o otf_rec_g_r -DFilter=Ramachandran
+
+otf_rec_g_s:	$(ESF) cbp_s.o otf_rec.c error.c $(COMMON_SRC)
+	$(CC) otf_rec.c $(ESF) $(COMMON_SRC) cbp_s.o $(LIBS) -ltiff -o otf_rec_g_s -DFilter=Shepp
+
+otf_rec_g_c:	$(ESF) cbp_c.o otf_rec.c error.c $(COMMON_SRC)
+	$(CC) otf_rec.c $(ESF) $(COMMON_SRC) cbp_c.o $(LIBS) -ltiff -o otf_rec_g_c -DFilter=Chesler

@@ -1,4 +1,3 @@
-
 BIN	=../bin
 
 CC	=gcc -O3 -D_GNU_SOURCE
@@ -31,77 +30,80 @@ clean:
 ECSSC	=error.c cell.h sif.h sif.c cbp.h
 ES		=error.c sif.c
 ESF		=error.c sif_f_fast.c
-CBP		=-fopenmp -std=c89 sort_filter_omp.c cbp_thread_int.c
-CBPd	=-fopenmp -std=c89 sort_filter_omp.c cbp_thread_nai.c
+SIF_F   =sif_f_fast.c
+# CBPフラグを修正（依存関係ではなくコンパイラオプションとして定義）
+CBPFLAGS	=-fopenmp
+CBPFILES	=sort_filter_omp.c cbp_thread_int.c
+CBPdFILES	=sort_filter_omp.c cbp_thread_nai.c
 LPTM	=-lpthread -ltiff -lm
 LP		=-lpthread
 
 
-ct_rec_t_r:	$(ESF) $(CBP) ct_rec.c error.c
-	$(CC)  $(CBP) ct_rec.c -lm $(ESF) $(LP) -o ct_rec_t_r -DFilter=Ramachandran
+ct_rec_t_r:	$(ESF) $(CBPFILES) ct_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) ct_rec.c -lm $(ESF) $(LP) -o ct_rec_t_r -DFilter=Ramachandran
 
-ct_rec_t_s:	$(ESF) $(CBP) ct_rec.c error.c
-	$(CC)  $(CBP) ct_rec.c -lm $(ESF) $(LP) -o ct_rec_t_s -DFilter=Shepp
+ct_rec_t_s:	$(ESF) $(CBPFILES) ct_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) ct_rec.c -lm $(ESF) $(LP) -o ct_rec_t_s -DFilter=Shepp
 
-ct_rec_t_c:	$(ESF) $(CBP) ct_rec.c error.c
-	$(CC)  $(CBP) ct_rec.c -lm $(ESF) $(LP) -o ct_rec_t_c -DFilter=Chesler
+ct_rec_t_c:	$(ESF) $(CBPFILES) ct_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) ct_rec.c -lm $(ESF) $(LP) -o ct_rec_t_c -DFilter=Chesler
 
-tf_rec_t_r:	$(ESF) $(CBP) tf_rec.c error.c
-	$(CC)  $(CBP) tf_rec.c -lm $(ESF) $(LP) -ltiff -o tf_rec_t_r -DFilter=Ramachandran
+tf_rec_t_r:	$(ESF) $(CBPFILES) tf_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) tf_rec.c -lm $(ESF) $(LP) -ltiff -o tf_rec_t_r -DFilter=Ramachandran
 
-tf_rec_t_s:	$(ESF) $(CBP) tf_rec.c error.c
-	$(CC)  $(CBP) tf_rec.c -lm $(ESF) $(LP) -ltiff -o tf_rec_t_s -DFilter=Shepp
+tf_rec_t_s:	$(ESF) $(CBPFILES) tf_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) tf_rec.c -lm $(ESF) $(LP) -ltiff -o tf_rec_t_s -DFilter=Shepp
 
-tf_rec_t_c:	$(ESF) $(CBP) tf_rec.c error.c
-	$(CC)  $(CBP) tf_rec.c -lm $(ESF) $(LP) -ltiff -o tf_rec_t_c -DFilter=Chesler
+tf_rec_t_c:	$(ESF) $(CBPFILES) tf_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) tf_rec.c -lm $(ESF) $(LP) -ltiff -o tf_rec_t_c -DFilter=Chesler
 
-hp_tg_t_r:	error.c $(CBP) hp_tg_ku.c
-	$(CC) -DFloat=float error.c $(CBP) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_r -DFilter=Ramachandran
+hp_tg_t_r:	error.c $(CBPFILES) hp_tg_ku.c
+	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_r -DFilter=Ramachandran
 
-hp_tg_t_s:	error.c $(CBP) hp_tg_ku.c
-	$(CC) -DFloat=float error.c $(CBP) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_s -DFilter=Shepp
+hp_tg_t_s:	error.c $(CBPFILES) hp_tg_ku.c
+	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_s -DFilter=Shepp
 
-hp_tg_t_c:	error.c $(CBP) hp_tg_ku.c
-	$(CC) -DFloat=float error.c $(CBP) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_c -DFilter=Chesler
+hp_tg_t_c:	error.c $(CBPFILES) hp_tg_ku.c
+	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_c -DFilter=Chesler
 
-p_rec_t_r:	error.c $(CBP) p_rec.c
-	$(CC) -DFloat=float error.c $(CBP) p_rec.c $(LPTM) -o p_rec_t_r -DFilter=Ramachandran
+p_rec_t_r:	error.c $(CBPFILES) p_rec.c
+	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) p_rec.c $(LPTM) -o p_rec_t_r -DFilter=Ramachandran
 
-p_rec_t_s:	error.c $(CBP) p_rec.c
-	$(CC) -DFloat=float error.c $(CBP) p_rec.c $(LPTM) -o p_rec_t_s -DFilter=Shepp
+p_rec_t_s:	error.c $(CBPFILES) p_rec.c
+	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) p_rec.c $(LPTM) -o p_rec_t_s -DFilter=Shepp
 
-p_rec_t_c:	error.c $(CBP) p_rec.c
-	$(CC) -DFloat=float error.c $(CBP) p_rec.c $(LPTM) -o p_rec_t_c -DFilter=Chesler
+p_rec_t_c:	error.c $(CBPFILES) p_rec.c
+	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) p_rec.c $(LPTM) -o p_rec_t_c -DFilter=Chesler
 
-sf_rec_t_r:	$(CBPd) sf_rec.c error.c rl.c cbp_thread_nai.c
-	$(CC)  sf_rec.c error.c $(CBPd) $(LPTM) -o sf_rec_t_r -DFloat=double -DFilter=Ramachandran
+sf_rec_t_r:	$(CBPdFILES) sf_rec.c error.c rl.c cbp_thread_nai.c
+	$(CC) $(CBPFLAGS) sf_rec.c error.c $(CBPdFILES) $(LPTM) -o sf_rec_t_r -DFloat=double -DFilter=Ramachandran
 
-sf_rec_t_s:	$(CBPd) sf_rec.c error.c rl.c cbp_thread_nai.c
-	$(CC)  sf_rec.c error.c $(CBPd) $(LPTM) -o sf_rec_t_s -DFloat=double -DFilter=Shepp
+sf_rec_t_s:	$(CBPdFILES) sf_rec.c error.c rl.c cbp_thread_nai.c
+	$(CC) $(CBPFLAGS) sf_rec.c error.c $(CBPdFILES) $(LPTM) -o sf_rec_t_s -DFloat=double -DFilter=Shepp
 
-sf_rec_t_c:	$(CBPd) sf_rec.c error.c rl.c cbp_thread_nai.c
-	$(CC)  sf_rec.c error.c $(CBPd) $(LPTM) -o sf_rec_t_c -DFloat=double -DFilter=Chesler
+sf_rec_t_c:	$(CBPdFILES) sf_rec.c error.c rl.c cbp_thread_nai.c
+	$(CC) $(CBPFLAGS) sf_rec.c error.c $(CBPdFILES) $(LPTM) -o sf_rec_t_c -DFloat=double -DFilter=Chesler
 
-ofct_srec_t_r:	$(CBP) ofct_srec.c error.c rl.c rhp.c
-	$(CC)  ofct_srec.c rhp.c rl.c error.c $(CBP) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_r -DFilter=Ramachandran
+ofct_srec_t_r:	$(CBPFILES) ofct_srec.c error.c rl.c rhp.c
+	$(CC) $(CBPFLAGS) ofct_srec.c rhp.c rl.c error.c $(CBPFILES) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_r -DFilter=Ramachandran
 
-ofct_srec_t_s:	$(CBP) ofct_srec.c error.c rl.c rhp.c
-	$(CC)  ofct_srec.c rhp.c rl.c error.c $(CBP) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_s -DFilter=Shepp
+ofct_srec_t_s:	$(CBPFILES) ofct_srec.c error.c rl.c rhp.c
+	$(CC) $(CBPFLAGS) ofct_srec.c rhp.c rl.c error.c $(CBPFILES) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_s -DFilter=Shepp
 
-ofct_srec_t_c:	$(CBP) ofct_srec.c error.c rl.c rhp.c
-	$(CC)  ofct_srec.c rhp.c rl.c error.c $(CBP) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_c -DFilter=Chesler
+ofct_srec_t_c:	$(CBPFILES) ofct_srec.c error.c rl.c rhp.c
+	$(CC) $(CBPFLAGS) ofct_srec.c rhp.c rl.c error.c $(CBPFILES) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_c -DFilter=Chesler
 
-ofct_xy:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_xy.c sif_f.h
-	$(CC) oct_xy.c rhp.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o ofct_xy
+ofct_xy:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_xy.c
+	$(CC) $(CBPFLAGS) oct_xy.c rhp.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o ofct_xy
 
-otf_rec_t_r:	$(ESF) $(CBP) otf_rec.c error.c
-	$(CC)  $(CBP) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_r -DFilter=Ramachandran
+otf_rec_t_r:	$(ESF) $(CBPFILES) otf_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_r -DFilter=Ramachandran
 
-otf_rec_t_s:	$(ESF) $(CBP) otf_rec.c error.c
-	$(CC)  $(CBP) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_s -DFilter=Shepp
+otf_rec_t_s:	$(ESF) $(CBPFILES) otf_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_s -DFilter=Shepp
 
-otf_rec_t_c:	$(ESF) $(CBP) otf_rec.c error.c
-	$(CC)  $(CBP) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_c -DFilter=Chesler
+otf_rec_t_c:	$(ESF) $(CBPFILES) otf_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_c -DFilter=Chesler
 
 tif_f2i:	tif_f2i.c rif_f.c
 	$(CC) tif_f2i.c rif_f.c -ltiff -lm -o tif_f2i
@@ -198,4 +200,4 @@ gf_fd:	error.c fft.h fft.c cell.h rif.h rif.c sif.h sif.c gf_fd.c
 
 his2tif6:	his2tif6.c
 	$(CC) his2tif6.c -lm -ltiff -o his2tif6
-
+	
