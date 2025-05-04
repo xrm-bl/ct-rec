@@ -2,7 +2,7 @@ Explanation of image reconstruction software based on Nakano's software and arou
 
 K. Uesugi
 
-2023.4.26  ver. 1.2
+2025.05.04  ver. 1.4
 
 0. If you find any bugs or requests, please contact the author.
 
@@ -32,6 +32,16 @@ K. Uesugi
           _c: Chesler Filter
           _s: Shepp-Logan Filter
           _r: Ramachandran(HAN) Filter
+
+   d. Ring Artifact Removal
+      This version implements a ring removal function based on Algorithm 3 from Vo et al. (2018).
+      The function is executed immediately before CBP calculation. This feature can be turned
+      ON/OFF using environment variables. Setting the KERNEL_SIZE environment variable to 1
+      turns it OFF. Using other positive odd numbers changes its effect. The default value
+      is set to 5 (it also defaults to 5 if the environment variable is not defined).
+      Additionally, CPU parallel processing is implemented, with OMP_NUM_THREADS defaulting to 40.
+      For information on how to set these environment variables, please refer to the instructions
+      at the beginning of the "sort_filter_omp.c".
 
 2. 180deg scan. image reconstruction of standard absorption contrast CT.
 
@@ -170,10 +180,8 @@ K. Uesugi
       
    b. make sinogram
       sinog layer {skip}
-      of_sinog layer Rc {skip}
       32bit tiff output. Maximum and minimum values are described in tags.
       If "skip" is specified, the number of projections is set to 1/skip and output.
-      Set "Rotation center" for offset CT(of_sinog)
 
    c. Reconstructed from the synogram of b
       sf_rec_P_F input output {Dr RC RA0}

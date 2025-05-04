@@ -2,7 +2,7 @@
 
 上杉
 
-2023.4.26  ver. 1.2
+2025.05.04  ver. 1.4
 
 0. バグやリクエストは作者に連絡してください。
 
@@ -29,6 +29,14 @@
           _s: Shepp-Logan フィルター
           _r: Ramachandran(HAN)フィルター
       となっている。
+
+   d. リングアーティファクトの除去
+      このバージョンからVo et al.(2018)のArgorism 3型のリング除去機能を設けた。
+      CBP計算の直前に実行している。環境変数を指定することでこの機能をON/OFFできる。
+      環境変数で KERNEL_SIZE を1に指定するとOFF。それ以外の正の奇数で効果が変わる。
+      デフォルト値は5としている(環境変数が定義されていない場合も5になる)。
+      また、CPU並列計算も行っており、デフォルト値はOMP_NUM_THREADSを40としている。
+      環境変数の設定方法は、sort_filter_omp.c の冒頭に記述があるので参照のこと。
 
 2. 180deg scan。標準的な吸収の画像再構成。
 
@@ -136,6 +144,16 @@
          100レイヤーだけの場合：100
          100-150 レイヤー: 100-150
          全部: -
+   d. tiff データから1枚だけ再構成
+      otf_rec_P_F layer center {pixel size} {offsetangle}
+      
+      layer: 再構成するレイヤー(高さ)
+      center: 回転軸の位置(pixel)。
+      pixel: size: 画素サイズ(um)。省略した場合は1.0になる。
+      offset angle: 回転軸の原点オフセット。省略した場合は0.0になる。
+      
+      *) q????.tif があるディレクトリで実行する。
+   
 
 
 4. 32bit tiff 画像の規格化
@@ -169,8 +187,6 @@
       sinog layer {skip}
       32bit tiff にて出力。タグには最大と最小値のみ入る。
       skip を指定すると、投影数をskip分の1にして出力する。
-      of_sinog layer Rc {skip}
-      オフセットCTの場合は、回転中心を指定すること
 
    c. b のシノグラムから再構成
       sf_rec_P_F input output {Dr RC RA0}
@@ -199,10 +215,7 @@
       カッコ内の引数指定にてcropが可能
       
    h. 180deg スキャンから投影像を作成
-      1. 普通の規格化の場合
-         ct_prj_f HiPic/ prj/
-      2. トロトロスキャン(インテリア、ローカル、トラバターとも)の場合
-         ict_prj_fc HiPic/ prj/
+      ct_prj_f HiPic/ prj/
 
    i. 32bit tiff からヒストグラム
       tif2hst rec/ (x1 y1 x2 y2)
