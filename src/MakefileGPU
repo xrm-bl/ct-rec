@@ -1,7 +1,7 @@
 
 BIN	=../bin
 
-CC	=gcc -O3 -D_GNU_SOURCE
+CC	=gcc -O3 -D_GNU_SOURCE -fopenmp -std=c89 sort_filter_omp.c 
 NVCC	=nvcc -O3
 CUDA	=/usr/local/cuda
 INCS	=-I$(CUDA)/include

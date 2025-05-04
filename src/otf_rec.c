@@ -12,6 +12,7 @@
 #include "cbp.h"
 #include <math.h>
 #include "tiffio.h"
+#include "sort_filter_omp.h"
 
 /*----------------------------------------------------------------------*/
 #ifndef M_PI
@@ -495,6 +496,38 @@ char	**argv;
 			}
 		}
 	}
+/* ----------------  ring removal start ---------------- */
+/*                                                       */
+    int kernel_size = 5; // Default kernel size
+    int num_threads = 40; // Default number of threads
+    float		*image_data = NULL, *result_data = NULL;
+    // Get kernel size from environment variable
+    kernel_size = get_kernel_size_from_env();
+	// Get number of threads from environment variable
+    num_threads = get_num_threads_from_env();
+    // Allocate memory
+	image_data = (float *)malloc(NN * NNST * sizeof(float));
+	result_data = (float *)malloc(NN * NNST * sizeof(float));
+
+	for (j=0; j<NNST; j++){
+		for (i=0; i<NN; i++){
+			*(image_data+NN*j+i)=P[j][i];
+		}
+	}
+	// Execute OpenMP image processing
+	if (sort_filter_restore_omp(image_data, result_data, NN, NNST, kernel_size, num_threads) != 0) {
+		fprintf(stderr, "OpenMP image processing failed\n");
+		return 5;
+	}
+	for (j=0; j<NNST; j++){
+		for (i=0; i<NN; i++){
+				P[j][i]=*(result_data+NN*j+i);
+		}
+	}
+    if (image_data) free(image_data);
+    if (result_data) free(result_data);
+/* ----------------  ring removal finish --------------- */
+/*                                                       */
 
 	r0=-1.0*f_center;
 	delta = 1.0; //normilized data

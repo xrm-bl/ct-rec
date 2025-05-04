@@ -17,8 +17,7 @@ ALL	= ct_rec_t_c ct_rec_t_s ct_rec_t_r \
 	ct_sub_f ct_prj_fc ict_prj_fc his_spl_tif\
 	rec_gf si_rar si_sir si_sir_a si_sir_s si_gf \
 	chk-rc set-rc tif_ave hp2DO his_ave \
-	act_spl tf_prj_f rec_crop gf_sd his2tif6 \
-	of_sinog
+	act_spl tf_prj_f rec_crop gf_sd his2tif6
 
 all:	$(ALL)
 
@@ -32,8 +31,8 @@ clean:
 ECSSC	=error.c cell.h sif.h sif.c cbp.h
 ES		=error.c sif.c
 ESF		=error.c sif_f_fast.c
-CBP		=cbp_thread_int.c
-CBPd	=cbp_thread_nai.c
+CBP		=-fopenmp -std=c89 sort_filter_omp.c cbp_thread_int.c
+CBPd	=-fopenmp -std=c89 sort_filter_omp.c cbp_thread_nai.c
 LPTM	=-lpthread -ltiff -lm
 LP		=-lpthread
 
@@ -112,9 +111,6 @@ rec_crop:	rec_crop.c rif_f.c
 
 sinog:	sinog.c $(ESF)
 	$(CC) sinog.c $(ESF) -lm -o sinog
-
-of_sinog:	of_sinog.c $(ESF)
-	$(CC) sinog.c $(ESF) -lm -o of_sinog
 
 pid:	pid.c
 	$(CC) pid.c -lm -o pid

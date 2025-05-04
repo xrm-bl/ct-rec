@@ -2,7 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef	WINDOWS
+#include "msdirent.h"
+#else
 #include <dirent.h>
+#endif
+
 #include "cell.h"
 
 #ifdef	CSI_RGB

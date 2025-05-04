@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <omp.h>
 #include "cell.h"
 #include "sif.h"
 
@@ -177,6 +178,8 @@ char	**argv;
 		if ((array[y]=(double *)MA(Nc,*array))==NULL) Error(cmae);
 	}
 
+    /* Set number of threads */
+    omp_set_num_threads(16);
 	#pragma omp for
 	for (y=0; y<Ny; y++) {
 	    ReadProjection(PathD000,fileD000,

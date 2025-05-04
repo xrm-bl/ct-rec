@@ -3,22 +3,17 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include <stdint.h>
 
 #include "tiffio.h"
 #include "cbp.h"
+#include "sort_filter_omp.h"
 
 #define MA(cnt,ptr)	malloc((cnt)*sizeof(*(ptr)))
 
 static int		Nx, Ny, Nt, M, BPS;
 static char		*desc;
 static float	*data32;
-
-static void Error(char *msg)
-{
-	fputs(msg, stderr);
-	fputc('\n', stderr);
-	exit(1);
-}
 
 /*----------------------------------------------------------------------*/
 
@@ -164,7 +159,10 @@ float	center;
 }
 
 
+
+
 /*----------------------------------------------------------------------*/
+
 
 #ifndef CLOCKS_PER_SEC
 #define CLOCKS_PER_SEC	1000000
@@ -184,19 +182,20 @@ int	main(int argc, char *argv[])
 	char		*comm = NULL;
 	double		data_max, data_min;
 	double		Dr,RC,RA0,Ct;
-	double		Clock, t1,t2,t3;					// timer setting
+	double		t0, t1,t2,t3,t4,t5;					// timer setting
 //	FILE		*fs[8192];
 	
+ 	
 //	if (_setmaxstdio(8192)!=8192)
 //		Error("set max stdio error");
 	
 	//	printf("%d\n", argc);
-	Clock=CLOCK();
+	t0=CLOCK();
 	if (argc == 3 || argc == 6 ) {
 			sprintf(fh, "%s", argv[1]);
 			if (existFile(fh)) {
 				(void)Read32TiffFile(fh,1);
-				fprintf(stderr, "%s\r", fh);
+//				fprintf(stderr, "%s\r", fh);
 			}
 			else {
 				fprintf(stderr, "\nNo %s.\n", fh);
@@ -223,25 +222,55 @@ int	main(int argc, char *argv[])
 	}
 	(void)Read32TiffFile(fh,0);
 
-	t1=CLOCK()-Clock;
+	t1=CLOCK();
 //	fprintf(stderr, "\t%lf\n",t1);
 
-//	return 0;
-	
+
+	//	
 	// initilaize for CBP
 	if ((P=InitCBP(Nx,Nt))==NULL){
 		Error("memory allocation error.");
 	}
-
-	t1=CLOCK();
-
-		for (i=0;i<Nt;i++){
-			for (n=0; n<Nx; n++){
-//				if(abs(*(po+Nx*Ny*i+m*Nx+n))<100.){
-					P[i][n]=*(data32+i*Nx+n);
-//				}
-			}
+	for (i=0;i<Nt;i++){
+		for (n=0; n<Nx; n++){
+				P[i][n]=*(data32+i*Nx+n);
 		}
+	}
+/* ----------------  ring removal start ---------------- */
+/*                                                       */
+    int kernel_size = 5; // Default kernel size
+    int num_threads = 40; // Default number of threads
+    float		*image_data = NULL, *result_data = NULL;
+    // Get kernel size from environment variable
+    kernel_size = get_kernel_size_from_env();
+	// Get number of threads from environment variable
+    num_threads = get_num_threads_from_env();
+    // Allocate memory
+	image_data = (float *)malloc(Nx * Nt * sizeof(float));
+	result_data = (float *)malloc(Nx * Nt * sizeof(float));
+
+	for (j=0; j<Nt; j++){
+		for (i=0; i<Nx; i++){
+			*(image_data+N*j+i)=P[j][i];
+		}
+	}
+	// Execute OpenMP image processing
+	if (sort_filter_restore_omp(image_data, result_data, Nx, Nt, kernel_size, num_threads) != 0) {
+		fprintf(stderr, "OpenMP image processing failed\n");
+		return 5;
+	}
+	for (j=0; j<Nt; j++){
+		for (i=0; i<Nx; i++){
+				P[j][i]=*(result_data+Nx*j+i);
+		}
+	}
+    if (image_data) free(image_data);
+    if (result_data) free(result_data);
+
+/* ----------------  ring removal finish --------------- */
+/*                                                       */
+	t2=CLOCK();
+
 // CBP
 
 	if (argc == 3) {
@@ -250,11 +279,11 @@ int	main(int argc, char *argv[])
 		RA0 = 0.0;
 	}
 
-		fprintf(stderr, "%f\t%f\t%f\n",Dr,RC,RA0);
+	t3=CLOCK();
+	fprintf(stderr, "%f\t%f\t%f\n",Dr,RC,RA0);
 
-	Clock=CLOCK();
 	F=CBP(1.0,-RC,RA0);
-	t2=CLOCK()-Clock;
+	t4=CLOCK();
 //	fprintf(stderr, "\t%lf\n",t2);
 
 	free(data32);
@@ -264,10 +293,9 @@ int	main(int argc, char *argv[])
 			data_max =-32000.;
 			data_min = 32000.;
 
-			Clock=CLOCK();
 			for(vv=0; vv<Nx; vv++){
 				for (hh=0; hh<Nx; hh++){
-					*(data32+Nx*vv+hh) = F[vv][hh]*10000./Dr;	/* unit change  um -> cm */;
+					*(data32+Nx*vv+hh) = F[vv][hh]*10000./Dr;	// unit change  um -> cm
 					if(data_max<*(data32+Nx*vv+hh)) data_max=*(data32+Nx*vv+hh);
 					if(data_min>*(data32+Nx*vv+hh)) data_min=*(data32+Nx*vv+hh);
 //	printf("\n%d\t%d\t%f\t%f",hh,vv,F[vv][hh],*(data32+Nx*vv+hh)*Dr/10000.);
@@ -281,23 +309,23 @@ int	main(int argc, char *argv[])
 			sprintf(comm,"%f\t%f\t%d\t%f\t%f\t%f",Dr, RC, Nt, RA0, (float)data_min, (float)data_max);
 			sprintf(fo, "%s", argv[2]);
 			(void)Store32TiffFile(fo, Nx, Nx, 32, data32, comm);
-			 free(comm);
-			t3=CLOCK()-Clock;
-			fprintf(stderr, "\rstore:\t%s\t%lf\t%lf", argv[2], t2, t3);
-
-
-	printf("\t%f\n",CLOCK()-t1);
-	printf("finish. \n");
+			t5=CLOCK();
+	
+	printf("\rstored:\t%s\t%lf\t%lf\t%lf\t%lf\t%lf\n", argv[2], t1-t0, t2-t1, t3-t2, t4-t3, t5-t4);
+//	printf("finish. \n");
 	free(data32);
+	free(comm);
 
+	
 //	// append to log file
 //	FILE		*ff;
-//	if ((ff = fopen("cmd-hst.log", "a")) == NULL) {
+//	if ((ff = fopen("../cmd-hst.log", "a")) == NULL) {
 //		return(-1);
 //	}
 //	for (i = 0; i<argc; ++i) fprintf(ff, "%s ", argv[i]);
 //	fprintf(ff, "\n");
 //	fclose(ff);
 
+	
 	return 0;
 }

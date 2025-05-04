@@ -6,6 +6,7 @@
 
 #include "tiffio.h"
 #include "cbp.h"
+#include "sort_filter_omp.h"
 
 #define MA(cnt,ptr)	malloc((cnt)*sizeof(*(ptr)))
 
@@ -205,14 +206,13 @@ int	main(int argc, char *argv[])
 	fprintf(stderr, "\t%lf\n",t1);
 
 	free(data32);
-	
+
 	// initilaize for CBP
 	if ((P=InitCBP(Nx,Nt))==NULL){
 		Error("memory allocation error.");
 	}
 
 	// loop z1 to z2
-	
 	t1=CLOCK();
 		for(m=z1;m<z2;++m){
 			for (l=0;l<Nt;l++){
@@ -223,6 +223,39 @@ int	main(int argc, char *argv[])
 				}
 			}
 
+/* ----------------  ring removal start ---------------- */
+/*                                                       */
+    int kernel_size = 5; // Default kernel size
+    int num_threads = 40; // Default number of threads
+    float		*image_data = NULL, *result_data = NULL;
+    // Get kernel size from environment variable
+    kernel_size = get_kernel_size_from_env();
+	// Get number of threads from environment variable
+    num_threads = get_num_threads_from_env();
+    // Allocate memory
+	image_data = (float *)malloc(Nx * Nt * sizeof(float));
+	result_data = (float *)malloc(Nx * Nt * sizeof(float));
+
+	for (j=0; j<Nt; j++){
+		for (i=0; i<Nx; i++){
+			*(image_data+Nx*j+i)=P[j][i];
+		}
+	}
+	// Execute OpenMP image processing
+	if (sort_filter_restore_omp(image_data, result_data, Nx, Nt, kernel_size, num_threads) != 0) {
+		fprintf(stderr, "OpenMP image processing failed\n");
+		return 5;
+	}
+	for (j=0; j<Nt; j++){
+		for (i=0; i<Nx; i++){
+				P[j][i]=*(result_data+Nx*j+i);
+		}
+	}
+    if (image_data) free(image_data);
+    if (result_data) free(result_data);
+/* ----------------  ring removal finish --------------- */
+/*                                                       */
+			
 // CBP
 			Clock=CLOCK();
 			F=CBP(1.0,-RC,RA0);
@@ -258,7 +291,10 @@ int	main(int argc, char *argv[])
 
 			RC=RC+Ct;
 		}
-	
+
+/* ----------------  ring removal finish --------------- */
+/*                                                       */
+
 	printf("\t%f\n",CLOCK()-t1);
 	printf("\nfinish.\n");
 	free(po);

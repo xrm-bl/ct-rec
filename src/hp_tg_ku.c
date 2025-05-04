@@ -6,6 +6,7 @@
 #include "cbp.h"
 //#include "sif_f.h"
 #include "tiffio.h"
+#include "sort_filter_omp.h"
 
 
 extern void	Error(char *msg);
@@ -139,7 +140,7 @@ int	main(int argc,char **argv)
 {
 	HiPic		hp;
 	double		y0,dy,Dz=0.0, cc;
-	int		Nz,z1,z2,y1,y2,y,z,t,x,len,i;
+	int		Nz,z1,z2,y1,y2,y,z,t,x,len,i,j;
 	Float		**P,***W,*w,*P_F,**F;
 	Struct		S;
 	FOM		*hp_T,fom,*S_F;
@@ -229,6 +230,40 @@ int	main(int argc,char **argv)
 		    w=W[y-y1][t]; for (x=0; x<hp.Nx; x++) *(P_F++)=(*(w++));
 		}
 	    }
+		
+/* ----------------  ring removal start ---------------- */
+/*                                                       */
+    int kernel_size = 5; // Default kernel size
+    int num_threads = 40; // Default number of threads
+    float		*image_data = NULL, *result_data = NULL;
+    // Get kernel size from environment variable
+    kernel_size = get_kernel_size_from_env();
+	// Get number of threads from environment variable
+    num_threads = get_num_threads_from_env();
+    // Allocate memory
+	image_data = (float *)malloc(hp.Nx * hp.Nt * sizeof(float));
+	result_data = (float *)malloc(hp.Nx * hp.Nt * sizeof(float));
+
+	for (j=0; j<hp.Nt; j++){
+		for (i=0; i<hp.Nx; i++){
+			*(image_data+hp.Nx*j+i)=P[j][i];
+		}
+	}
+	// Execute OpenMP image processing
+	if (sort_filter_restore_omp(image_data, result_data, hp.Nx, hp.Nt, kernel_size, num_threads) != 0) {
+		fprintf(stderr, "OpenMP image processing failed\n");
+		return 5;
+	}
+	for (j=0; j<hp.Nt; j++){
+		for (i=0; i<hp.Nx; i++){
+				P[j][i]=*(result_data+hp.Nx*j+i);
+		}
+	}
+    if (image_data) free(image_data);
+    if (result_data) free(result_data);
+/* ----------------  ring removal finish --------------- */
+/*                                                       */
+		
 	    F=CBP(Dr,-RC,RA0);
 		RC=RC+Ct;
 

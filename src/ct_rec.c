@@ -11,6 +11,7 @@
 #include <time.h>
 #include "cbp.h"
 #include "sif_f.h"
+#include "sort_filter_omp.h"
 
 /*----------------------------------------------------------------------*/
 #ifndef M_PI
@@ -521,6 +522,7 @@ char	**argv;
 		f_center= calc_center();
 	}
 
+
 // CBP
 	if ((P=InitCBP(N,M))==NULL) Error("memory allocation error.");
 
@@ -532,7 +534,39 @@ char	**argv;
 		}
 	}
 
-//
+/* ----------------  ring removal start ---------------- */
+/*                                                       */
+    int kernel_size = 5; // Default kernel size
+    int num_threads = 40; // Default number of threads
+    float		*image_data = NULL, *result_data = NULL;
+    // Get kernel size from environment variable
+    kernel_size = get_kernel_size_from_env();
+	// Get number of threads from environment variable
+    num_threads = get_num_threads_from_env();
+    // Allocate memory
+	image_data = (float *)malloc(N * M * sizeof(float));
+	result_data = (float *)malloc(N * M * sizeof(float));
+
+	for (j=0; j<M; j++){
+		for (i=0; i<N; i++){
+			*(image_data+N*j+i)=P[j][i];
+		}
+	}
+	// Execute OpenMP image processing
+	if (sort_filter_restore_omp(image_data, result_data, N, M, kernel_size, num_threads) != 0) {
+		fprintf(stderr, "OpenMP image processing failed\n");
+		return 5;
+	}
+	for (j=0; j<M; j++){
+		for (i=0; i<N; i++){
+				P[j][i]=*(result_data+N*j+i);
+		}
+	}
+    if (image_data) free(image_data);
+    if (result_data) free(result_data);
+/* ----------------  ring removal finish --------------- */
+/*                                                       */
+
 	r0=-1.0*f_center;
 	delta = 1.0; //normilized data
 

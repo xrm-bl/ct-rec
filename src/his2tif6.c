@@ -274,7 +274,7 @@ char	*argv[];
 
 	// read input images
 		if ((j = read_his(&his)) != 0){
-			printf("something wrong -- return value is %d", i);
+			printf("something wrong -- return value is %d", j);
 			free(his.comment); 
 			return(-1);
 		}
