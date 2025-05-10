@@ -17,20 +17,60 @@ char        *msg;
 }
 
 /*----------------------------------------------------------------------*/
+
+void replace_in_file(const char *filename, const char *search, const char *replace) {
+	FILE *file = fopen(filename, "r");
+	if (!file) {
+		perror("ファイルを開けませんでした");
+		return;
+	}
+
+	char temp_filename[] = "temp.txt";
+	FILE *temp_file = fopen(temp_filename, "w");
+	if (!temp_file) {
+		perror("一時ファイルを作成できませんでした");
+		fclose(file);
+		return;
+	}
+
+	char buffer[1024];
+	while (fgets(buffer, sizeof(buffer), file)) {
+		char *pos;
+		while ((pos = strstr(buffer, search)) != NULL) {
+			*pos = '\0';
+			fprintf(temp_file, "%s%s", buffer, replace);
+			strcpy(buffer, pos + strlen(search));
+		}
+		fprintf(temp_file, "%s", buffer);
+	}
+
+	fclose(file);
+	fclose(temp_file);
+
+	remove(filename);
+	rename(temp_filename, filename);
+}
+
+/*----------------------------------------------------------------------*/
 int main(argc,argv)
 int		argc;
 char	**argv;
 {
-	int	i, j, l;
+	int	i, j, l, gk;
 	int	L, M, N;
 	long	KK, k;
 
 	char    command[50];
 
 // parameter setting
-	if (argc!=3){
-		fprintf(stderr, "usage : %s N-shot N-split\n", argv[0]);
+	gk=0;
+	if (argc<3){
+		fprintf(stderr, "usage : %s N-shot N-split (kernel_size) \n", argv[0]);
 		return(1);
+	}else if (argc==3){
+		gk=0;
+	}else if (argc==4){
+		gk=atoi(argv[3]);
 	}
 
 	L=atoi(argv[1]);
@@ -38,8 +78,7 @@ char	**argv;
 	N=L*M;
 
 #ifdef WINDOWS
-//	sprintf(command, "sed -i -e 's/img/tif/g' conv.bat");
-//	if (system(command) == -1) {printf("command error at conv.\n");}
+	replace_in_file("conv.bat", "img", "tif");
 #else
 	sprintf(command, "sed -i -e 's/\r//g' conv.bat");				// CRLF -> LF
 	if (system(command) == -1) {printf("command error at conv.\n");}
@@ -55,31 +94,19 @@ char	**argv;
 	
 #endif
 
-
-	k=0;
 	for(j=1;j<M+1;++j){
-#ifdef WINDOWS
-		sprintf(command, "mkdir %03d", j); printf("%s\n"command);
+		#ifdef WINDOWS
+		sprintf(command, "mkdir %03d", j); printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j); }
-		sprintf(command, "mkdir %03d\\raw", j);printf("%s\n"command);
+		sprintf(command, "mkdir %03d\\raw", j);printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j); }
-		sprintf(command, "copy conv.bat %03d\\raw", j);printf("%s\n"command);
+		sprintf(command, "copy conv.bat %03d\\raw", j);printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j); }
-		sprintf(command, "copy output.log %03d\\raw", j);printf("%s\n"command);
+		sprintf(command, "copy output.log %03d\\raw", j);printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j); }
 //		sprintf(command, "copy lastangle.dat %03d\\raw", j);printf("%s\n"command);
 //		if (system(command) == -1) {printf("command error at %d\n",j); }
-
-		for(l=1;l<L+1;++l){
-			k=k+1;
-			if (L>99)   {sprintf(command, "move a%06ld.tif %03d\\raw\\a%03d.tif", k,j,l);}
-			if (L>999)  {sprintf(command, "move a%06ld.tif %03d\\raw\\a%04d.tif", k,j,l);}
-			if (L>9999) {sprintf(command, "move a%06ld.tif %03d\\raw\\a%05d.tif", k,j,l);}
-			if (system(command) == -1) {printf("command error at tif %d\n",k); }
-//			printf("%s\n",command);
-		}
-
-#else
+		#else
 		sprintf(command, "mkdir %03d", j); printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j);}
 		sprintf(command, "mkdir %03d/raw", j); printf("%s\n",command);
@@ -90,20 +117,50 @@ char	**argv;
 		if (system(command) == -1) {printf("command error at %d\n",j);}
 		sprintf(command, "cp lastangle.dat %03d/raw", j); printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j);}
-
-		for(l=1;l<L+1;++l){
-			k=k+1;
-			if (L>99)   {sprintf(command, "mv a%06ld.tif %03d/raw/a%03d.tif", k,j,l);}
-			if (L>999)  {sprintf(command, "mv a%06ld.tif %03d/raw/a%04d.tif", k,j,l);}
-			if (L>9999) {sprintf(command, "mv a%06ld.tif %03d/raw/a%05d.tif", k,j,l);}
-			if (system(command) == -1) {printf("command error at tif %d\n",k); }
-//			printf("%s\n",command);
-		}
-
-#endif
+		#endif
 	}
 
-//	printf("his_spl_E a.his %d %d \n", L, M);
+	if(gk==0){
+		k=0;
+		for(j=1;j<M+1;++j){
+			for(l=1;l<L+1;++l){
+				k=k+1;
+				#ifdef WINDOWS
+				if (L>99)   {sprintf(command, "move a%06ld.tif %03d\\raw\\a%03d.tif", k,j,l);}
+				if (L>999)  {sprintf(command, "move a%06ld.tif %03d\\raw\\a%04d.tif", k,j,l);}
+				if (L>9999) {sprintf(command, "move a%06ld.tif %03d\\raw\\a%05d.tif", k,j,l);}
+				if (system(command) == -1) {printf("command error at tif %d\n",k); }
+				#else
+				if (L>99)   {sprintf(command, "mv a%06ld.tif %03d/raw/a%03d.tif", k,j,l);}
+				if (L>999)  {sprintf(command, "mv a%06ld.tif %03d/raw/a%04d.tif", k,j,l);}
+				if (L>9999) {sprintf(command, "mv a%06ld.tif %03d/raw/a%05d.tif", k,j,l);}
+				if (system(command) == -1) {printf("command error at tif %d\n",k); }
+				#endif
+				printf("%s\r",command);
+			}
+		}
+	}else{
+		k=0;
+		for(j=1;j<M+1;++j){
+			for(l=1;l<L+1;++l){
+				k=k+1;
+				#ifdef WINDOWS
+				if (L>99)   {sprintf(command, "start /b gf_sd a%06ld.tif %d %03d\\raw\\a%03d.tif", k,gk,j,l);}
+				if (L>999)  {sprintf(command, "start /b gf_sd a%06ld.tif %d %03d\\raw\\a%04d.tif", k,gk,j,l);}
+				if (L>9999) {sprintf(command, "start /b gf_sd a%06ld.tif %d %03d\\raw\\a%05d.tif", k,gk,j,l);}
+				if (system(command) == -1) {printf("command error at tif %d\n",k); }
+				#else
+				if (L>99)   {sprintf(command, "gf_sd a%06ld.tif %d %03d/raw/a%03d.tif", k,gk,j,l);}
+				if (L>999)  {sprintf(command, "gf_sd a%06ld.tif %d %03d/raw/a%04d.tif", k,gk,j,l);}
+				if (L>9999) {sprintf(command, "gf_sd a%06ld.tif %d %03d/raw/a%05d.tif", k,gk,j,l);}
+				if (system(command) == -1) {printf("command error at tif %d\n",k); }
+				#endif
+				printf("%s\r",command);
+			}
+		}
+	}
+//printf("his_spl_E a.his %d %d \n", L, M);
+printf("\n");
 //
 
 	// append to log file

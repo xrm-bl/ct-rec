@@ -23,6 +23,10 @@ rem CPU
 %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_s.exe hp_tg_ku.c error.c rhp.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Shepp
 %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_c.exe hp_tg_ku.c error.c rhp.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Chesler
 
+%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_r.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Ramachandran
+%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_s.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Shepp
+%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_c.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Chesler
+
 rem reconstruction for offset CT
 rem CPU
 
@@ -36,6 +40,7 @@ rem CPU
 
 rem guess rotation center for offset CT
 %CC2% /Feofct_xy.exe /DONLY_CT_VIEWS error.c rhp.c msd.c %SIF_F% oct_xy.c
+%CC2% /Feotf_xy.exe /DONLY_CT_VIEWS error.c rtf.c msd.c %SIF_F% libtiff.lib otf_xy.c
 
 rem p image CT reconstruction
 rem CPU
