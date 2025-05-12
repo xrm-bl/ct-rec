@@ -27,7 +27,8 @@ ALL	= ct_rec_g_c ct_rec_g_s ct_rec_g_r \
 	otf_rec_g_c otf_rec_g_s otf_rec_g_r \
 	hp_tg_g_c hp_tg_g_s hp_tg_g_r \
 	p_rec_g_c p_rec_g_s p_rec_g_r \
-	ofct_srec_g_c ofct_srec_g_s ofct_srec_g_r
+	ofct_srec_g_c ofct_srec_g_s ofct_srec_g_r \\
+	oftf_srec_g_c oftf_srec_g_s oftf_srec_g_r
 
 # Basic targets
 all:	$(ALL)
@@ -123,3 +124,14 @@ otf_rec_g_s:	$(ESF) cbp_s.o otf_rec.c error.c $(COMMON_SRC)
 
 otf_rec_g_c:	$(ESF) cbp_c.o otf_rec.c error.c $(COMMON_SRC)
 	$(CC) otf_rec.c $(ESF) $(COMMON_SRC) cbp_c.o $(LIBS) -ltiff -o otf_rec_g_c -DFilter=Chesler
+
+# oftf_srec targets
+oftf_srec_g_r:	cbp_r.o ofct_srec.c rtf.c rl.c error.c $(COMMON_SRC)
+	$(CC) ofct_srec.c rtf.c rl.c error.c $(COMMON_SRC) cbp_r.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o oftf_srec_g_r -DFilter=Ramachandran
+
+oftf_srec_g_s:	cbp_s.o ofct_srec.c rtf.c rl.c error.c $(COMMON_SRC)
+	$(CC) ofct_srec.c rtf.c rl.c error.c $(COMMON_SRC) cbp_s.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o oftf_srec_g_s -DFilter=Shepp
+
+oftf_srec_g_c:	cbp_c.o ofct_srec.c rtf.c rl.c error.c $(COMMON_SRC)
+	$(CC) ofct_srec.c rtf.c rl.c error.c $(COMMON_SRC) cbp_c.o $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o oftf_srec_g_c -DFilter=Chesler
+

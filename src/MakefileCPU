@@ -10,7 +10,8 @@ ALL	= ct_rec_t_c ct_rec_t_s ct_rec_t_r \
 	p_rec_t_c p_rec_t_s p_rec_t_r \
 	sf_rec_t_c sf_rec_t_s sf_rec_t_r \
 	ofct_srec_t_c ofct_srec_t_s ofct_srec_t_r \
-	ofct_xy \
+	oftf_srec_t_c oftf_srec_t_s oftf_srec_t_r \
+	ofct_xy oftf_xy \
 	tif_f2i sinog pid stop_watch img_ave spl \
 	his_spl_K his_spl_E rec_stk his2img ct_prj_f \
 	ct_sub_f ct_prj_fc ict_prj_fc his_spl_tif\
@@ -93,9 +94,6 @@ ofct_srec_t_s:	$(CBPFILES) ofct_srec.c error.c rl.c rhp.c
 ofct_srec_t_c:	$(CBPFILES) ofct_srec.c error.c rl.c rhp.c
 	$(CC) $(CBPFLAGS) ofct_srec.c rhp.c rl.c error.c $(CBPFILES) $(LPTM) -DONLY_CT_VIEWS -o ofct_srec_t_c -DFilter=Chesler
 
-ofct_xy:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_xy.c
-	$(CC) $(CBPFLAGS) oct_xy.c rhp.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o ofct_xy
-
 otf_rec_t_r:	$(ESF) $(CBPFILES) otf_rec.c error.c
 	$(CC) $(CBPFLAGS) $(CBPFILES) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_r -DFilter=Ramachandran
 
@@ -104,6 +102,24 @@ otf_rec_t_s:	$(ESF) $(CBPFILES) otf_rec.c error.c
 
 otf_rec_t_c:	$(ESF) $(CBPFILES) otf_rec.c error.c
 	$(CC) $(CBPFLAGS) $(CBPFILES) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_c -DFilter=Chesler
+
+ofct_xy:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_xy.c
+	$(CC) $(CBPFLAGS) oct_xy.c rhp.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o ofct_xy
+
+oftf_xy:	error.c rhp.h rtf.c msd.h msd.c sif_f.h $(SIF_F) oct_xy.c
+	$(CC) $(CBPFLAGS) oct_xy.c rtf.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o oftf_xy
+
+oftf_srec_t_r:	$(CBPFILES) ofct_srec.c error.c rl.c rtf.c
+	$(CC) $(CBPFLAGS) ofct_srec.c rtf.c rl.c error.c $(CBPFILES) $(LPTM) -DONLY_CT_VIEWS -o oftf_srec_t_r -DFilter=Ramachandran
+
+oftf_srec_t_s:	$(CBPFILES) ofct_srec.c error.c rl.c rtf.c
+	$(CC) $(CBPFLAGS) ofct_srec.c rtf.c rl.c error.c $(CBPFILES) $(LPTM) -DONLY_CT_VIEWS -o oftf_srec_t_s -DFilter=Shepp
+
+oftf_srec_t_c:	$(CBPFILES) ofct_srec.c error.c rl.c rtf.c
+	$(CC) $(CBPFLAGS) ofct_srec.c rtf.c rl.c error.c $(CBPFILES) $(LPTM) -DONLY_CT_VIEWS -o oftf_srec_t_c -DFilter=Chesler
+
+otf_rec_t_r:	$(ESF) $(CBPFILES) otf_rec.c error.c
+	$(CC) $(CBPFLAGS) $(CBPFILES) otf_rec.c -lm $(ESF) $(LP) -ltiff -o otf_rec_t_r -DFilter=Ramachandran
 
 tif_f2i:	tif_f2i.c rif_f.c
 	$(CC) tif_f2i.c rif_f.c -ltiff -lm -o tif_f2i

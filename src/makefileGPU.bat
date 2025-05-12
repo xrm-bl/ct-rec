@@ -63,6 +63,16 @@ nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Ch
 %CC2% /openmp /Feotf_rec_g_c.exe  otf_rec.c error.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
+nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Ramachandran
+%CC2% /openmp /Feoftf_srec_g_r.exe ofct_srec.c error.c rtf.c rl.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
+nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Shepp
+%CC2% /openmp /Feoftf_srec_g_s.exe ofct_srec.c error.c rtf.c rl.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
+nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Chesler
+%CC2% /openmp /Feoftf_srec_g_c.exe ofct_srec.c error.c rtf.c rl.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
+
 rem p image CT reconstruction
 rem GPU
 
