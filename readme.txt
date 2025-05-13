@@ -31,7 +31,7 @@
       となっている。
 
    d. リングアーティファクトの除去
-      このバージョンからVo et al.(2018)のArgorism 3型のリング除去機能を設けた。
+      バージョン1.4からVo et al.(2018)のArgorism 3型のリング除去機能を設けた。
       CBP計算の直前に実行している。環境変数を指定することでこの機能をON/OFFできる。
       環境変数で KERNEL_SIZE を1に指定するとOFF。それ以外の正の奇数で効果が変わる。
       デフォルト値は5としている(環境変数が定義されていない場合も5になる)。
@@ -62,18 +62,20 @@
    
    c. 連続再構成
       hp_tg_P_F HiPic/ Dr RC RA0 rec/
-      (回転軸が傾いてない場合。全レイヤー)
+      tf_tg_P_F HiPic/ Dr RC RA0 rec/
+     (回転軸が傾いてない場合。全レイヤー)
       
-      HiPic/: q????.img が格納されているディレクトリ名。(/ は不要)
+      HiPic/: q????.img もしくは q????.tif が格納されているディレクトリ名。(/ は不要)
       Dr: 画素サイズ (um)
       RC: 回転軸の位置
       RA0: 回転軸の原点オフセット
       rec/: 再構成画像を出力するディレクトリ(計算前に作成すること)
       
       hp_tg_P_F HiPic/ Dr L1 C1 L2 C2 RA0 rec/
+      tf_tg_P_F HiPic/ Dr L1 C1 L2 C2 RA0 rec/
       (回転軸が傾いている場合。もしくは一部の領域のみの計算時)
       
-      HiPic/: q????.img が格納されているディレクトリ名。(/ は不要)
+      HiPic/: q????.img もしくは q????.tif が格納されているディレクトリ名。(/ は不要)
       Dr: 画素サイズ (um)
       L1: 計算開始レイヤー
       C1: L1での回転軸の位置
@@ -109,7 +111,8 @@
 3. 360deg scan (offset CT)。標準的な吸収の画像再構成
    a. 回転軸位置の推定
       ofct_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
-      
+      oftf_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
+     
       HiPic/: q????.img が格納されているディレクトリ名(/ は不要)
       Ox1: 横の捜索範囲開始点。(省略可)
       Ox2: 横の捜索範囲終了点。(省略可)
@@ -122,7 +125,7 @@
    b. 必要メモリ量の確認
       ofct_srec_P_F HiPic/ Rc Oy
 
-      HiPic/: q????.img が格納されているディレクトリ名(/ は不要)
+      HiPic/: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
       Rc: 回転軸の位置(左端からの画素数)
       Oy: 縦ずれ量（常に 0 を指定）。
 
@@ -131,8 +134,9 @@
 
    c. 再構成
       ofct_srec_P_F HiPic/ Rc Oy rangeList Dr RA0 rec/
+      oftf_srec_P_F HiPic/ Rc Oy rangeList Dr RA0 rec/
       
-      HiPic/: q????.img が格納されているディレクトリ名(/ は不要)
+      HiPic/: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
       Rc: 回転軸の位置(左端からの画素数)
       Oy: 縦ずれ量（常に 0 を指定）。
       rangeList: 再構成するレイヤーを指定。

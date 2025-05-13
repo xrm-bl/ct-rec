@@ -34,7 +34,7 @@ K. Uesugi
           _r: Ramachandran(HAN) Filter
 
    d. Ring Artifact Removal
-      This version implements a ring removal function based on Algorithm 3 from Vo et al. (2018).
+      This version 1.4 implements a ring removal function based on Algorithm 3 from Vo et al. (2018).
       The function is executed immediately before CBP calculation. This feature can be turned
       ON/OFF using environment variables. Setting the KERNEL_SIZE environment variable to 1
       turns it OFF. Using other positive odd numbers changes its effect. The default value
@@ -67,18 +67,20 @@ K. Uesugi
    
    c. Continuous reconstruction
       hp_tg_P_F HiPic/ Dr RC RA0 rec/
+      tf_tg_P_F HiPic/ Dr RC RA0 rec/
       (When the rotation axis is not tilted. All layers.)
       
-      HiPic/: The name of the directory in which the q????.img is stored.(/ is not required)
+      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
       Dr: pixel size (um)
       RC: position of rotation axis
       RA0: offset angle of rotation
       rec/: Directory for outputting reconstructed images(To be created before calculation)
       
       hp_tg_P_F HiPic/ Dr L1 C1 L2 C2 RA0 rec/
+      tf_tg_P_F HiPic/ Dr L1 C1 L2 C2 RA0 rec/
       (If the rotation axis is tilted. or when calculating only a part of the area)
       
-      HiPic/: The name of the directory in which the q????.img is stored.(/ is not required)
+      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
       Dr: pixel size (um)
       L1: Calculation start layer
       C1: position of rotation axis at L1
@@ -114,8 +116,9 @@ K. Uesugi
 3. 360deg scan (offset CT)ÅBImage reconstruction of standard absorption contrast.
    a. Estimation of rotational axis position
       ofct_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
+      oftf_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
       
-      HiPic/: The name of the directory in which the q????.img is stored.(/ is not required)
+      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
       Ox1: Starting point of the horizontal search area. (optional)
       Ox2: End point of the horizontal search area. (optional)
       Oy1: The starting point of the vertical search area. (optional)
@@ -126,8 +129,9 @@ K. Uesugi
 
    b. Check the amount of memory required.
       ofct_srec_P_F HiPic/ Rc Oy
+      oftf_srec_P_F HiPic/ Rc Oy
 
-      HiPic/: The name of the directory in which the q????.img is stored.(/ is not required)
+      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
       Rc: position of rotation axis (Number of pixels from the left edge)
       Oy: amount of vertical misalignment (Always set to 0).
 
@@ -136,8 +140,9 @@ K. Uesugi
 
    c. Reconstruction of offset CT
       ofct_srec_P_F HiPic/ Rc Oy rangeList Dr RA0 rec/
+      oftf_srec_P_F HiPic/ Rc Oy rangeList Dr RA0 rec/
       
-      HiPic/: The name of the directory in which the q????.img is stored.(/ is not required)
+      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
       Rc: position of rotation axis(Number of pixels from the left edge)
       Oy: amount of vertical misalignment (Always set to 0).
       rangeList: Specify the layer to be reconstructed.
