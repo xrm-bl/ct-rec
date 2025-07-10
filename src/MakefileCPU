@@ -67,6 +67,15 @@ hp_tg_t_s:	error.c $(CBPFILES) hp_tg_ku.c
 hp_tg_t_c:	error.c $(CBPFILES) hp_tg_ku.c
 	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) hp_tg_ku.c rhp.c $(LPTM) -DONLY_CT_VIEWS -o hp_tg_t_c -DFilter=Chesler
 
+tf_tg_t_r:	error.c $(CBPFILES) hp_tg_ku.c
+	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) hp_tg_ku.c rtf.c $(LPTM) -DONLY_CT_VIEWS -o tf_tg_t_r -DFilter=Ramachandran
+
+tf_tg_t_s:	error.c $(CBPFILES) hp_tg_ku.c
+	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) hp_tg_ku.c rtf.c $(LPTM) -DONLY_CT_VIEWS -o tf_tg_t_s -DFilter=Shepp
+
+tf_tg_t_c:	error.c $(CBPFILES) hp_tg_ku.c
+	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) hp_tg_ku.c rtf.c $(LPTM) -DONLY_CT_VIEWS -o tf_tg_t_c -DFilter=Chesler
+
 p_rec_t_r:	error.c $(CBPFILES) p_rec.c
 	$(CC) -DFloat=float error.c $(CBPFLAGS) $(CBPFILES) p_rec.c $(LPTM) -o p_rec_t_r -DFilter=Ramachandran
 

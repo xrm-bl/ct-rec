@@ -95,6 +95,16 @@ hp_tg_g_s:	cbp_f_s.o hp_tg_ku.c rhp.c error.c $(COMMON_SRC)
 hp_tg_g_c:	cbp_f_c.o hp_tg_ku.c rhp.c error.c $(COMMON_SRC)
 	$(CC) hp_tg_ku.c rhp.c error.c $(COMMON_SRC) cbp_f_c.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o hp_tg_g_c -DFilter=Chesler
 
+# tf_tg targets
+tf_tg_g_r:	cbp_f_r.o hp_tg_ku.c rhp.c error.c $(COMMON_SRC)
+	$(CC) hp_tg_ku.c rtf.c error.c $(COMMON_SRC) cbp_f_r.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o tf_tg_g_r -DFilter=Ramachandran
+
+tf_tg_g_s:	cbp_f_s.o hp_tg_ku.c rhp.c error.c $(COMMON_SRC)
+	$(CC) hp_tg_ku.c rtf.c error.c $(COMMON_SRC) cbp_f_s.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o tf_tg_g_s -DFilter=Shepp
+
+tf_tg_g_c:	cbp_f_c.o hp_tg_ku.c rhp.c error.c $(COMMON_SRC)
+	$(CC) hp_tg_ku.c rtf.c error.c $(COMMON_SRC) cbp_f_c.o -DFloat=float $(LPTM) $(LIBS) -DONLY_CT_VIEWS -o tf_tg_g_c -DFilter=Chesler
+
 # p_rec targets
 p_rec_g_r:	cbp_f_r.o p_rec.c error.c $(COMMON_SRC)
 	$(CC) p_rec.c error.c $(COMMON_SRC) cbp_f_r.o -DFloat=float $(LPTM) $(LIBS) -o p_rec_g_r -DFilter=Ramachandran

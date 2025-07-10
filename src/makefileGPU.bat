@@ -20,6 +20,9 @@ nvcc -O3 -I%CUDAINCL% cbp.cu -DFloat=float -c -use_fast_math -Xcompiler "/wd 481
 nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Ramachandran
 %CC2% /openmp /Fetf_rec_g_r.exe tf_rec.c error.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
 
+nvcc -O3 -I%CUDAINCL% cbp.cu -DFloat=float -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Ramachandran
+%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_r.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
 
 nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Shepp
 %CC2% /openmp /Fect_rec_g_s.exe ct_rec.c error.c sort_filter_omp.c %SIF_F% %CUFFT% %CUDART% cbp.obj
@@ -30,6 +33,9 @@ nvcc -O3 -I%CUDAINCL% cbp.cu -DFloat=float -c -use_fast_math -Xcompiler "/wd 481
 nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Shepp
 %CC2% /openmp /Fetf_rec_g_s.exe  tf_rec.c error.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
 
+nvcc -O3 -I%CUDAINCL% cbp.cu -DFloat=float -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Shepp
+%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_s.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
 
 nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Chesler
 %CC2% /openmp /Fect_rec_g_c.exe  ct_rec.c error.c sort_filter_omp.c %SIF_F% %CUFFT% %CUDART% cbp.obj
@@ -39,6 +45,10 @@ nvcc -O3 -I%CUDAINCL% cbp.cu -DFloat=float -c -use_fast_math -Xcompiler "/wd 481
 
 nvcc -O3 -I%CUDAINCL% cbp.cu -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Chesler
 %CC2% /openmp /Fetf_rec_g_c.exe  tf_rec.c error.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
+nvcc -O3 -I%CUDAINCL% cbp.cu -DFloat=float -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Chesler
+%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_c.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
+
 
 rem reconstruction for offset CT
 rem GPU
