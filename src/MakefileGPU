@@ -26,6 +26,7 @@ ALL	= ct_rec_g_c ct_rec_g_s ct_rec_g_r \
 	tf_rec_g_c tf_rec_g_s tf_rec_g_r \
 	otf_rec_g_c otf_rec_g_s otf_rec_g_r \
 	hp_tg_g_c hp_tg_g_s hp_tg_g_r \
+	tf_tg_g_c tf_tg_g_s tf_tg_g_r \
 	p_rec_g_c p_rec_g_s p_rec_g_r \
 	ofct_srec_g_c ofct_srec_g_s ofct_srec_g_r \\
 	oftf_srec_g_c oftf_srec_g_s oftf_srec_g_r
