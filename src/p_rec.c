@@ -128,7 +128,10 @@ int	main(int argc, char *argv[])
 	double		Dr,RC,RA0,Ct;
 	double		Clock, t1,t2,t3;					// timer setting
 	
-	//	printf("%d\n", argc);
+    int kernel_size = 5; // Default kernel size
+    int num_threads = 40; // Default number of threads
+
+//	printf("%d\n", argc);
 	Clock=CLOCK();
 	if (argc == 6 || argc == 9 ) {
 		p_sta = -1;
@@ -225,8 +228,6 @@ int	main(int argc, char *argv[])
 
 /* ----------------  ring removal start ---------------- */
 /*                                                       */
-    int kernel_size = 5; // Default kernel size
-    int num_threads = 40; // Default number of threads
     float		*image_data = NULL, *result_data = NULL;
     // Get kernel size from environment variable
     kernel_size = get_kernel_size_from_env();
@@ -292,8 +293,6 @@ int	main(int argc, char *argv[])
 			RC=RC+Ct;
 		}
 
-/* ----------------  ring removal finish --------------- */
-/*                                                       */
 
 	printf("\t%f\n",CLOCK()-t1);
 	printf("\nfinish.\n");
@@ -305,6 +304,7 @@ int	main(int argc, char *argv[])
 		return(-1);
 	}
 	for (i = 0; i<argc; ++i) fprintf(ff, "%s ", argv[i]);
+	fprintf(ff, "   %% kernel_size %d", kernel_size);
 	fprintf(ff, "\n");
 	fclose(ff);
 

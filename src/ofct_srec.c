@@ -141,6 +141,9 @@ int	main(int argc,char **argv)
 	HiPic	hp;
 	int	Ox,Oy,r0,r1,r2,r3,r4,r5,L,z0,z1,M,i;
 
+    int kernel_size = 5; // Default kernel size
+    int num_threads = 40; // Default number of threads
+
 	if (argc!=4 && argc!=8)
 	    Error("usage : ofct_srec HiPic/ Rc Oy {rangeList Dr RA0 rec/}"
 	    );
@@ -246,8 +249,6 @@ int	main(int argc,char **argv)
 
 /* ----------------  ring removal start ---------------- */
 /*                                                       */
-    int kernel_size = 5; // Default kernel size
-    int num_threads = 40; // Default number of threads
     float		*image_data = NULL, *result_data = NULL;
     // Get kernel size from environment variable
     kernel_size = get_kernel_size_from_env();
@@ -291,6 +292,18 @@ int	main(int argc,char **argv)
 	    	INIT_MT(t,Store,ac);
 		}
 
+	
+	// append to log file
+	FILE		*f;
+	if((f = fopen("cmd-hst.log","a")) == NULL){
+		return(-10);
+	}
+	for(i=0;i<argc;++i) fprintf(f,"%s ",argv[i]);
+	fprintf(f,"   %% kernel_size %d",kernel_size);
+	fprintf(f,"\n");
+	fclose(f);
+
+
 	TERM_MT(t,Store);
 
 	free(*fom); free(fom); free(**SG); free(*SG); free(SG); TermCBP();
@@ -298,15 +311,6 @@ int	main(int argc,char **argv)
 	free(target);
 }
 	TermReadHiPic(&hp);
-
-	// append to log file
-	FILE		*f;
-	if((f = fopen("cmd-hst.log","a")) == NULL){
-		return(-10);
-	}
-	for(i=0;i<argc;++i) fprintf(f,"%s ",argv[i]);
-	fprintf(f,"\n");
-	fclose(f);
 
 	return 0;
 }

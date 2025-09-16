@@ -631,6 +631,7 @@ char	**argv;
 		return(-10);
 	}
 	for(i=0;i<argc;++i) fprintf(ff,"%s ",argv[i]);
+	fprintf(ff, "   %% kernel_size %d", kernel_size);
 	fprintf(ff,"\n");
 	fclose(ff);
 

@@ -73,5 +73,15 @@ int	main(int argc,char **argv)
 	for (y=0; y<Ny; y++) free(cell[y]); free(cell);
 	if (desc!=NULL) free(desc);
 
+		// append to log file
+	FILE		*flog;
+	int		i;
+	if ((flog = fopen("cmd-hst.log", "a")) == NULL) {
+		return(-1);
+	}
+	for (i = 0; i<argc; ++i) fprintf(flog, "%s ", argv[i]);
+	fprintf(flog, "\n");
+	fclose(flog);
+
 	return 0;
 }

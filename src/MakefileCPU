@@ -7,6 +7,7 @@ ALL	= ct_rec_t_c ct_rec_t_s ct_rec_t_r \
 	tf_rec_t_c tf_rec_t_s tf_rec_t_r \
 	otf_rec_t_c otf_rec_t_s otf_rec_t_r \
 	hp_tg_t_c hp_tg_t_s hp_tg_t_r \
+	tf_tg_t_c tf_tg_t_s tf_tg_t_r \
 	p_rec_t_c p_rec_t_s p_rec_t_r \
 	sf_rec_t_c sf_rec_t_s sf_rec_t_r \
 	ofct_srec_t_c ofct_srec_t_s ofct_srec_t_r \
@@ -17,7 +18,8 @@ ALL	= ct_rec_t_c ct_rec_t_s ct_rec_t_r \
 	ct_sub_f ct_prj_fc ict_prj_fc his_spl_tif\
 	rec_gf si_rar si_sir si_sir_a si_sir_s si_gf \
 	chk-rc set-rc tif_ave hp2DO his_ave \
-	act_spl tf_prj_f rec_crop gf_sd his2tif6 ofsfa
+	act_spl tf_prj_f rec_crop gf_sd his2tif6 ofsfa \
+	act_spl2 tif_mgf tif_blf
 
 all:	$(ALL)
 
@@ -32,7 +34,7 @@ ECSSC	=error.c cell.h sif.h sif.c cbp.h
 ES		=error.c sif.c
 ESF		=error.c sif_f_fast.c
 SIF_F   =sif_f_fast.c
-# CBPフラグを修正（依存関係ではなくコンパイラオプションとして定義）
+# CBP flag corrected
 CBPFLAGS	=-fopenmp
 CBPFILES	=sort_filter_omp.c cbp_thread_int.c
 CBPdFILES	=sort_filter_omp.c cbp_thread_nai.c
@@ -115,8 +117,8 @@ otf_rec_t_c:	$(ESF) $(CBPFILES) otf_rec.c error.c
 ofct_xy:	error.c rhp.h rhp.c msd.h msd.c sif_f.h $(SIF_F) oct_xy.c
 	$(CC) $(CBPFLAGS) oct_xy.c rhp.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o ofct_xy
 
-oftf_xy:	error.c rhp.h rtf.c msd.h msd.c sif_f.h $(SIF_F) oct_xy.c
-	$(CC) $(CBPFLAGS) oct_xy.c rtf.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -lm -o oftf_xy
+oftf_xy:	error.c rhp.h rtf.c msd.h msd.c sif_f.h $(SIF_F) oftf_xy.c
+	$(CC) $(CBPFLAGS) oftf_xy.c rtf.c msd.c $(ESF) -DONLY_CT_VIEWS $(LP) -ltiff -lm -o oftf_xy
 
 oftf_srec_t_r:	$(CBPFILES) ofct_srec.c error.c rl.c rtf.c
 	$(CC) $(CBPFLAGS) ofct_srec.c rtf.c rl.c error.c $(CBPFILES) $(LPTM) -DONLY_CT_VIEWS -o oftf_srec_t_r -DFilter=Ramachandran
@@ -208,6 +210,12 @@ si_gf:	error.c fft.h fft.c csi.h csi.c cell.h rif.h rif.c sif.h sif.c si_gf.c
 tif_ave:	tif_ave.c rif.c
 	$(CC) tif_ave.c rif.c -lm -ltiff -o tif_ave
 
+tif_mgf:	tif_mgf.c
+	$(CC) tif_mgf.c  -O2 -fopenmp -lm -ltiff -o tif_mgf
+
+tif_blf:	tif_blf.c
+	$(CC) tif_blf.c  -O2 -fopenmp -lm -ltiff -o tif_blf
+
 his_ave:	his_ave.c sif.c
 	$(CC) his_ave.c sif.c -lm -o his_ave
 
@@ -216,6 +224,9 @@ hp2DO:	cell.h sif.h sif.c hp2DO.c
 
 act_spl:	act_spl.c
 	$(CC) act_spl.c -lm -o act_spl
+
+act_spl2:	act_spl2.c
+	$(CC) act_spl2.c -lm -o act_spl2
 
 gf_sd:	error.c cell.h rif.h rif.c sif.h sif.c gf_sd.c
 	$(CC) error.c rif.c sif.c gf_sd.c -lm -o gf_sd

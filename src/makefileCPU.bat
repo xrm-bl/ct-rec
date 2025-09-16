@@ -136,6 +136,9 @@ rem %ICX% hp2DO.c sif.c "C:\Program Files (x86)\IntelSWTools\compilers_and_libra
 rem tif_ave
 %CC2% /Fetif_ave.exe tif_ave.c rif.c libtiff.lib
 
+rem tif_mgf
+%CC2% /openmp /Fetif_mgf.exe tif_mgf.c libtiff.lib
+
 rem his_ave
 %CC2% /Fehis_ave.exe his_ave.c sif.c
 
@@ -145,6 +148,7 @@ rem q3_ave, q4_ave
 
 rem act_spl
 %CC2% /Feact_spl.exe act_spl.c
+%CC2% /Feact_spl2.exe act_spl2.c
 
 rem gf_sd fd
 %CC2% /Fegf_sd.exe error.c rif.c sif.c gf_sd.c
@@ -155,6 +159,8 @@ rem his2tif6
 
 rem ofsfa
 %CC2% /Feofsfa.exe ofsfa.c
+
+%CC2% /openmp tif_blf.c libtiff.lib
 
 move *.exe ..\exe
 del *.obj

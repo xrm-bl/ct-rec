@@ -121,13 +121,13 @@ char	**argv;
 //	printf("%d\n", argc-2);
 // read input images
 	for(i=1;i<argc-1;++i){
-		printf("read %s\r",argv[i]);
 //		Read16TiffFile(argv[i],0);
 	    ReadImageFile(argv[i],&Nx,&Ny,&BPS,&cell,&desc);
 		if (i==1){
 			sumdata = (long *) malloc(Nx*Ny*sizeof(long));
 			for(jj=0;jj<Nx*Ny;++jj) *(sumdata+jj)=0;
 		}
+		printf("read %s\t%d\t%d\r",argv[i],Nx,Ny);
 		jj=0;
 		for(vv=0;vv<Ny;++vv){
 			for(hh=0;hh<Nx;++hh){

@@ -146,6 +146,9 @@ int	main(int argc,char **argv)
 	FOM		*hp_T,fom,*S_F;
 	THREAD_T	T;
 
+    int kernel_size = 5; // Default kernel size
+    int num_threads = 40; // Default number of threads
+
 	if (argc!=6 && argc!=9){
 		fprintf(stderr,"usage : hp_tg HiPic/ Dr RC RA0 rec/\nusage : hp_tg HiPic/ Dr L1 C1 L2 C2 RA0 rec/");
 	    Error(" ");  
@@ -233,8 +236,6 @@ int	main(int argc,char **argv)
 		
 /* ----------------  ring removal start ---------------- */
 /*                                                       */
-    int kernel_size = 5; // Default kernel size
-    int num_threads = 40; // Default number of threads
     float		*image_data = NULL, *result_data = NULL;
     // Get kernel size from environment variable
     kernel_size = get_kernel_size_from_env();
@@ -277,18 +278,20 @@ int	main(int argc,char **argv)
 	    }
 	    INIT_MT(T,Store,&S);
 	}
-	TERM_MT(T);
-
-	free(*(S.F)); free(S.F); free(**W); free(*W); free(W); TermCBP();
-
 	// append to log file
 	FILE		*f;
 	if((f = fopen("cmd-hst.log","a")) == NULL){
 		return(-10);
 	}
 	for(i=0;i<argc;++i) fprintf(f,"%s ",argv[i]);
+	fprintf(f,"   %% kernel_size %d",kernel_size);
 	fprintf(f,"\n");
 	fclose(f);
+
+
+	TERM_MT(T);
+
+	free(*(S.F)); free(S.F); free(**W); free(*W); free(W); TermCBP();
 
 	return 0;
 }
