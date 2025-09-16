@@ -2,7 +2,7 @@
 
 上杉
 
-2025.05.04  ver. 1.4
+2025.05.04  ver. 1.6
 
 0. バグやリクエストは作者に連絡してください。
 
@@ -274,4 +274,19 @@
       y1: 縦方向切り出しの始まり。
       y2: 縦方向切り出しの終わり。
 
+   o. 任意bit数のCT像にbilateral filterかける
+      tif_blf orgDir newDir  [kernel_size] [spatial_sigma] [intensity_sigma]
+      後ろの３つの変数は省略すると、自動的にパラメータを決める。
 
+      例: tif_blf_g rh rh_blf1
+      例: tif_blf rh rh_blf1 5 20 200
+      
+
+   p. tif画像にmedial filterかけてからgaussian filterをかける。
+      tif_mgf <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
+      X線透過像に散乱光のノイズなどがある場合に、除去するようなときに用いる。
+      
+      例: tif_mgf a000401.tif 001/raw/a0401.tif 3 1
+      例: tif_mgf a000401.tif 001/raw/a0401.tif 0 1
+
+      

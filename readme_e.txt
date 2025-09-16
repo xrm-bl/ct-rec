@@ -2,7 +2,7 @@ Explanation of image reconstruction software based on Nakano's software and arou
 
 K. Uesugi
 
-2025.05.04  ver. 1.4
+2025.06.16  ver. 1.6
 
 0. If you find any bugs or requests, please contact the author.
 
@@ -273,4 +273,19 @@ K. Uesugi
       y1: Beginning of the longitudinal cutout.
       x2: End of the lateral cutout.
       y2: End of the longitudinal cutout.
+
+   o. bilateral filter on CT image with any number of bits
+      tif_blf orgDir newDir [kernel_size] [spatial_sigma] [intensity_sigma]
+      If the three variables behind are omitted, the parameters are automatically determined.
+      _g uses cuda toolkit
+
+      Ex: tif_blf_g rh rh_blf1
+      Ex: tif_blf rh rh_blf1 5 20 200
+
+   p. Apply a medial filter to a tif image and then apply a gaussian filter.
+      tif_mgf <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
+      This filter is used to remove scattered noise in the X-ray transmission image.
+      
+      Ex: tif_mgf a000401.tif 001/raw/a0401.tif 3 1
+      Ex: tif_mgf a000401.tif 001/raw/a0401.tif 0 1
 
