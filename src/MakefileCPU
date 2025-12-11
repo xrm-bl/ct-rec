@@ -186,17 +186,17 @@ ict_prj_fc:	ict_prj_fc.c
 ct_prj_fc:	ct_prj_fc.c
 	$(CC) ct_prj_fc.c -lm -ltiff -o ct_prj_fc
 
-tf_prj_f:	tf_prj_f.c rif.c
-	$(CC) tf_prj_f.c rif.c -lm -ltiff -o tf_prj_f
+tf_prj_f:	tf_prj_f.c rif_fast.c
+	$(CC) -fopenmp -march=native tf_prj_f.c rif_fast.c -lm -ltiff -o tf_prj_f
 
 rec_gf:	rec_gf.c fft.c rif_f.c
 	$(CC) rec_gf.c fft.c rif_f.c -lm -ltiff -o rec_gf
 
-si_rar: si_rar.c error.c rif.c csi.c rsi.c sif.c
-	$(CC) si_rar.c error.c rif.c csi.c rsi.c sif.c -lm -ltiff -o si_rar
+si_rar: si_rar.c error.c rif_fast.c csi.c rsi.c sif_fast.c
+	$(CC) -fopenmp -march=native si_rar.c error.c rif_fast.c csi.c rsi.c sif_fast.c -lm -ltiff -o si_rar
 
-si_sir: si_sir.c error.c rif.c csi.c rsi.c sif.c
-	$(CC) si_sir.c error.c rif.c csi.c rsi.c sif.c -lm -ltiff -o si_sir
+si_sir: si_sir.c error.c rif_fast.c csi.c rsi.c sif_fast.c
+	$(CC) -fopenmp -march=native si_sir.c error.c rif_fast.c csi.c rsi.c sif_fast.c -lm -ltiff -o si_sir
 
 si_sir_a: si_sir_a.c error.c rif.c csi.c rsi.c
 	$(CC) si_sir_a.c error.c rif.c csi.c rsi.c -lm -ltiff -o si_sir_a
@@ -204,8 +204,8 @@ si_sir_a: si_sir_a.c error.c rif.c csi.c rsi.c
 si_sir_s: si_sir_s.c error.c rif.c csi.c rsi.c
 	$(CC) si_sir_s.c error.c rif.c csi.c rsi.c -lm -ltiff -o si_sir_s
 
-si_gf:	error.c fft.h fft.c csi.h csi.c cell.h rif.h rif.c sif.h sif.c si_gf.c
-	$(CC) error.c fft.c csi.c rif.c sif.c si_gf.c -lm -o si_gf
+si_gf:	error.c fft.h fft.c csi.h csi.c cell.h rif.h rif_fast.c sif.h sif_fast.c si_gf.c
+	$(CC) -fopenmp -march=native error.c fft.c csi.c rif_fast.c sif_fast.c si_gf.c -lm -o si_gf
 
 tif_ave:	tif_ave.c rif.c
 	$(CC) tif_ave.c rif.c -lm -ltiff -o tif_ave
@@ -228,11 +228,11 @@ act_spl:	act_spl.c
 act_spl2:	act_spl2.c
 	$(CC) act_spl2.c -lm -o act_spl2
 
-gf_sd:	error.c cell.h rif.h rif.c sif.h sif.c gf_sd.c
-	$(CC) error.c rif.c sif.c gf_sd.c -lm -o gf_sd
+gf_sd:	error.c cell.h rif.h rif_fast.c sif.h sif_fast.c gf_sd.c
+	$(CC) -fopenmp -march=native error.c rif_fast.c sif_fast.c gf_sd.c -lm -o gf_sd
 
-gf_fd:	error.c fft.h fft.c cell.h rif.h rif.c sif.h sif.c gf_fd.c
-	$(CC) error.c fft.c rif.c sif.c gf_fd.c -lm -o gf_fd
+gf_fd:	error.c fft.h fft.c cell.h rif.h rif_fast.c sif.h sif_fast.c gf_fd.c
+	$(CC) -fopenmp -march=native error.c fft.c rif_fast.c sif_fast.c gf_fd.c -lm -o gf_fd
 
 his2tif6:	his2tif6.c
 	$(CC) his2tif6.c -lm -ltiff -o his2tif6

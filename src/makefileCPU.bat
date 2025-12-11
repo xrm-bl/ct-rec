@@ -106,7 +106,7 @@ rem ct_prj_fc
 %CC2% /Fect_prj_fc.exe ct_prj_fc.c libtiff.lib
 
 rem tf_prj_fc
-%CC2% /Fetf_prj_f.exe rif.c tf_prj_f.c libtiff.lib
+%CC2% /openmp /arch:AVX2 /Fetf_prj_f.exe rif_fast.c tf_prj_f.c libtiff.lib
 
 rem tif2hst
 %CC2% /Fetif2hst.exe tif2hst.c libtiff.lib
@@ -117,24 +117,27 @@ rem 3D gaussian filter
 rem 3D Rectangle rotation
 rem si_rar.exe ro - +y +z +x ro_yz
 rem si_rar.exe ro - +z +x +y ro_zx
-%CC2% error.c rif.c csi.c rsi.c sif.c si_rar.c /Fesi_rar.exe
+rem %CC2% error.c rif.c csi.c rsi.c sif.c si_rar.c /Fesi_rar.exe
+%CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c sif_fast.c si_rar.c /Fesi_rar.exe
 
 rem 3D binning
 rem si_sir ro - 2 ro_2x2x2
-%CC2% error.c rif.c csi.c rsi.c sif.c si_sir.c /Fesi_sir.exe
-%CC2% error.c rif.c csi.c rsi.c si_sir_a.c libtiff.lib /Fesi_sir_a.exe
-%CC2% error.c rif.c csi.c rsi.c si_sir_s.c libtiff.lib /Fesi_sir_s.exe
+rem %CC2% error.c rif.c csi.c rsi.c sif.c si_sir.c /Fesi_sir.exe
+%CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c si_sir_a.c libtiff.lib /Fesi_sir_a.exe
+%CC2%/openmp /arch:AVX2  error.c rif_fast.c csi.c rsi.c si_sir_s.c libtiff.lib /Fesi_sir_s.exe
+rem %CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c sif_fast.c si_sir_fast.c /Fe:si_sir_fast.exe
+%CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c sif_fast.c si_sir_pipe.c /Fe:si_sir.exe
 
 rem 3D gaussian filter for 8 or 16bit tiff
 rem   si_gf  orgDir  nameFile  radius  {bias}  newDir
-%CC2% error.c fft.c csi.c rif.c sif.c si_gf.c /Fesi_gf.exe
+%CC2% /openmp /arch:AVX2  error.c fft.c csi.c rif_fast.c sif_fast.c si_gf.c /Fesi_gf.exe
 
 rem hp2DO
 rem %ICX% hp2DO.c sif.c "C:\Program Files (x86)\IntelSWTools\compilers_and_libraries_2019.5.281\windows\compiler\lib\intel64_win\libiomp5md.lib"
 %CCX% /openmp hp2DO.c sif.c 
 
 rem tif_ave
-%CC2% /Fetif_ave.exe tif_ave.c rif.c libtiff.lib
+%CC2% /openmp /arch:AVX2 /Fetif_ave.exe tif_ave.c rif_fast.c libtiff.lib
 
 rem tif_mgf
 %CC2% /openmp /Fetif_mgf.exe tif_mgf.c libtiff.lib
@@ -151,8 +154,8 @@ rem act_spl
 %CC2% /Feact_spl2.exe act_spl2.c
 
 rem gf_sd fd
-%CC2% /Fegf_sd.exe error.c rif.c sif.c gf_sd.c
-%CC2% /Fegf_fd.exe error.c fft.c rif.c sif.c gf_fd.c
+%CC2% /openmp /arch:AVX2 /Fegf_sd.exe error.c rif_fast.c sif_fast.c gf_sd.c
+%CC2% /openmp /arch:AVX2 /Fegf_fd.exe error.c fft.c rif_fast.c sif_fast.c gf_fd.c
 
 rem his2tif6
 %CC2% /Fehis2tif6.exe his2tif6.c libtiff.lib
