@@ -1,0 +1,119 @@
+## 連続撮影データの自動一括再構成手順 on windows PC
+
+### 前提条件
+
+以下の3つのファイルが同一ディレクトリに存在すること。
+
+- `a.his`
+- `conv.bat`
+- `output.log`
+
+### 手順
+
+#### 1. rc-check.bat の実行
+
+```
+rc-check.bat 撮影枚数 測定回数
+```
+
+例：`rc-check.bat 2101 4`
+
+このバッチファイルは以下の処理を自動で行う。
+
+1. 分割データの作成（`spl 撮影枚数 測定回数 > aaa.bat` および `call aaa.bat` を実行）
+2. 各分割ディレクトリで `call conv.bat` および `ct_rec_g_c 120` を実行して試し再構成を行う
+
+**注意**：`120` は計算する高さの仮値である。自身のデータに合わせて適切な値に変更すること。
+
+実行完了後、`rc-check` ディレクトリ内に以下が生成される。
+
+- 各ディレクトリの試し再構成画像
+- `..\center.log`
+
+#### 2. 結果の確認
+
+**この時点で `rc-check` 内の画像データに異常がないか必ず確認すること。**
+
+#### 3. 本再構成の実行
+
+確認が完了したら、以下を実行する。
+
+```
+gen-all center.log
+```
+
+**事前準備**：`gen-all` の27-31行目を自身の環境に合わせて編集すること。画素サイズの設定も忘れずに確認する。
+
+### 異常があった場合の対処
+
+`rc-check` 内の画像に異常がある場合は、以下の手順で対応する。
+
+1. 該当ディレクトリで手動再構成を行う
+2. 正しい回転軸の位置を特定する
+3. `center.log` の2列目の値を修正する
+
+---
+
+
+
+## Automatic Batch Reconstruction Procedure for Continuous Imaging Data on windows PC
+
+### Prerequisites
+
+Ensure the following three files are located in the same directory:
+
+- `a.his`
+- `conv.bat`
+- `output.log`
+
+### Procedure
+
+#### 1. Run rc-check.bat
+
+```
+rc-check.bat <number_of_frames> <number_of_measurements>
+```
+
+Example: `rc-check.bat 2101 4`
+
+This batch file automatically performs the following operations:
+
+1. Creates split data  
+   (executes `spl <number_of_frames> <number_of_measurements> > aaa.bat` and then `call aaa.bat`)
+2. Performs a trial reconstruction in each split directory by running  
+   `call conv.bat` and `ct_rec_g_c 120`
+
+**Note:** The value `120` is a temporary height parameter for the reconstruction.  
+Adjust it appropriately according to your dataset.
+
+After execution, the following items will be generated inside the `rc-check` directory:
+
+- Trial reconstruction images for each directory
+- `..\center.log`
+
+#### 2. Check the Results
+
+**At this stage, make sure to verify that there are no abnormalities in the image data inside `rc-check`.**
+
+#### 3. Run the Final Reconstruction
+
+Once verification is complete, execute:
+
+```
+gen-all center.log
+```
+
+**Preparation:**  
+Edit lines 27–31 of `gen-all` to match your environment.  
+Also ensure that the pixel size settings are correct.
+
+### Handling Abnormalities
+
+If any abnormalities are found in the images inside `rc-check`, follow these steps:
+
+1. Perform a manual reconstruction in the affected directory  
+2. Determine the correct rotation axis position  
+3. Modify the value in the second column of `center.log`
+
+---
+
