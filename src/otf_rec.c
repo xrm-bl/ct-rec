@@ -287,7 +287,7 @@ long		ln;
 			ilp=0;
 			for (jx = 0; jx < N; ++jx){
 				I0[jx]    = a[jx] * shottime[k] + b[jx];
-				if ((I[jx]-dark[jx]) < 1){
+				if ((I[jx]-dark[jx]) < 20){
 					if(ilp==0){
 						printf("Warning \t");
 //						printf("  jx = %d, I0 = %f, I = %d, dark = %d, ln =%d \n", jx, I0[jx], I[jx], dark[jx], ln);
@@ -295,7 +295,7 @@ long		ln;
 //						printf("  t1   = %f, t2   = %f \n", t1, t2);
 //						printf("  data is negative!! = %f,  %d\n",(double)I0[jx] / (double)(I[jx]-dark[jx]), jx);
 //						printf("  a = %f,  b = %f\n", a[jx], b[jx]);
-						printf("  %s\tareare\n", fii);
+						printf("  %s\t black\n", fname);
 						ilp=1;
 					}
 				}
