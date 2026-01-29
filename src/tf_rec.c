@@ -347,8 +347,8 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 	for(i=0;i<N;++i) cent_1[i]=data[i];
 
 // zero degree file(transmitted)
-	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, 2);
-	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, 2);
+	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, 3);
+	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, 3);
 	if ((i = Read16TiffFileLine(fname, 0)) != 0){
 		printf("something wrong -- return value is %d(II01)", i);
 		return -1;
