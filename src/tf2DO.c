@@ -1,243 +1,419 @@
+/*
+ * tf2DO.c - 16bit Monochrome TIFF version of hp2DO
+ * 
+ * Rotation axis determination from 0/180 degree projections
+ * Input: 16bit monochrome TIFF files
+ * Output: Text data and optional TIFF image
+ *
+ * Compile (Windows, Visual Studio):
+ *   cl /O2 /openmp tf2DO.c libtiff.lib /Fetf2DO.exe
+ *
+ * Compile (Windows, MinGW-w64):
+ *   gcc -O2 -fopenmp -o tf2DO.exe tf2DO.c -ltiff
+ */
+
+#ifdef _MSC_VER
+#define _CRT_SECURE_NO_WARNINGS
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
-#include "cell.h"
-#include "sif.h"
-#include "rif.h"
+#include <stdint.h>
+#include <omp.h>
+#include "tiffio.h"
 
-static void	Abort(path,msg)
-char		*path,*msg;
+/* Cell type for output image (16bit) */
+typedef unsigned short Cell;
+
+static void Abort(const char *path, const char *msg)
 {
-	fprintf(stderr,"%s : %s\n",path,msg); exit(1);
+    fprintf(stderr, "%s : %s\n", path, msg);
+    exit(1);
 }
 
-#define GetByte(file)	fgetc(file)
-
-static int	GetWord(file)
-FILE		*file;
+static void Error(const char *msg)
 {
-	int	lo,hi;
-
-	return ((lo=GetByte(file))==EOF ||
-		(hi=GetByte(file))==EOF)?-1:(hi<<8)|lo;
+    fputs(msg, stderr);
+    fputc('\n', stderr);
+    exit(1);
 }
 
-static FILE	*OpenFile(path,Nx,Ny,firstFile)
-char		*path;
-int		*Nx,*Ny,firstFile;
+#define MA(cnt, ptr) malloc((size_t)(cnt) * sizeof(*(ptr)))
+
+/*
+ * Read entire 16bit monochrome TIFF file into memory
+ * Returns allocated 2D array [Ny][Nx] of unsigned short
+ */
+static unsigned short **ReadTiffFile(const char *path, int *Nx, int *Ny, int firstFile)
 {
-	FILE	*file=fopen(path,"rb");
-	int	len;
+    TIFF *tif;
+    uint32_t width, height;
+    uint16_t bps, spp;
+    unsigned short **data;
+    int y;
 
-	if (file==NULL) Abort(path,"file not open.");
+    tif = TIFFOpen(path, "r");
+    if (tif == NULL) Abort(path, "file not open.");
 
-	if (GetByte(file)!='I' ||
-	    GetByte(file)!='M') Abort(path,"bad magic number.");
+    TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width);
+    TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &height);
+    TIFFGetField(tif, TIFFTAG_BITSPERSAMPLE, &bps);
+    TIFFGetField(tif, TIFFTAG_SAMPLESPERPIXEL, &spp);
 
-	if ((len=GetWord(file))<0) Abort(path,"bad comment length.");
+    if (bps != 16) Abort(path, "not 16bit image.");
+    if (spp != 1) Abort(path, "not monochrome image.");
 
-	if (firstFile) {
-	    if ((*Nx=GetWord(file))<=0 ||
-		(*Ny=GetWord(file))<=0) Abort(path,"bad image size.");
-	}
-	else
-	    if (*Nx!=GetWord(file) ||
-		*Ny!=GetWord(file)) Abort(path,"image size not match.");
+    if (firstFile) {
+        *Nx = (int)width;
+        *Ny = (int)height;
+    } else {
+        if (*Nx != (int)width || *Ny != (int)height)
+            Abort(path, "image size not match.");
+    }
 
-	fseek(file,4L,1);		/* image offset */
+    /* Allocate memory for entire image */
+    data = (unsigned short **)MA(*Ny, data);
+    if (data == NULL) Abort(path, "memory allocation error.");
 
-	if (GetWord(file)!=2) Abort(path,"bad image type.");
+    for (y = 0; y < *Ny; y++) {
+        data[y] = (unsigned short *)MA(*Nx, *data);
+        if (data[y] == NULL) Abort(path, "memory allocation error.");
+    }
 
-	fseek(file,(long)(len+50),1);	/* reserved data and comment */
+    /* Read all scanlines */
+    for (y = 0; y < (int)height; y++) {
+        if (TIFFReadScanline(tif, data[y], y, 0) < 0) {
+            Abort(path, "error reading scanline.");
+        }
+    }
 
-	return file;
+    TIFFClose(tif);
+    return data;
 }
 
-static void	ReadLine(path,file,Nx,line)
-char		*path;
-FILE		*file;
-int		Nx,*line;
+/*
+ * Free 2D image array
+ */
+static void FreeTiffData(unsigned short **data, int Ny)
 {
-	int	x,word;
-
-	for (x=0; x<Nx; x++) {
-	    if ((word=GetWord(file))<0) Abort(path,"unexpected end of file.");
-
-	    line[x]=word;
-	}
+    int y;
+    for (y = 0; y < Ny; y++) free(data[y]);
+    free(data);
 }
 
-static double	Log(I0,I)
-double		I0,I;
+static double Log(double I0, double I)
 {
-	return (I0<=0.0 || I<=0.0)?0.0:log(I0/I);
+    return (I0 <= 0.0 || I <= 0.0) ? 0.0 : log(I0 / I);
 }
 
-static void	ReadProjection(pathD,fileD,
-			       pathI,fileI,
-			       pathE,fileE,Nx,dark,work,p)
-char		*pathD,*pathI,*pathE;
-FILE		*fileD,*fileI,*fileE;
-int		Nx,*dark,*work;
-double		*p;
+/*
+ * Calculate projection data from pre-loaded D(dark), I(I0), E(exposure) arrays
+ */
+static void CalcProjection(unsigned short **dataD, unsigned short **dataI,
+                           unsigned short **dataE, int Nx, int y, double *p)
 {
-	int	x;
+    int x;
+    double I0, I;
 
-	ReadLine(pathD,fileD,Nx,dark);
-	ReadLine(pathI,fileI,Nx,work);
-	for (x=0; x<Nx; x++) p[x]=(double)work[x]-(double)dark[x];
-
-	ReadLine(pathE,fileE,Nx,work);
-	for (x=0; x<Nx; x++) p[x]=Log(p[x],(double)work[x]-(double)dark[x]);
+    for (x = 0; x < Nx; x++) {
+        I0 = (double)dataI[y][x] - (double)dataD[y][x];
+        I  = (double)dataE[y][x] - (double)dataD[y][x];
+        p[x] = Log(I0, I);
+    }
 }
 
-static double	Sqrt(d)
-double		d;
+static double Sqrt(double d)
 {
-	return (d<0.0)?0.0:sqrt(d);
+    return (d < 0.0) ? 0.0 : sqrt(d);
 }
 
-static double	CalculateRMS(N1,dx,x1,x2,p000,p180)
-int		N1,dx,x1,x2;
-double		*p000,*p180;
+static double CalculateRMS(int N1, int dx, int x1, int x2,
+                           double *p000, double *p180)
 {
-	int	x;
-	double	d,sum=0.0;
+    int x;
+    double d, sum = 0.0;
 
-	for (x=x1; x<x2; x++) {
-	    d=p000[x+dx]-p180[N1-x]; sum+=(d*d);
-	}
-	return Sqrt(sum/(double)(x2-x1));
+    for (x = x1; x < x2; x++) {
+        d = p000[x + dx] - p180[N1 - x];
+        sum += (d * d);
+    }
+    return Sqrt(sum / (double)(x2 - x1));
 }
 
-static void	Error(msg)
-char		*msg;
+/*
+ * Save result as 16bit monochrome TIFF
+ */
+static void StoreTiffFile(const char *path, int width, int height,
+                          Cell **cell, const char *desc)
 {
-	fputs(msg,stderr); fputc('\n',stderr); exit(1);
+    TIFF *tif;
+    int y;
+    uint16_t *buf;
+
+    tif = TIFFOpen(path, "w");
+    if (tif == NULL) {
+        fprintf(stderr, "%s : cannot create output file.\n", path);
+        return;
+    }
+
+    TIFFSetField(tif, TIFFTAG_IMAGEWIDTH, (uint32_t)width);
+    TIFFSetField(tif, TIFFTAG_IMAGELENGTH, (uint32_t)height);
+    TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 16);
+    TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
+    TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, 1);
+    TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
+    TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+    TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+    if (desc != NULL && strlen(desc) > 0) {
+        TIFFSetField(tif, TIFFTAG_IMAGEDESCRIPTION, desc);
+    }
+
+    buf = (uint16_t *)_TIFFmalloc(width * sizeof(uint16_t));
+    if (buf == NULL) {
+        fprintf(stderr, "%s : memory allocation error.\n", path);
+        TIFFClose(tif);
+        return;
+    }
+
+    for (y = 0; y < height; y++) {
+        memcpy(buf, cell[y], width * sizeof(uint16_t));
+        TIFFWriteScanline(tif, buf, y, 0);
+    }
+
+    _TIFFfree(buf);
+    TIFFClose(tif);
 }
 
-#define MA(cnt,ptr)	malloc((size_t)(cnt)*sizeof(*(ptr)))
+#define PathD000 argv[1]
+#define PathI000 argv[2]
+#define PathE000 argv[3]
+#define PathD180 argv[4]
+#define PathI180 argv[5]
+#define PathE180 argv[6]
 
-#define PathD000	argv[1]
-#define PathI000	argv[2]
-#define PathE000	argv[3]
-#define PathD180	argv[4]
-#define PathI180	argv[5]
-#define PathE180	argv[6]
+#define BPS 16
+#define DESC_LEN 256
 
-#define BPS	(8*sizeof(Cell))
+/* Search range as percentage of image width (default 10%) */
+#define DEFAULT_SEARCH_PERCENT 10.0
 
-#define DESC_LEN	256
-
-int	main(argc,argv)
-int	argc;
-char	**argv;
+int main(int argc, char **argv)
 {
-	FILE	*fileD000,*fileI000,*fileE000,
-		*fileD180,*fileI180,*fileE180;
-	int	Nx,Ny,z1,z2,*dark,*work,N1,N2,Nc,y,dx0,x1,x2,dx,x;
-	double	*p000,*p180,**array,RMS0,RMS,R0,CC,D,A,B,RMS1,RMS2,dRMS,
-		sCC=0.0,sCCy=0.0,sCCR0=0.0,sCCy2=0.0,sCCR02=0.0,sCCyR0=0.0;
-	char	desc[DESC_LEN],
-		*cmae="cell memory allocation error.";
-	Cell	**cell;
+    unsigned short **dataD000, **dataI000, **dataE000,
+                   **dataD180, **dataI180, **dataE180;
+    int Nx, Ny, z1, z2, N1, N2, Nc, y;
+    int search_range;  /* Actual search range in pixels */
+    double **array, D, A, B, RMS1, RMS2, dRMS,
+           sCC = 0.0, sCCy = 0.0, sCCR0 = 0.0, sCCy2 = 0.0, sCCR02 = 0.0, sCCyR0 = 0.0;
+    double *R0_arr, *RMS0_arr, *CC_arr;
+    int *dx0_arr;
+    char desc[DESC_LEN],
+         *cmae = "cell memory allocation error.";
+    Cell **cell;
+    int num_threads = 16;
+    double search_percent = DEFAULT_SEARCH_PERCENT;
 
-	if (argc<7 || argc>10)
-	Error("usage : hp2DO D000 I000 E000 D180 I180 E180 {y1 y2} {TIFF}");
+    if (argc < 7 || argc > 11)
+        Error("usage : tf2DO D000 I000 E000 D180 I180 E180 {y1 y2} {TIFF} {search%}");
 
-	fileD000=OpenFile(PathD000,&Nx,&Ny,1);
-	fileI000=OpenFile(PathI000,&Nx,&Ny,0);
-	fileE000=OpenFile(PathE000,&Nx,&Ny,0);
-	fileD180=OpenFile(PathD180,&Nx,&Ny,0);
-	fileI180=OpenFile(PathI180,&Nx,&Ny,0);
-	fileE180=OpenFile(PathE180,&Nx,&Ny,0);
+    /* Suppress libtiff warnings/errors to stderr for cleaner output */
+    TIFFSetWarningHandler(NULL);
 
-	if (argc==7 || argc==8) {
-	    z1=0; z2=Ny-1;
-	}
-	else
-	    if ((z1=atoi(argv[7]))<0 ||
-		(z2=atoi(argv[8]))>=Ny || z1>=z2) Error("bad slice range.");
+    /* Check for search percentage as last argument (if numeric) */
+    if (argc >= 8) {
+        double tmp = atof(argv[argc - 1]);
+        if (tmp > 0.0 && tmp <= 50.0) {
+            /* Last argument looks like a percentage */
+            if (argc == 8 || argc == 10) {
+                search_percent = tmp;
+                argc--;  /* Adjust argc to exclude search% from other parsing */
+            }
+        }
+    }
 
-	printf("%d\t%d\n",Nx,Ny);
+    /* Read all TIFF files into memory */
+    fprintf(stderr, "Loading TIFF files...\n");
+    dataD000 = ReadTiffFile(PathD000, &Nx, &Ny, 1);
+    dataI000 = ReadTiffFile(PathI000, &Nx, &Ny, 0);
+    dataE000 = ReadTiffFile(PathE000, &Nx, &Ny, 0);
+    dataD180 = ReadTiffFile(PathD180, &Nx, &Ny, 0);
+    dataI180 = ReadTiffFile(PathI180, &Nx, &Ny, 0);
+    dataE180 = ReadTiffFile(PathE180, &Nx, &Ny, 0);
+    fprintf(stderr, "Loading complete.\n");
 
-	if ((dark=(int    *)MA(Nx,dark))==NULL ||
-	    (work=(int    *)MA(Nx,work))==NULL ||
-	    (p000=(double *)MA(Nx,p000))==NULL ||
-	    (p180=(double *)MA(Nx,p180))==NULL)
-	    Error("line memory allocation error.");
+    if (argc == 7 || argc == 8) {
+        z1 = 0;
+        z2 = Ny - 1;
+    } else {
+        if ((z1 = atoi(argv[7])) < 0 ||
+            (z2 = atoi(argv[8])) >= Ny || z1 >= z2)
+            Error("bad slice range.");
+    }
 
-	N1=Nx-1; N2=Nx/2;
+    printf("%d\t%d\n", Nx, Ny);
 
-	if (argc==8 || argc==10) {
-	    if ((array=(double **)MA(Ny,array))==NULL) Error(cmae);
+    N1 = Nx - 1;
+    N2 = Nx / 2;
 
-	    Nc=N2*2+1;
-	    for (y=0; y<Ny; y++)
-		if ((array[y]=(double *)MA(Nc,*array))==NULL) Error(cmae);
-	}
+    /* Calculate search range from percentage */
+    search_range = (int)(Nx * search_percent / 100.0);
+    if (search_range < 1) search_range = 1;
+    if (search_range > N2) search_range = N2;
+    fprintf(stderr, "Search range: +/-%d pixels (%.1f%% of width %d)\n", 
+            search_range, search_percent, Nx);
 
-	#pragma omp for
-	for (y=0; y<Ny; y++) {
-	    ReadProjection(PathD000,fileD000,
-			   PathI000,fileI000,
-			   PathE000,fileE000,Nx,dark,work,p000);
+    /* Allocate result arrays for parallel processing */
+    R0_arr = (double *)MA(Ny, R0_arr);
+    RMS0_arr = (double *)MA(Ny, RMS0_arr);
+    CC_arr = (double *)MA(Ny, CC_arr);
+    dx0_arr = (int *)MA(Ny, dx0_arr);
+    if (R0_arr == NULL || RMS0_arr == NULL || CC_arr == NULL || dx0_arr == NULL)
+        Error("result array memory allocation error.");
 
-	    ReadProjection(PathD180,fileD180,
-			   PathI180,fileI180,
-			   PathE180,fileE180,Nx,dark,work,p180);
+    if (argc == 8 || argc == 10) {
+        if ((array = (double **)MA(Ny, array)) == NULL) Error(cmae);
 
-	    RMS0=CalculateRMS(N1,dx0=0,x1=0,x2=Nx,p000,p180);
-	    if (argc==8 || argc==10) array[y][N2]=RMS0;
+        Nc = search_range * 2 + 1;  /* Use search_range instead of N2 */
+        for (y = 0; y < Ny; y++)
+            if ((array[y] = (double *)MA(Nc, *array)) == NULL) Error(cmae);
+    }
 
-	    for (dx=1; dx<=N2; dx++) {
-		if ((RMS=CalculateRMS(N1,-dx,dx,Nx,p000,p180))<RMS0) {
-		    RMS0=RMS; dx0=(-dx); x1=dx; x2=Nx;
-		}
-		if (argc==8 || argc==10) array[y][N2+dx]=RMS;
+    /* Set number of threads */
+    omp_set_num_threads(num_threads);
 
-		if ((RMS=CalculateRMS(N1,dx,0,Nx-dx,p000,p180))<RMS0) {
-		    RMS0=RMS; dx0=dx; x1=0; x2=Nx-dx;
-		}
-		if (argc==8 || argc==10) array[y][N2-dx]=RMS;
-	    }
-	    R0=(-(double)(N1+dx0)/2.0);
+    /* Parallel processing loop */
+    #pragma omp parallel
+    {
+        double *p000, *p180;
+        int tid = omp_get_thread_num();
 
-	    CC=0.0; for (x=x1; x<x2; x++) CC+=(p000[x+dx0]*p180[N1-x]);
+        /* Thread-local buffers */
+        p000 = (double *)MA(Nx, p000);
+        p180 = (double *)MA(Nx, p180);
+        if (p000 == NULL || p180 == NULL) {
+            fprintf(stderr, "Thread %d: line memory allocation error.\n", tid);
+        }
 
-	    printf("%d\t%lg\t%lf\t%lf\n",y,R0,RMS0,CC);
+        #pragma omp for schedule(dynamic)
+        for (y = 0; y < Ny; y++) {
+            int dx0, x1, x2, dx, x;
+            double RMS0, RMS, R0, CC;
 
-	    if (y>=z1 && y<=z2) {
-		sCC+=CC;
-		sCCy+=(CC*(double)y);
-		sCCR0+=(CC*R0);
-		sCCy2+=(CC*(double)y*(double)y);
-		sCCR02+=(CC*R0*R0);
-		sCCyR0+=(CC*(double)y*R0);
-	    }
-	}
-	D=sCCy2*sCC-sCCy*sCCy;
-	A=(sCC*sCCyR0-sCCy*sCCR0)/D;
-	B=(sCCy2*sCCR0-sCCy*sCCyR0)/D;
-	printf("%lf\t%lf\t%lf",A,B,Sqrt((sCCR02-A*sCCyR0-B*sCCR0)/sCC));
-	if (argc==9 || argc==10) printf("\t%d\t%d",z1,z2);
-	putchar('\n');
+            CalcProjection(dataD000, dataI000, dataE000, Nx, y, p000);
+            CalcProjection(dataD180, dataI180, dataE180, Nx, y, p180);
 
-	if (argc==8 || argc==10) {
-	    RMS1=RMS2=RMS0;
-	    for (y=0; y<Ny; y++) for (dx=0; dx<Nc; dx++) {
-		if (array[y][dx]<RMS1) RMS1=array[y][dx];
-		if (array[y][dx]>RMS2) RMS2=array[y][dx];
-	    }
-	    dRMS=(RMS2-RMS1)/((double)(1<<BPS)-1.0);
+            RMS0 = CalculateRMS(N1, dx0 = 0, x1 = 0, x2 = Nx, p000, p180);
+            if (argc == 8 || argc == 10) array[y][search_range] = RMS0;
 
-	    cell=(Cell **)array;
-	    for (y=0; y<Ny; y++) for (dx=0; dx<Nc; dx++)
-		cell[y][dx]=(Cell)floor((array[y][dx]-RMS1)/dRMS+0.5);
+            /* Search only within +/- search_range from center */
+            for (dx = 1; dx <= search_range; dx++) {
+                if ((RMS = CalculateRMS(N1, -dx, dx, Nx, p000, p180)) < RMS0) {
+                    RMS0 = RMS;
+                    dx0 = (-dx);
+                    x1 = dx;
+                    x2 = Nx;
+                }
+                if (argc == 8 || argc == 10) array[y][search_range + dx] = RMS;
 
-	    sprintf(desc,"%d\t%lf\t%lf\n",Nx,RMS1,RMS2);
-	    StoreImageFile(argv[argc-1],Nc,Ny,BPS,cell,desc);
-	}
-	return 0;
+                if ((RMS = CalculateRMS(N1, dx, 0, Nx - dx, p000, p180)) < RMS0) {
+                    RMS0 = RMS;
+                    dx0 = dx;
+                    x1 = 0;
+                    x2 = Nx - dx;
+                }
+                if (argc == 8 || argc == 10) array[y][search_range - dx] = RMS;
+            }
+            R0 = (-(double)(N1 + dx0) / 2.0);
+
+            CC = 0.0;
+            for (x = x1; x < x2; x++) CC += (p000[x + dx0] * p180[N1 - x]);
+
+            /* Store results */
+            R0_arr[y] = R0;
+            RMS0_arr[y] = RMS0;
+            CC_arr[y] = CC;
+            dx0_arr[y] = dx0;
+        }
+
+        free(p000);
+        free(p180);
+    }
+
+    /* Output results and calculate sums (sequential) */
+    for (y = 0; y < Ny; y++) {
+        printf("%d\t%lg\t%lf\t%lf\n", y, R0_arr[y], RMS0_arr[y], CC_arr[y]);
+
+        if (y >= z1 && y <= z2) {
+            double CC = CC_arr[y];
+            double R0 = R0_arr[y];
+            sCC += CC;
+            sCCy += (CC * (double)y);
+            sCCR0 += (CC * R0);
+            sCCy2 += (CC * (double)y * (double)y);
+            sCCR02 += (CC * R0 * R0);
+            sCCyR0 += (CC * (double)y * R0);
+        }
+    }
+
+    D = sCCy2 * sCC - sCCy * sCCy;
+    A = (sCC * sCCyR0 - sCCy * sCCR0) / D;
+    B = (sCCy2 * sCCR0 - sCCy * sCCyR0) / D;
+    printf("%lf\t%lf\t%lf", A, B, Sqrt((sCCR02 - A * sCCyR0 - B * sCCR0) / sCC));
+    if (argc == 9 || argc == 10) printf("\t%d\t%d", z1, z2);
+    putchar('\n');
+
+    if (argc == 8 || argc == 10) {
+        RMS1 = RMS2 = RMS0_arr[0];
+        for (y = 0; y < Ny; y++) {
+            int dx;
+            for (dx = 0; dx < Nc; dx++) {
+                if (array[y][dx] < RMS1) RMS1 = array[y][dx];
+                if (array[y][dx] > RMS2) RMS2 = array[y][dx];
+            }
+        }
+        dRMS = (RMS2 - RMS1) / ((double)(1 << BPS) - 1.0);
+
+        cell = (Cell **)MA(Ny, cell);
+        if (cell == NULL) Error(cmae);
+        for (y = 0; y < Ny; y++) {
+            cell[y] = (Cell *)MA(Nc, *cell);
+            if (cell[y] == NULL) Error(cmae);
+        }
+
+        for (y = 0; y < Ny; y++) {
+            int dx;
+            for (dx = 0; dx < Nc; dx++) {
+                cell[y][dx] = (Cell)floor((array[y][dx] - RMS1) / dRMS + 0.5);
+            }
+        }
+
+        sprintf(desc, "%d\t%lf\t%lf", Nx, RMS1, RMS2);
+        StoreTiffFile(argv[argc - 1], Nc, Ny, cell, desc);
+
+        /* Free cell memory */
+        for (y = 0; y < Ny; y++) free(cell[y]);
+        free(cell);
+
+        /* Free array memory */
+        for (y = 0; y < Ny; y++) free(array[y]);
+        free(array);
+    }
+
+    /* Free result arrays */
+    free(R0_arr);
+    free(RMS0_arr);
+    free(CC_arr);
+    free(dx0_arr);
+
+    /* Free TIFF data */
+    FreeTiffData(dataD000, Ny);
+    FreeTiffData(dataI000, Ny);
+    FreeTiffData(dataE000, Ny);
+    FreeTiffData(dataD180, Ny);
+    FreeTiffData(dataI180, Ny);
+    FreeTiffData(dataE180, Ny);
+
+    return 0;
 }

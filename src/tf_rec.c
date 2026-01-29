@@ -390,29 +390,36 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 		rmsd0=sqrt(rsum/(double)N);
 		dx0=0;
 
-		for(dx=1;dx<=N/2;++dx){
-			rsum=0.0;
-			for(j=0;j<N1-dx;++j){
-				rd=*(p000+dx+j)-*(p180+N1-j);
-				rsum=rsum+rd*rd;
-			}
-			rmsd=sqrt(rsum/(double)(N-dx));
-			if(rmsd0>rmsd){
-				rmsd0=rmsd;
-				dx0=dx;
-//				printf("%d\t%lf\t%lf\n", dx,rmsd0,rmsd);
-			}
+		/* Search range: +/- 10% of image width */
+		{
+			long search_range = N / 10;
+			if (search_range < 1) search_range = 1;
+			if (search_range > N/2) search_range = N/2;
 
-			rsum=0.0;
-			for(j=0;j<N1-dx;++j){
-				rd=*(p000+j)-*(p180-dx+N1-j);
-				rsum=rsum+rd*rd;
-			}
-			rmsd=sqrt(rsum/(double)(N-dx));
-			if(rmsd0>rmsd){
-				rmsd0=rmsd;
-				dx0=-dx;
+			for(dx=1;dx<=search_range;++dx){
+				rsum=0.0;
+				for(j=0;j<N1-dx;++j){
+					rd=*(p000+dx+j)-*(p180+N1-j);
+					rsum=rsum+rd*rd;
+				}
+				rmsd=sqrt(rsum/(double)(N-dx));
+				if(rmsd0>rmsd){
+					rmsd0=rmsd;
+					dx0=dx;
+//				printf("%d\t%lf\t%lf\n", dx,rmsd0,rmsd);
+				}
+
+				rsum=0.0;
+				for(j=0;j<N1-dx;++j){
+					rd=*(p000+j)-*(p180-dx+N1-j);
+					rsum=rsum+rd*rd;
+				}
+				rmsd=sqrt(rsum/(double)(N-dx));
+				if(rmsd0>rmsd){
+					rmsd0=rmsd;
+					dx0=-dx;
 //				printf("%d\t%lf\t%lf\n", -dx,rmsd0,rmsd);
+				}
 			}
 		}
 		center=(N1+dx0)/2.0;

@@ -134,7 +134,8 @@ rem   si_gf  orgDir  nameFile  radius  {bias}  newDir
 
 rem hp2DO
 rem %ICX% hp2DO.c sif.c "C:\Program Files (x86)\IntelSWTools\compilers_and_libraries_2019.5.281\windows\compiler\lib\intel64_win\libiomp5md.lib"
-%CCX% /openmp hp2DO.c sif.c 
+%CC2% /openmp hp2DO.c sif.c 
+%CC2% /openmp tf2do.c libtiff.lib
 
 rem tif_ave
 %CC2% /openmp /arch:AVX2 /Fetif_ave.exe tif_ave.c rif_fast.c libtiff.lib
