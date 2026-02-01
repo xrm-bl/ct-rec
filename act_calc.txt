@@ -1,0 +1,7 @@
+手順
+
+1. 前処理	act_spl2 3601 30 3 1
+2. テスト	act_rc-check.bat stack_num
+3. 本番		act_gen-all.bat center.log
+4. 結合		stkw.bat
+

@@ -10,7 +10,7 @@
 
 ### 手順
 
-#### 1. rc-check.bat の実行
+#### 1. rc-check.bat の実行 (自動CTの場合は act_rc-check.bat)
 
 ```
 rc-check.bat 撮影枚数 測定回数
@@ -34,7 +34,7 @@ rc-check.bat 撮影枚数 測定回数
 
 **この時点で `rc-check` 内の画像データに異常がないか必ず確認すること。**
 
-#### 3. 本再構成の実行
+#### 3. 本再構成の実行 gen-all.bat  (自動CTの場合は act_gen-all.bat)
 
 確認が完了したら、以下を実行する。
 
@@ -68,7 +68,7 @@ Ensure the following three files are located in the same directory:
 
 ### Procedure
 
-#### 1. Run rc-check.bat
+#### 1. Run rc-check.bat  (act_rc-check.bat for auto CT)
 
 ```
 rc-check.bat <number_of_frames> <number_of_measurements>
@@ -95,7 +95,7 @@ After execution, the following items will be generated inside the `rc-check` dir
 
 **At this stage, make sure to verify that there are no abnormalities in the image data inside `rc-check`.**
 
-#### 3. Run the Final Reconstruction
+#### 3. Run the Final Reconstruction with gen-all.bat   (act_gen-all.bat for auto CT)
 
 Once verification is complete, execute:
 
