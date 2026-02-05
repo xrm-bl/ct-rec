@@ -25,10 +25,10 @@
 /*----------------------------------------------------------------------*/
 
 // main data for read transmitted images (data[y][x])
-short	data[MAXPIXL];
+unsigned short	data[MAXPIXL];
 
 //dark file name and data
-short	dark[MAXPIXL];
+unsigned short	dark[MAXPIXL];
 short	cent_flag;
 
 // image profile from 'output.log'
@@ -36,8 +36,8 @@ float	shottime[MAX_SHOT], shotangle[MAX_SHOT];
 int		Ishot[MAX_SHOT], NST, NI0, II0[MAX_SHOT];
 
 // parameters for interpolation of incident beam
-short	II01[MAXPIXL], II02[MAXPIXL];     // II01[x], II02[x]
-short	I[MAXPIXL];                                // I[x]
+unsigned short	II01[MAXPIXL], II02[MAXPIXL];     // II01[x], II02[x]
+unsigned short	I[MAXPIXL];                                // I[x]
 double	I0[MAXPIXL];
 
 // file head character  q???.tif or q????.tif
@@ -295,7 +295,7 @@ long		ln;
 //						printf("  t1   = %f, t2   = %f \n", t1, t2);
 //						printf("  data is negative!! = %f,  %d\n",(double)I0[jx] / (double)(I[jx]-dark[jx]), jx);
 //						printf("  a = %f,  b = %f\n", a[jx], b[jx]);
-						printf("  %s\t black\n", fname);
+						printf("  %d\t black \t %d \n", k, (I[jx]-dark[jx]));
 						ilp=1;
 					}
 				}

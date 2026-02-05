@@ -296,7 +296,7 @@ long		ln;
 //						printf("  II01 = %d, II02 = %d\n", II01[jx], II02[jx]);
 //						printf("  t1   = %f, t2   = %f \n", t1, t2);
 //						printf("  a = %f,  b = %f\n", a[jx], b[jx]);
-						printf("  %s\t black\n", fname);
+						printf("  %d\t black \t %d \n", k, (I[jx]-dark[jx]));
 						*(ilp+nshot)=1;
 					}
 				}
