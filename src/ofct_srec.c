@@ -247,6 +247,59 @@ int	main(int argc,char **argv)
 			for (m=0; m<M; m++)
 			for (r=0; r<N; r++) P[m][r]=(*(sg++));
 
+/* ----------------  black projection correction start ---------------- */
+/*                                                                       */
+{
+			int		blk_m, blk_r, blk_good;
+			double	blk_sum;
+			int		*blk_flag;
+			double	*blk_avg;
+
+			blk_flag = (int *)malloc(M * sizeof(int));
+			blk_avg  = (double *)malloc(N * sizeof(double));
+
+			/* initialize average profile */
+			for (blk_r = 0; blk_r < N; blk_r++) blk_avg[blk_r] = 0.0;
+			blk_good = 0;
+
+			/* detect black projections: all pixels == 0 */
+			for (blk_m = 0; blk_m < M; blk_m++){
+				blk_sum = 0.0;
+				for (blk_r = 0; blk_r < N; blk_r++){
+					blk_sum += P[blk_m][blk_r];
+				}
+				if (blk_sum == 0.0){
+					blk_flag[blk_m] = 1;
+					(void)fprintf(stderr, "Warning\t black\t m=%d\n", blk_m);
+				} else {
+					blk_flag[blk_m] = 0;
+					blk_good++;
+					for (blk_r = 0; blk_r < N; blk_r++){
+						blk_avg[blk_r] += P[blk_m][blk_r];
+					}
+				}
+			}
+
+			/* replace black projections with average profile */
+			if (blk_good > 0){
+				for (blk_r = 0; blk_r < N; blk_r++){
+					blk_avg[blk_r] /= (double)blk_good;
+				}
+				for (blk_m = 0; blk_m < M; blk_m++){
+					if (blk_flag[blk_m] == 1){
+						for (blk_r = 0; blk_r < N; blk_r++){
+							P[blk_m][blk_r] = blk_avg[blk_r];
+						}
+					}
+				}
+			}
+
+			free(blk_flag);
+			free(blk_avg);
+}
+/* ----------------  black projection correction finish --------------- */
+/*                                                                       */
+
 /* ----------------  ring removal start ---------------- */
 /*                                                       */
     float		*image_data = NULL, *result_data = NULL;
