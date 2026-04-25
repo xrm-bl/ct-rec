@@ -227,7 +227,17 @@ long		ln;
 
 	double		*po;
 	double		p_sum, p_ave, ddv, dva, dvb;
+	double		black_thresh;
+	double		id_sum;
+	char		*env_bt;
 	FILE		*fi;
+
+	env_bt = getenv("CT_REC_BLACK_THRESH");
+	if (env_bt != NULL){
+		black_thresh = atof(env_bt);
+	} else {
+		black_thresh = 1.0;
+	}
 
 // initialize po and pp 
 	po = (double *)malloc(N*NST*sizeof(double));
@@ -287,18 +297,19 @@ long		ln;
 			ilp=0;
 			for (jx = 0; jx < N; ++jx){
 				I0[jx]    = a[jx] * shottime[k] + b[jx];
-				if ((I[jx]-dark[jx]) < 20){
-					if(ilp==0){
-						printf("Warning \t");
-//						printf("  jx = %d, I0 = %f, I = %d, dark = %d, ln =%d \n", jx, I0[jx], I[jx], dark[jx], ln);
-//						printf("  II01 = %d, II02 = %d\n", II01[jx], II02[jx]);
-//						printf("  t1   = %f, t2   = %f \n", t1, t2);
-//						printf("  data is negative!! = %f,  %d\n",(double)I0[jx] / (double)(I[jx]-dark[jx]), jx);
-//						printf("  a = %f,  b = %f\n", a[jx], b[jx]);
-						printf("  %d\t black \t %d \n", k, (I[jx]-dark[jx]));
-						ilp=1;
-					}
-				}
+			}
+			/* black check: average of (I[jx]-dark[jx]) over all pixels */
+			id_sum = 0.0;
+			for (jx = 0; jx < N; ++jx){
+				id_sum += (double)(I[jx] - dark[jx]);
+			}
+			if (id_sum / (double)N < black_thresh){
+				printf("Warning \t");
+				printf("  %d\t black \t avg=%.2f (thresh=%.2f)\n",
+					k, id_sum/(double)N, black_thresh);
+				ilp=1;
+			}
+			for (jx = 0; jx < N; ++jx){
 				*(po+nshot*N+jx)= log((double)(I0[jx])/(double)(I[jx]-dark[jx]));
 			}
 			if(ilp==1){
