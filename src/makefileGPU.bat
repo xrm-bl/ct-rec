@@ -95,9 +95,17 @@ nvcc -O3 -I%CUDAINCL% cbp.cu -DFloat=float -c -use_fast_math -Xcompiler "/wd 481
 nvcc -O3 -I%CUDAINCL% cbp.cu -DFloat=float -c -use_fast_math -Xcompiler "/wd 4819" -DFilter=Chesler
 %CC2% /openmp /Fep_rec_g_c.exe /DFOM=float /DFloat=float p_rec.c error.c sort_filter_omp.c libtiff.lib %CUFFT% %CUDART% cbp.obj
 
-rem bilateral filter
+rem filters made by ClaudAI
 nvcc -O3 -I%CUDAINCL% -o tif_blf_g.exe tif_blf_g.cu -use_fast_math -Xcompiler "/wd 4819" libtiff.lib
+nvcc -O3 -I%CUDAINCL% -o tif_gsf_g.exe tif_gsf_g.cu -use_fast_math -Xcompiler "/wd 4819" libtiff.lib
+nvcc -O3 -I%CUDAINCL% -o tif_mdf_g.exe tif_mdf_g.cu -use_fast_math -Xcompiler "/wd 4819" libtiff.lib
+nvcc -O3 -I%CUDAINCL% -o tif_nlm_g.exe tif_nlm_g.cu -use_fast_math -Xcompiler "/wd 4819" libtiff.lib
+nvcc -O3 -I%CUDAINCL% -o tif_tvd_g.exe tif_tvd_g.cu -use_fast_math -Xcompiler "/wd 4819" libtiff.lib
+nvcc -O3 -I%CUDAINCL% -o tif_wvd_g.exe tif_wvd_g.cu -use_fast_math -Xcompiler "/wd 4819" libtiff.lib
+nvcc -O3 -I%CUDAINCL% -o tif_adf_g.exe tif_adf_g.cu -use_fast_math -Xcompiler "/wd 4819" libtiff.lib
+nvcc -O3 -I%CUDAINCL% -o tif_bm4d_g.exe tif_bm4d_g.cu -use_fast_math -Xcompiler "/wd 4819" libtiff.lib
 
 move *.exe ..\exe
-del *.obj
+del *.obj tif_*_g.exp  tif_*_g.lib
+
 

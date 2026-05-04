@@ -140,6 +140,7 @@ int main(int argc, char* argv[])
 	}
 	for (i = 0; i<argc; ++i) fprintf(flog, "%s ", argv[i]);
 	fprintf(flog, "\n");
+	fprintf(flog, "   %% median_kernel_size %d  gaussian_sigma %g\n", median_kernel_size, gaussian_sigma);
 	fclose(flog);
   
 	

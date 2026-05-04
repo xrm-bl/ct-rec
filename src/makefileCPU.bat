@@ -74,7 +74,7 @@ rem print image discription
 %CC2% /Fepid.exe pid.c
 
 rem stop watch
-%CC2% stop_watch.c
+%CC2% /Festop_watch.exe stop_watch.c
 
 rem img average
 %CC2% /Feimg_ave.exe img_ave.c
@@ -132,10 +132,8 @@ rem 3D gaussian filter for 8 or 16bit tiff
 rem   si_gf  orgDir  nameFile  radius  {bias}  newDir
 %CC2% /openmp /arch:AVX2  error.c fft.c csi.c rif_fast.c sif_fast.c si_gf.c /Fesi_gf.exe
 
-rem hp2DO
-rem %ICX% hp2DO.c sif.c "C:\Program Files (x86)\IntelSWTools\compilers_and_libraries_2019.5.281\windows\compiler\lib\intel64_win\libiomp5md.lib"
-%CC2% /openmp hp2DO.c sif.c 
-%CC2% /openmp tf2do.c libtiff.lib
+rem hp2DO (unified: auto-detects img/tif from first argument)
+%CC2% /openmp /Fehp2DO.exe hp2DO.c libtiff.lib
 
 rem tif_ave
 %CC2% /openmp /arch:AVX2 /Fetif_ave.exe tif_ave.c rif_fast.c libtiff.lib
@@ -164,7 +162,10 @@ rem his2tif6
 rem ofsfa
 %CC2% /Feofsfa.exe ofsfa.c
 
-%CC2% /openmp tif_blf.c libtiff.lib
+rem filters made by ClaudAI
+%CC2% /openmp /Fetif_blf.exe tif_blf.c libtiff.lib
+%CC2% /openmp /Fetif_gsf.exe tif_gsf.c libtiff.lib
+%CC2% /openmp /Fetif_mdf.exe tif_mdf.c libtiff.lib
 
 move *.exe ..\exe
 del *.obj

@@ -252,10 +252,16 @@ void	ReadHiPic(HiPic *hp,int t)
 	int		i,y,x;
 	WORD		*D,*I1,*I2,*T;
 	double		r1,r2,I_D,T_D;
+	double		td_sum,black_thresh;
+	char		*env_bt;
 
 	if (t<0 || t>=hp->Nt) {
 	    (void)sprintf(str,"%d",t); Error("",str,"bad sequence number.");
 	}
+
+	env_bt = getenv("CT_REC_BLACK_THRESH");
+	black_thresh = (env_bt != NULL) ? atof(env_bt) : 1.0;
+
 	ol=hp->OL+t;
 	Read(hp->dir,hp->q_img[ol->q],hp->Nx,hp->Ny,(WORD *)*(hp->T));
 
@@ -268,11 +274,24 @@ void	ReadHiPic(HiPic *hp,int t)
 	T=(WORD *)*(hp->T)+(size_t)hp->Ny*hp->Nx;
 	r1=1.0-(r2=(ol->c-OL[i].c)/(OL[i+1].c-OL[i].c));
 
+	td_sum = 0.0;
 	for (y=hp->Ny-1; y>=0; y--)
 	for (x=hp->Nx-1; x>=0; x--) {
 	    --D; --I1; --I2; --T;
-	    hp->T[y][x]=((I_D=r1*(double)*I1+r2*(double)*I2-(double)*D)>0.0 &&
-			 (T_D=(double)*T-(double)*D)>0.0)?T_D/I_D:ERROR_VALUE;
+	    T_D=(double)*T-(double)*D;
+	    I_D=r1*(double)*I1+r2*(double)*I2-(double)*D;
+	    hp->T[y][x]=(I_D>0.0 && T_D>0.0)?T_D/I_D:ERROR_VALUE;
+	    td_sum += T_D;
+	}
+
+	/* black check: average of (T-dark) over all pixels */
+	if (td_sum / (double)(hp->Nx * hp->Ny) < black_thresh){
+	    (void)fprintf(stderr,
+	        "Warning\t black\t t=%d avg=%.2f (thresh=%.2f)\n",
+	        t, td_sum/(double)(hp->Nx*hp->Ny), black_thresh);
+	    for (y=0; y<hp->Ny; y++)
+	    for (x=0; x<hp->Nx; x++)
+	        hp->T[y][x]=ERROR_VALUE;
 	}
 }
 

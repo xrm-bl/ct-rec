@@ -1,18 +1,18 @@
 /*
- * tif_blf_g.cu - 3D Bilateral Filter for TIFF Image Stacks (CUDA version)
+ * tif_mdf_g.cu - 3D Median Filter for TIFF Image Stacks (CUDA version)
  *
  * Compile:
- *   nvcc -O3 -o tif_blf_g tif_blf_g.cu -ltiff
+ *   nvcc -O3 -o tif_mdf_g tif_mdf_g.cu -ltiff
  *
  * Usage:
- *   tif_blf_g <input_dir> <output_dir> [kernel_size] [spatial_sigma] [intensity_sigma]
+ *   tif_mdf_g <input_dir> <output_dir> [kernel_size]
+ *   Default kernel_size: 3
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <time.h>
 #include <float.h>
 #include <cuda_runtime.h>
 
@@ -23,9 +23,6 @@
     #include "tiffio.h"
     #define PATH_SEPARATOR "\\"
     #define snprintf _snprintf
-    #ifndef isfinite
-        #define isfinite(x) _finite(x)
-    #endif
 #else
     #include <unistd.h>
     #include <dirent.h>
@@ -45,16 +42,14 @@
 
 #define MAX_PATH_LENGTH 1024
 #define MAX_FILES 100000
-#define BLOCK_SIZE_X 16
-#define BLOCK_SIZE_Y 16
+#define BLOCK_SIZE_X 8
+#define BLOCK_SIZE_Y 8
 #define BLOCK_SIZE_Z 4
-#define MAX_KERNEL_SIZE 21
 #define GPU_MEMORY_FRACTION 0.7f
+#define MAX_MEDIAN_ELEMENTS 9261  /* 21^3 */
 
 typedef struct {
     int kernel_size;
-    float spatial_sigma;
-    float intensity_sigma;
 } FilterParams;
 
 typedef struct {
@@ -79,15 +74,27 @@ typedef struct {
     void *d_output;
 } ChunkData;
 
+__device__ void insertion_sort(float *arr, int n) {
+    int i, j;
+    float key;
+    for (i = 1; i < n; i++) {
+        key = arr[i];
+        j = i - 1;
+        while (j >= 0 && arr[j] > key) {
+            arr[j + 1] = arr[j];
+            j--;
+        }
+        arr[j + 1] = key;
+    }
+}
+
 template<typename T>
-__global__ void bilateral_filter_3d_kernel(
+__global__ void median_filter_3d_kernel(
     const T* __restrict__ input,
     T* __restrict__ output,
     int width, int height, int chunk_depth,
     int valid_start, int valid_end,
     int kernel_size,
-    float spatial_sigma_sq_inv,
-    float intensity_sigma_sq_inv,
     float max_value)
 {
     const int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -96,38 +103,28 @@ __global__ void bilateral_filter_3d_kernel(
     if (x >= width || y >= height || z > valid_end) return;
     const int half_kernel = kernel_size / 2;
     const size_t slice_size = (size_t)width * height;
-    const size_t center_idx = (size_t)z * slice_size + (size_t)y * width + x;
-    const float center_value = (float)input[center_idx];
-    float weighted_sum = 0.0f, weight_sum = 0.0f;
+    float neighbors[MAX_MEDIAN_ELEMENTS];
+    int count = 0;
     for (int kz = -half_kernel; kz <= half_kernel; kz++) {
-        const int nz = z + kz;
+        int nz = z + kz;
         if (nz < 0 || nz >= chunk_depth) continue;
         for (int ky = -half_kernel; ky <= half_kernel; ky++) {
-            const int ny = y + ky;
+            int ny = y + ky;
             if (ny < 0 || ny >= height) continue;
             for (int kx = -half_kernel; kx <= half_kernel; kx++) {
-                const int nx = x + kx;
+                int nx = x + kx;
                 if (nx < 0 || nx >= width) continue;
-                const size_t neighbor_idx = (size_t)nz * slice_size + (size_t)ny * width + nx;
-                const float neighbor_value = (float)input[neighbor_idx];
-                const float spatial_dist_sq = (float)(kx*kx + ky*ky + kz*kz);
-                const float spatial_weight = __expf(-spatial_dist_sq * spatial_sigma_sq_inv);
-                const float intensity_diff = neighbor_value - center_value;
-                const float intensity_dist_sq = intensity_diff * intensity_diff;
-                const float intensity_weight = __expf(-intensity_dist_sq * intensity_sigma_sq_inv);
-                const float weight = spatial_weight * intensity_weight;
-                weighted_sum += neighbor_value * weight;
-                weight_sum += weight;
+                size_t idx = (size_t)nz * slice_size + (size_t)ny * width + nx;
+                neighbors[count] = (float)input[idx];
+                count++;
             }
         }
     }
-    if (weight_sum > 0.0f) {
-        float result = weighted_sum / weight_sum;
-        result = fminf(fmaxf(result, 0.0f), max_value);
-        output[center_idx] = (T)result;
-    } else {
-        output[center_idx] = input[center_idx];
-    }
+    insertion_sort(neighbors, count);
+    size_t center_idx = (size_t)z * slice_size + (size_t)y * width + x;
+    float result = neighbors[count / 2];
+    result = fminf(fmaxf(result, 0.0f), max_value);
+    output[center_idx] = (T)result;
 }
 
 static int create_directory(const char *path) {
@@ -203,10 +200,8 @@ static int get_image_info(const char *dir_path, const char *filename, ImageInfo 
     sample_format = SAMPLEFORMAT_UINT;
     TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLEFORMAT, &sample_format);
     TIFFClose(tif);
-    info->width = width;
-    info->height = height;
-    info->bits_per_sample = bits_per_sample;
-    info->samples_per_pixel = samples_per_pixel;
+    info->width = width; info->height = height;
+    info->bits_per_sample = bits_per_sample; info->samples_per_pixel = samples_per_pixel;
     info->sample_format = sample_format;
     info->bytes_per_pixel = (bits_per_sample / 8) * samples_per_pixel;
     info->bytes_per_slice = (size_t)width * height * info->bytes_per_pixel;
@@ -214,10 +209,7 @@ static int get_image_info(const char *dir_path, const char *filename, ImageInfo 
 }
 
 static int calculate_overlap_size(FilterParams *params) {
-    int half_kernel = params->kernel_size / 2;
-    int sigma_range = (int)ceilf(3.0f * params->spatial_sigma);
-    int overlap = (half_kernel > sigma_range) ? half_kernel : sigma_range;
-    return overlap + 1;
+    return params->kernel_size / 2 + 1;
 }
 
 static int calculate_gpu_chunk_size(ImageInfo *info, int overlap_size) {
@@ -334,8 +326,6 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
     int valid_depth = chunk->valid_end - chunk->valid_start + 1;
     CUDA_CHECK(cudaMemcpy(chunk->d_data, chunk->h_data, chunk_bytes, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(chunk->d_output, chunk->d_data, chunk_bytes, cudaMemcpyDeviceToDevice));
-    float spatial_sigma_sq_inv = 0.5f / (params->spatial_sigma * params->spatial_sigma);
-    float intensity_sigma_sq_inv = 0.5f / (params->intensity_sigma * params->intensity_sigma);
     float max_value;
     if (info->bits_per_sample == 8) max_value = 255.0f;
     else if (info->bits_per_sample == 16) max_value = 65535.0f;
@@ -347,67 +337,24 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
         (valid_depth + block.z - 1) / block.z
     );
     if (info->bits_per_sample == 8) {
-        bilateral_filter_3d_kernel<unsigned char><<<grid, block>>>(
+        median_filter_3d_kernel<unsigned char><<<grid, block>>>(
             (unsigned char*)chunk->d_data, (unsigned char*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
-            chunk->valid_start, chunk->valid_end,
-            params->kernel_size, spatial_sigma_sq_inv, intensity_sigma_sq_inv, max_value);
+            chunk->valid_start, chunk->valid_end, params->kernel_size, max_value);
     } else if (info->bits_per_sample == 16) {
-        bilateral_filter_3d_kernel<unsigned short><<<grid, block>>>(
+        median_filter_3d_kernel<unsigned short><<<grid, block>>>(
             (unsigned short*)chunk->d_data, (unsigned short*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
-            chunk->valid_start, chunk->valid_end,
-            params->kernel_size, spatial_sigma_sq_inv, intensity_sigma_sq_inv, max_value);
+            chunk->valid_start, chunk->valid_end, params->kernel_size, max_value);
     } else if (info->bits_per_sample == 32 && info->sample_format == SAMPLEFORMAT_IEEEFP) {
-        bilateral_filter_3d_kernel<float><<<grid, block>>>(
+        median_filter_3d_kernel<float><<<grid, block>>>(
             (float*)chunk->d_data, (float*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
-            chunk->valid_start, chunk->valid_end,
-            params->kernel_size, spatial_sigma_sq_inv, intensity_sigma_sq_inv, max_value);
+            chunk->valid_start, chunk->valid_end, params->kernel_size, max_value);
     }
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK(cudaMemcpy(chunk->h_data, chunk->d_output, chunk_bytes, cudaMemcpyDeviceToHost));
-}
-
-static float get_float_dynamic_range(const char *dir_path, char files[][MAX_PATH_LENGTH],
-                                    int file_count, ImageInfo *info) {
-    TIFF *tif;
-    char full_path[MAX_PATH_LENGTH];
-    tsize_t scanline_size;
-    float *buffer;
-    int sample_count = file_count / 20;
-    if (sample_count < 1) sample_count = 1;
-    if (sample_count > 10) sample_count = 10;
-    int sample_interval = file_count / sample_count;
-    float min_val = FLT_MAX, max_val = -FLT_MAX;
-    for (int i = 0; i < sample_count; i++) {
-        int file_idx = i * sample_interval;
-        snprintf(full_path, MAX_PATH_LENGTH, "%s%s%s", dir_path, PATH_SEPARATOR, files[file_idx]);
-        tif = TIFFOpen(full_path, "r");
-        if (tif == NULL) continue;
-        scanline_size = TIFFScanlineSize(tif);
-        buffer = (float*)_TIFFmalloc(scanline_size);
-        if (buffer == NULL) { TIFFClose(tif); continue; }
-        int start_y = info->height / 4, end_y = 3 * info->height / 4;
-        int y_step = (end_y - start_y) / 10;
-        if (y_step < 1) y_step = 1;
-        for (int y = start_y; y < end_y; y += y_step) {
-            if (TIFFReadScanline(tif, buffer, y, 0) >= 0) {
-                int start_x = info->width / 4, end_x = 3 * info->width / 4;
-                for (int x = start_x; x < end_x; x++) {
-                    float val = buffer[x];
-                    if (isfinite(val)) {
-                        if (val < min_val) min_val = val;
-                        if (val > max_val) max_val = val;
-                    }
-                }
-            }
-        }
-        _TIFFfree(buffer);
-        TIFFClose(tif);
-    }
-    return max_val - min_val;
 }
 
 int main(int argc, char *argv[]) {
@@ -433,23 +380,19 @@ int main(int argc, char *argv[]) {
     CUDA_CHECK(cudaSetDevice(best_device));
 
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s <input_dir> <output_dir> [kernel_size] [spatial_sigma] [intensity_sigma]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <input_dir> <output_dir> [kernel_size]\n", argv[0]);
+        fprintf(stderr, "  Default kernel_size: 3 (odd, 3-21)\n");
         return 1;
     }
     strncpy(input_dir, argv[1], MAX_PATH_LENGTH - 1); input_dir[MAX_PATH_LENGTH - 1] = '\0';
     strncpy(output_dir, argv[2], MAX_PATH_LENGTH - 1); output_dir[MAX_PATH_LENGTH - 1] = '\0';
 
-    params.kernel_size = 5; params.spatial_sigma = 2.0f; params.intensity_sigma = 50.0f;
+    params.kernel_size = 3;
     if (argc > 3) params.kernel_size = atoi(argv[3]);
-    if (argc > 4) params.spatial_sigma = (float)atof(argv[4]);
-    if (argc > 5) params.intensity_sigma = (float)atof(argv[5]);
+    if (params.kernel_size < 3 || params.kernel_size > 21 || params.kernel_size % 2 == 0) {
+        fprintf(stderr, "Error: Kernel size must be odd and between 3 and 21\n"); return 1;
+    }
 
-    if (params.kernel_size < 3 || params.kernel_size > MAX_KERNEL_SIZE || params.kernel_size % 2 == 0) {
-        fprintf(stderr, "Error: Kernel size must be odd and between 3 and %d\n", MAX_KERNEL_SIZE); return 1;
-    }
-    if (params.spatial_sigma <= 0 || params.intensity_sigma <= 0) {
-        fprintf(stderr, "Error: Sigma values must be positive\n"); return 1;
-    }
     if (create_directory(output_dir) != 0) { fprintf(stderr, "Error: Cannot create output directory\n"); return 1; }
 
     files = (char (*)[MAX_PATH_LENGTH])malloc((size_t)MAX_FILES * MAX_PATH_LENGTH);
@@ -461,17 +404,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Error: Cannot read image information\n"); free(files); return 1;
     }
     info.depth = file_count;
-
-    if (argc <= 5 && params.intensity_sigma == 50.0f) {
-        if (info.bits_per_sample == 8) {
-            params.intensity_sigma = 256.0f / 3.0f;
-        } else if (info.bits_per_sample == 16) {
-            params.intensity_sigma = 65536.0f / 3.0f;
-        } else if (info.bits_per_sample == 32 && info.sample_format == SAMPLEFORMAT_IEEEFP) {
-            float dr = get_float_dynamic_range(input_dir, files, file_count, &info);
-            params.intensity_sigma = (dr > 0.0f) ? dr / 3.0f : 0.1f;
-        }
-    }
 
     overlap_size = calculate_overlap_size(&params);
     chunk_size = calculate_gpu_chunk_size(&info, overlap_size);
@@ -511,7 +443,7 @@ int main(int argc, char *argv[]) {
         if ((f = fopen("cmd-hst.log", "a")) != NULL) {
             for (i = 0; i < argc; ++i) fprintf(f, "%s ", argv[i]);
             fprintf(f, "\n");
-            fprintf(f, "   %% kernel_size %d  spatial_sigma %g  intensity_sigma %g\n", params.kernel_size, params.spatial_sigma, params.intensity_sigma);
+            fprintf(f, "   %% kernel_size %d\n", params.kernel_size);
             fclose(f);
         }
     }

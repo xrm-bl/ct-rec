@@ -1,21 +1,20 @@
 /*
- * tif_blf.c - 3D Bilateral Filter for TIFF Image Stacks (CPU version)
+ * tif_mdf.c - 3D Median Filter for TIFF Image Stacks (CPU version)
  *
  * Compile:
- *   Windows: cl /O2 /openmp tif_blf.c libtiff.lib
- *   Linux:   gcc -O2 -fopenmp -o tif_blf tif_blf.c -ltiff -lm
+ *   Windows: cl /O2 /openmp tif_mdf.c libtiff.lib
+ *   Linux:   gcc -O2 -fopenmp -o tif_mdf tif_mdf.c -ltiff -lm
  *
  * Usage:
- *   tif_blf <input_dir> <output_dir> [kernel_size] [spatial_sigma] [intensity_sigma]
+ *   tif_mdf <input_dir> <output_dir> [kernel_size]
+ *   Default kernel_size: 3
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <time.h>
 #include <float.h>
-#include <stdarg.h>
 
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
@@ -24,9 +23,6 @@
     #include "tiffio.h"
     #define PATH_SEPARATOR "\\"
     #define snprintf _snprintf
-    #ifndef isfinite
-        #define isfinite(x) _finite(x)
-    #endif
 #else
     #include <unistd.h>
     #include <dirent.h>
@@ -46,8 +42,6 @@
 
 typedef struct {
     int kernel_size;
-    double spatial_sigma;
-    double intensity_sigma;
 } FilterParams;
 
 typedef struct {
@@ -143,10 +137,8 @@ static int get_image_info(const char *dir_path, const char *filename, ImageInfo 
     sample_format = SAMPLEFORMAT_UINT;
     TIFFGetFieldDefaulted(tif, TIFFTAG_SAMPLEFORMAT, &sample_format);
     TIFFClose(tif);
-    info->width = width;
-    info->height = height;
-    info->bits_per_sample = bits_per_sample;
-    info->samples_per_pixel = samples_per_pixel;
+    info->width = width; info->height = height;
+    info->bits_per_sample = bits_per_sample; info->samples_per_pixel = samples_per_pixel;
     info->sample_format = sample_format;
     info->bytes_per_pixel = (bits_per_sample / 8) * samples_per_pixel;
     info->bytes_per_slice = (size_t)width * height * info->bytes_per_pixel;
@@ -171,10 +163,7 @@ static size_t get_available_memory(void) {
 }
 
 static int calculate_overlap_size(FilterParams *params) {
-    int half_kernel = params->kernel_size / 2;
-    int sigma_range = (int)ceil(3.0 * params->spatial_sigma);
-    int overlap = (half_kernel > sigma_range) ? half_kernel : sigma_range;
-    return overlap + 1;
+    return params->kernel_size / 2 + 1;
 }
 
 static int calculate_chunk_size(ImageInfo *info, int overlap_size) {
@@ -284,10 +273,6 @@ static int save_chunk_valid_region(const char *dir_path, char files[][MAX_PATH_L
     return 0;
 }
 
-static double gaussian_weight(double distance, double sigma) {
-    return exp(-(distance * distance) / (2.0 * sigma * sigma));
-}
-
 static void get_pixel_value(void *data, ImageInfo *info, int x, int y, int z, double *value) {
     size_t offset;
     void *pixel_data;
@@ -310,39 +295,56 @@ static void set_pixel_value(void *data, ImageInfo *info, int x, int y, int z, do
              x * info->bytes_per_pixel;
     pixel_data = (char*)data + offset;
     if (info->bits_per_sample == 8) {
+        if (value < 0.0) value = 0.0;
+        if (value > 255.0) value = 255.0;
         *(unsigned char*)pixel_data = (unsigned char)(value + 0.5);
     } else if (info->bits_per_sample == 16) {
+        if (value < 0.0) value = 0.0;
+        if (value > 65535.0) value = 65535.0;
         *(unsigned short*)pixel_data = (unsigned short)(value + 0.5);
     } else if (info->bits_per_sample == 32 && info->sample_format == SAMPLEFORMAT_IEEEFP) {
         *(float*)pixel_data = (float)value;
     }
 }
 
-static void apply_bilateral_filter_chunk(ChunkData *chunk, ImageInfo *info,
-                                        FilterParams *params) {
+static int compare_double(const void *a, const void *b) {
+    double va = *(const double*)a;
+    double vb = *(const double*)b;
+    if (va < vb) return -1;
+    if (va > vb) return 1;
+    return 0;
+}
+
+static void apply_median_filter_chunk(ChunkData *chunk, ImageInfo *info,
+                                     FilterParams *params) {
     void *output_data;
     int x, y, z, kx, ky, kz;
     int half_kernel;
-    double center_value, neighbor_value;
-    double spatial_dist, intensity_dist;
-    double spatial_weight, intensity_weight, weight;
-    double weighted_sum, weight_sum;
-    double dx, dy, dz;
     int nx, ny, nz;
     size_t total_size;
+    int max_neighbors;
+
     total_size = (size_t)chunk->chunk_depth * info->bytes_per_slice;
     output_data = malloc(total_size);
     if (output_data == NULL) return;
     memcpy(output_data, chunk->data, total_size);
+
     half_kernel = params->kernel_size / 2;
+    max_neighbors = params->kernel_size * params->kernel_size * params->kernel_size;
+
 #ifdef _OPENMP
-    #pragma omp parallel for private(y, x, kz, ky, kx, center_value, weighted_sum, weight_sum, nz, ny, nx, neighbor_value, dz, dy, dx, spatial_dist, spatial_weight, intensity_dist, intensity_weight, weight)
+    #pragma omp parallel private(y, x, kz, ky, kx, nz, ny, nx)
+    {
+#endif
+    double *neighbors = (double*)malloc(max_neighbors * sizeof(double));
+
+#ifdef _OPENMP
+    #pragma omp for
 #endif
     for (z = chunk->valid_start; z <= chunk->valid_end; z++) {
         for (y = 0; y < (int)info->height; y++) {
             for (x = 0; x < (int)info->width; x++) {
-                get_pixel_value(chunk->data, info, x, y, z, &center_value);
-                weighted_sum = 0.0; weight_sum = 0.0;
+                int count = 0;
                 for (kz = -half_kernel; kz <= half_kernel; kz++) {
                     nz = z + kz;
                     if (nz < 0 || nz >= chunk->chunk_depth) continue;
@@ -352,72 +354,25 @@ static void apply_bilateral_filter_chunk(ChunkData *chunk, ImageInfo *info,
                         for (kx = -half_kernel; kx <= half_kernel; kx++) {
                             nx = x + kx;
                             if (nx < 0 || nx >= (int)info->width) continue;
-                            get_pixel_value(chunk->data, info, nx, ny, nz, &neighbor_value);
-                            dx = (double)kx; dy = (double)ky; dz = (double)kz;
-                            spatial_dist = sqrt(dx*dx + dy*dy + dz*dz);
-                            spatial_weight = gaussian_weight(spatial_dist, params->spatial_sigma);
-                            intensity_dist = fabs(neighbor_value - center_value);
-                            intensity_weight = gaussian_weight(intensity_dist, params->intensity_sigma);
-                            weight = spatial_weight * intensity_weight;
-                            weighted_sum += neighbor_value * weight;
-                            weight_sum += weight;
+                            get_pixel_value(chunk->data, info, nx, ny, nz, &neighbors[count]);
+                            count++;
                         }
                     }
                 }
-                if (weight_sum > 0.0) {
-                    set_pixel_value(output_data, info, x, y, z, weighted_sum / weight_sum);
-                } else {
-                    set_pixel_value(output_data, info, x, y, z, center_value);
-                }
+                qsort(neighbors, count, sizeof(double), compare_double);
+                set_pixel_value(output_data, info, x, y, z, neighbors[count / 2]);
             }
         }
     }
+
+    free(neighbors);
+
+#ifdef _OPENMP
+    }
+#endif
+
     memcpy(chunk->data, output_data, total_size);
     free(output_data);
-}
-
-static double get_float_dynamic_range(const char *dir_path, char files[][MAX_PATH_LENGTH],
-                                     int file_count, ImageInfo *info) {
-    TIFF *tif;
-    char full_path[MAX_PATH_LENGTH];
-    tsize_t scanline_size;
-    float *buffer;
-    int sample_count, sample_interval;
-    int i, y, x;
-    float min_val = FLT_MAX, max_val = -FLT_MAX;
-    int start_y, end_y, y_step, start_x, end_x, file_idx;
-    float val;
-    sample_count = file_count / 20;
-    if (sample_count < 1) sample_count = 1;
-    if (sample_count > 10) sample_count = 10;
-    sample_interval = file_count / sample_count;
-    for (i = 0; i < sample_count; i++) {
-        file_idx = i * sample_interval;
-        snprintf(full_path, MAX_PATH_LENGTH, "%s%s%s", dir_path, PATH_SEPARATOR, files[file_idx]);
-        tif = TIFFOpen(full_path, "r");
-        if (tif == NULL) continue;
-        scanline_size = TIFFScanlineSize(tif);
-        buffer = (float*)_TIFFmalloc(scanline_size);
-        if (buffer == NULL) { TIFFClose(tif); continue; }
-        start_y = info->height / 4; end_y = 3 * info->height / 4;
-        y_step = (end_y - start_y) / 10;
-        if (y_step < 1) y_step = 1;
-        for (y = start_y; y < end_y; y += y_step) {
-            if (TIFFReadScanline(tif, buffer, y, 0) >= 0) {
-                start_x = info->width / 4; end_x = 3 * info->width / 4;
-                for (x = start_x; x < end_x; x++) {
-                    val = buffer[x];
-                    if (isfinite(val)) {
-                        if (val < min_val) min_val = val;
-                        if (val > max_val) max_val = val;
-                    }
-                }
-            }
-        }
-        _TIFFfree(buffer);
-        TIFFClose(tif);
-    }
-    return (double)(max_val - min_val);
 }
 
 int main(int argc, char *argv[]) {
@@ -433,29 +388,22 @@ int main(int argc, char *argv[]) {
     int valid_global_start, valid_global_end;
     int chunk_global_start, chunk_global_end;
     int actual_chunk_depth;
-    double dynamic_range;
 
     if (argc < 3) {
-        fprintf(stderr, "Usage: %s <input_dir> <output_dir> [kernel_size] [spatial_sigma] [intensity_sigma]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <input_dir> <output_dir> [kernel_size]\n", argv[0]);
+        fprintf(stderr, "  Default kernel_size: 3 (odd, 3-21)\n");
         return 1;
     }
     strncpy(input_dir, argv[1], MAX_PATH_LENGTH - 1); input_dir[MAX_PATH_LENGTH - 1] = '\0';
     strncpy(output_dir, argv[2], MAX_PATH_LENGTH - 1); output_dir[MAX_PATH_LENGTH - 1] = '\0';
 
-    params.kernel_size = 5; params.spatial_sigma = 2.0; params.intensity_sigma = 50.0;
+    params.kernel_size = 3;
     if (argc > 3) params.kernel_size = atoi(argv[3]);
-    if (argc > 4) params.spatial_sigma = atof(argv[4]);
-    if (argc > 5) params.intensity_sigma = atof(argv[5]);
-
     if (params.kernel_size < 3 || params.kernel_size > 21 || params.kernel_size % 2 == 0) {
         fprintf(stderr, "Error: Kernel size must be odd and between 3 and 21\n"); return 1;
     }
-    if (params.spatial_sigma <= 0 || params.intensity_sigma <= 0) {
-        fprintf(stderr, "Error: Sigma values must be positive\n"); return 1;
-    }
-    if (create_directory(output_dir) != 0) {
-        fprintf(stderr, "Error: Cannot create output directory\n"); return 1;
-    }
+
+    if (create_directory(output_dir) != 0) { fprintf(stderr, "Error: Cannot create output directory\n"); return 1; }
 
     files = (char (*)[MAX_PATH_LENGTH])malloc((size_t)MAX_FILES * MAX_PATH_LENGTH);
     if (files == NULL) { fprintf(stderr, "Error: Memory allocation failed\n"); return 1; }
@@ -466,17 +414,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Error: Cannot read image information\n"); free(files); return 1;
     }
     info.depth = file_count;
-
-    if (argc <= 5 && params.intensity_sigma == 50.0) {
-        if (info.bits_per_sample == 8) {
-            params.intensity_sigma = 256.0 / 3.0;
-        } else if (info.bits_per_sample == 16) {
-            params.intensity_sigma = 65536.0 / 3.0;
-        } else if (info.bits_per_sample == 32 && info.sample_format == SAMPLEFORMAT_IEEEFP) {
-            dynamic_range = get_float_dynamic_range(input_dir, files, file_count, &info);
-            params.intensity_sigma = (dynamic_range > 0.0) ? dynamic_range / 3.0 : 0.1;
-        }
-    }
 
     overlap_size = calculate_overlap_size(&params);
     chunk_size = calculate_chunk_size(&info, overlap_size);
@@ -496,8 +433,7 @@ int main(int argc, char *argv[]) {
         if (chunk_global_start < 0) chunk_global_start = 0;
         if (chunk_global_end >= file_count) chunk_global_end = file_count - 1;
         actual_chunk_depth = chunk_global_end - chunk_global_start + 1;
-        chunk->start_z = chunk_global_start;
-        chunk->end_z = chunk_global_end;
+        chunk->start_z = chunk_global_start; chunk->end_z = chunk_global_end;
         chunk->chunk_depth = actual_chunk_depth;
         chunk->valid_start = valid_global_start - chunk_global_start;
         chunk->valid_end = valid_global_end - chunk_global_start;
@@ -505,7 +441,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Error: Failed to load chunk %d\n", chunk_idx);
             free_chunk(chunk); free(files); return 1;
         }
-        apply_bilateral_filter_chunk(chunk, &info, &params);
+        apply_median_filter_chunk(chunk, &info, &params);
         if (save_chunk_valid_region(output_dir, files, &info, chunk) != 0) {
             fprintf(stderr, "Error: Failed to save chunk %d\n", chunk_idx);
             free_chunk(chunk); free(files); return 1;
@@ -522,7 +458,7 @@ int main(int argc, char *argv[]) {
         if ((f = fopen("cmd-hst.log", "a")) != NULL) {
             for (i = 0; i < argc; ++i) fprintf(f, "%s ", argv[i]);
             fprintf(f, "\n");
-            fprintf(f, "   %% kernel_size %d  spatial_sigma %g  intensity_sigma %g\n", params.kernel_size, params.spatial_sigma, params.intensity_sigma);
+            fprintf(f, "   %% kernel_size %d\n", params.kernel_size);
             fclose(f);
         }
     }
