@@ -2,7 +2,7 @@
 
 上杉
 
-2025.05.04  ver. 1.6
+2026.05.04  ver. 1.7
 
 0. バグやリクエストは作者に連絡してください。
 
@@ -31,12 +31,20 @@
       となっている。
 
    d. リングアーティファクトの除去
-      バージョン1.4からVo et al.(2018)のArgorism 3型のリング除去機能を設けた。
+      バージョン1.4からVo et al.(2018)のAlgorithm 3型のリング除去機能を設けた。
       CBP計算の直前に実行している。環境変数を指定することでこの機能をON/OFFできる。
       環境変数で KERNEL_SIZE を1に指定するとOFF。それ以外の正の奇数で効果が変わる。
       デフォルト値は5としている(環境変数が定義されていない場合も5になる)。
-      また、CPU並列計算も行っており、デフォルト値はOMP_NUM_THREADSを40としている。
-      環境変数の設定方法は、sort_filter_omp.c の冒頭に記述があるので参照のこと。
+      また、リング除去処理はOpenMPによるCPU並列計算で行っており、デフォルト値は
+      OMP_NUM_THREADSを40としている。これは1cで述べたCBP_THREADS（逆投影計算用の
+      スレッド数、デフォルト8）とは独立した設定である。
+
+   e. missing angle の処理
+      板状試料などの場合、角度によっては透過率が極端に低下する。極端な値の場合は
+      何らかの細工が必要。その「程度」をコントロールするようにした。
+      環境変数 CT_REC_BLACK_THRESH で指定する(未設定の場合は 1 とする)。
+      missing angle がある場合この値を 1, 10, 100, 1000 など変更し ct_rec を実行する事で
+      画像再構成の状況を変更可能。
 
 2. 180deg scan。標準的な吸収の画像再構成。
 
@@ -45,7 +53,7 @@
       
       layer: 再構成するレイヤー(高さ)
       center: 回転軸の位置(pixel)。省略した場合は自動推定する。
-      pixel: size: 画素サイズ(um)。省略した場合は1.0になる。
+      pixel size: 画素サイズ(um)。省略した場合は1.0になる。
       offset angle: 回転軸の原点オフセット。省略した場合は0.0になる。
       
       *) q????.img があるディレクトリで実行する。
@@ -55,52 +63,52 @@
       
       layer: 再構成するレイヤー(高さ)
       center: 回転軸の位置(pixel)。省略した場合は自動推定する。
-      pixel: size: 画素サイズ(um)。省略した場合は1.0になる。
+      pixel size: 画素サイズ(um)。省略した場合は1.0になる。
       offset angle: 回転軸の原点オフセット。省略した場合は0.0になる。
       
       *) q????.tif があるディレクトリで実行する。
    
    c. 連続再構成
-      hp_tg_P_F HiPic/ Dr RC RA0 rec/
-      tf_tg_P_F HiPic/ Dr RC RA0 rec/
+      hp_tg_P_F HiPic Dr RC RA0 rec
+      tf_tg_P_F HiPic Dr RC RA0 rec
      (回転軸が傾いてない場合。全レイヤー)
       
-      HiPic/: q????.img もしくは q????.tif が格納されているディレクトリ名。(/ は不要)
+      HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名。(/ は不要)
       Dr: 画素サイズ (um)
       RC: 回転軸の位置
       RA0: 回転軸の原点オフセット
-      rec/: 再構成画像を出力するディレクトリ(計算前に作成すること)
+      rec: 再構成画像を出力するディレクトリ(計算前に作成すること)
       
-      hp_tg_P_F HiPic/ Dr L1 C1 L2 C2 RA0 rec/
-      tf_tg_P_F HiPic/ Dr L1 C1 L2 C2 RA0 rec/
+      hp_tg_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
+      tf_tg_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
       (回転軸が傾いている場合。もしくは一部の領域のみの計算時)
       
-      HiPic/: q????.img もしくは q????.tif が格納されているディレクトリ名。(/ は不要)
+      HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名。(/ は不要)
       Dr: 画素サイズ (um)
       L1: 計算開始レイヤー
       C1: L1での回転軸の位置
       L2: 計算終了レイヤー
       C2: L2での回転軸の位置
       RA0: 回転軸の原点オフセット
-      rec/: 再構成画像を出力するディレクトリ(/ は不要。計算前に作成すること)
+      rec: 再構成画像を出力するディレクトリ(/ は不要。計算前に作成すること)
    
       *) q????.img があるディレクトリの一つ上で実行する。
 
    d. p画像からの連続再構成
-      p_rec_P_F p/ rec/ Dr RC RA0
+      p_rec_P_F p rec Dr RC RA0
       (回転軸が傾いてない場合。全レイヤー)
       
-      p/: p?????.tif が格納されているディレクトリ名。(/ は不要)
-      rec/: 再構成画像を出力するディレクトリ(計算前に作成すること)
+      p: p?????.tif が格納されているディレクトリ名。(/ は不要)
+      rec: 再構成画像を出力するディレクトリ(計算前に作成すること)
       Dr: 画素サイズ (um)
       RC: 回転軸の位置
       RA0: 回転軸の原点オフセット
       
-      p_rec_P_F p/ rec/ Dr L1 C1 L2 C2 RA0
+      p_rec_P_F p rec Dr L1 C1 L2 C2 RA0
       (回転軸が傾いている場合)
       
-      p/: p?????.tif が格納されているディレクトリ名。(/ は不要)
-      rec/: 再構成画像を出力するディレクトリ(計算前に作成すること)
+      p: p?????.tif が格納されているディレクトリ名。(/ は不要)
+      rec: 再構成画像を出力するディレクトリ(計算前に作成すること)
       Dr: 画素サイズ (um)
       L1: 計算開始レイヤー
       C1: L1での回転軸の位置
@@ -110,10 +118,10 @@
 
 3. 360deg scan (offset CT)。標準的な吸収の画像再構成
    a. 回転軸位置の推定
-      ofct_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
-      oftf_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
+      ofct_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
+      oftf_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
      
-      HiPic/: q????.img が格納されているディレクトリ名(/ は不要)
+      HiPic: q????.img もしくはq????.tif が格納されているディレクトリ名(/ は不要)
       Ox1: 横の捜索範囲開始点。(省略可)
       Ox2: 横の捜索範囲終了点。(省略可)
       Oy1: 縦の捜索範囲開始点。(省略可)
@@ -123,9 +131,9 @@
       *) 画像出力時にはカッコ内に画像のオフセットが表示される。
 
    b. 必要メモリ量の確認
-      ofct_srec_P_F HiPic/ Rc Oy
+      ofct_srec_P_F HiPic Rc Oy
 
-      HiPic/: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
+      HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
       Rc: 回転軸の位置(左端からの画素数)
       Oy: 縦ずれ量（常に 0 を指定）。
 
@@ -133,16 +141,16 @@
       rangeListを決める際の目安になる。
 
    c. 再構成
-      ofct_srec_P_F HiPic/ Rc Oy rangeList Dr RA0 rec/
-      oftf_srec_P_F HiPic/ Rc Oy rangeList Dr RA0 rec/
+      ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
+      oftf_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
       
-      HiPic/: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
+      HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
       Rc: 回転軸の位置(左端からの画素数)
       Oy: 縦ずれ量（常に 0 を指定）。
       rangeList: 再構成するレイヤーを指定。
       Dr: 画素サイズ
       RA0: 回転軸の原点オフセット
-      rec/: 再構成画像を出力するディレクトリ(計算前に作成すること)
+      rec: 再構成画像を出力するディレクトリ(計算前に作成すること)
 
       *) rangeListの例。
          100レイヤーだけの場合：100
@@ -153,7 +161,7 @@
       
       layer: 再構成するレイヤー(高さ)
       center: 回転軸の位置(pixel)。
-      pixel: size: 画素サイズ(um)。省略した場合は1.0になる。
+      pixel size: 画素サイズ(um)。省略した場合は1.0になる。
       offset angle: 回転軸の原点オフセット。省略した場合は0.0になる。
       
       *) q????.tif があるディレクトリで実行する。
@@ -161,31 +169,30 @@
 
 
 4. 32bit tiff 画像の規格化
-    tif_f2i bit rec/ out/ {LACmin LACmax} {x1 y1 x2 y2}
+    tif_f2i bit rec out {LACmin LACmax} {x1 y1 x2 y2}
     
     bit: ビット数 0 か 8 か 16 (0 は範囲を調べるだけ)
-    rec/: 32bit tiff 再構成画像があるディレクトリ
-    out/: 規格化後の画像を出力するディレクトリ(実行前に作成すること)
+    rec: 32bit tiff 再構成画像があるディレクトリ
+    out: 規格化後の画像を出力するディレクトリ(実行前に作成すること)
     LACmin: 規格化時の最小値。(省略可)
     LACmax: 規格化時の最大値。(省略可)
     x1: 横方向切り出しの始まり。(省略可)
-    x2: 横方向切り出しの終わり。(省略可)
     y1: 縦方向切り出しの始まり。(省略可)
+    x2: 横方向切り出しの終わり。(省略可)
     y2: 縦方向切り出しの終わり。(省略可)
     LAC の最大最小を省略した場合は、rec/ 中の最大最小値を用いて規格化する。
     規格化時の最大最小値はtiffのタグの最後に付け加えられている。
 
 5. 32bit tiff 画像へのgaussian filter適用
-    rec_gf rec/ radius out/
+    rec_gf rec radius out
     
-    rec/: 32bit tiff 再構成画像があるディレクトリ
+    rec: 32bit tiff 再構成画像があるディレクトリ
     radius: gaussian filter の半値幅
-    out/: フィルター後の画像を出力するディレクトリ(実行前に作成すること)
+    out: フィルター後の画像を出力するディレクトリ(実行前に作成すること)
 
 6. その他おまけ
-   a. print image description
+   a. tif 画像に埋め込まれたタグ(画素サイズ、投影数など)を表示する
       pid tiff-file
-      tifのタグを表示する
       
    b. シノグラム作成
       sinog layer {skip}
@@ -202,7 +209,7 @@
       RA0: 回転軸の原点オフセット
 
    d. img 画像平均
-      img_ave file1 file 2... output
+      img_ave file1 file2... output
       img 画像を平均化する。conv.bat 実行時に必須。
 
    e. his 分割保存
@@ -219,11 +226,11 @@
       カッコ内の引数指定にてcropが可能
       
    h. 180deg スキャンから投影像を作成
-      ct_prj_f HiPic/ prj/
+      ct_prj_f HiPic prj
 
    i. 32bit tiff からヒストグラム
-      tif2hst rec/ (x1 y1 x2 y2)
-      rec/: 32bit tiff 再構成画像があるディレクトリ
+      tif2hst rec (x1 y1 x2 y2)
+      rec: 32bit tiff 再構成画像があるディレクトリ
       x1: 横方向切り出しの始まり。(省略可)
       y1: 縦方向切り出しの始まり。(省略可)
       x2: 横方向切り出しの終わり。(省略可)
@@ -265,24 +272,38 @@
       call ddd.bat
 
    n. 32bit tiff 画像の切り出し
-      rec_crop in/ out/ {x1 y1 x2 y2}
+      rec_crop in out {x1 y1 x2 y2}
     
-      in/: 32bit tiff 再構成画像があるディレクトリ
-      out/: 切り出し後の画像を出力するディレクトリ(実行前に作成すること)
+      in: 32bit tiff 再構成画像があるディレクトリ
+      out: 切り出し後の画像を出力するディレクトリ(実行前に作成すること)
       x1: 横方向切り出しの始まり。
-      x2: 横方向切り出しの終わり。
       y1: 縦方向切り出しの始まり。
+      x2: 横方向切り出しの終わり。
       y2: 縦方向切り出しの終わり。
 
-   o. 任意bit数のCT像にbilateral filterかける
-      tif_blf orgDir newDir  [kernel_size] [spatial_sigma] [intensity_sigma]
-      後ろの３つの変数は省略すると、自動的にパラメータを決める。
+   o. 任意bit数のCT像に filterかける
+      Bilateral filter, Gaussian Filter, Median filter などがある。
+      各ソフト _g で終わるものはGPU使用版(Cuda toolkit のバージョンを確認すること)。
+      tif_blf, tif_blf_g, tif_gsf, tif_gsf_g, tif_mdf, tif_mdf_g
+      
+      Bilateral filter
+      tif_blf[_g] <input_dir> <output_dir>  [kernel_size] [spatial_sigma] [intensity_sigma]
+      
+      Gaussian filter
+      tif_gsf[_g] <input_dir> <output_dir> [sigma]
+      
+      Median filter
+      tif_md[_g]f <input_dir> <output_dir> [kernel_size]
+      
+      []の変数は省略すると、自動的にパラメータを決める。
 
       例: tif_blf_g rh rh_blf1
       例: tif_blf rh rh_blf1 5 20 200
       
+      その他のフィルタ等の詳細はfilter_readme.pdfを参照のこと。
+      
 
-   p. tif画像にmedial filterかけてからgaussian filterをかける。
+   p. tif画像にmedian filterかけてからgaussian filterをかける。
       tif_mgf <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
       X線透過像に散乱光のノイズなどがある場合に、除去するようなときに用いる。
       

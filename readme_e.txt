@@ -1,260 +1,290 @@
-Explanation of image reconstruction software based on Nakano's software and around normalization
+Description of Image Reconstruction Software and Normalization
+Based on Nakano's Software
 
-K. Uesugi
+Uesugi
 
-2025.06.16  ver. 1.6
+2026.05.04  ver. 1.7
 
-0. If you find any bugs or requests, please contact the author.
+0. Please contact the author for bug reports or feature requests.
 
-1. Basic rules
-   a. Input or raw image files
-      img type (ITEX made by Hamamatsu) and tiff monochrome.
+1. General Concepts
+   a. Input
+      Basically img format.
 
    b. Output
-      32bit tiff for CT images as rec?????.tif (5 digits).
-      Each tiff tag contains the following information
-        pixel size, position of the rotation axis, number of projections,
-        rotation angle offset, minimum and maximum values
-      They are embedded in that order.
-      When the image is normalized, the minimum and maximum values at the time
-      of normalization are added to the previous tags. For continuous
-      reconstruction and normalization, a log is left in cmd-hst.log
-      when the execution is completed.
+      CT images are output as 32-bit TIFF files: rec?????.tif (5-digit numbering)
+      The following information is embedded in the TIFF tags of each image,
+      in this order:
+      pixel size, rotation axis position, number of projections,
+      rotation angle offset, minimum and maximum values of the image.
+      During normalization, the min/max values used for normalization are
+      appended to the existing tags.
+      For continuous reconstruction and normalization, a log is saved to
+      cmd-hst.log upon completion.
 
-   c. Subscript of a program
-      The image reconstruction software has subscripts such as _t_c.
-      These specify the processor and reconstruction filter to be used for the operation.
-      _P: processor
-          _t: Use the multi-threading function of the CPU. Controlled by the environment
+   c. Program Suffixes
+      The reconstruction software has suffixes such as _t_c.
+      These specify the processor and reconstruction filter to use.
+      _P: Processor
+          _t: Use CPU multi-threading. Controlled by the environment
               variable CBP_THREADS. Default is 8 threads.
-          _g: GPGPU is used. The attached exe has been compiled with CUDA toolkit 11.2.
-      _F: Filter function
-          _c: Chesler Filter
-          _s: Shepp-Logan Filter
-          _r: Ramachandran(HAN) Filter
+          _g: Use GPGPU. The included executables are compiled with
+              CUDA Toolkit 10.2.
+      _F: Filter
+          _c: Chesler filter
+          _s: Shepp-Logan filter
+          _r: Ramachandran (HAN) filter
 
    d. Ring Artifact Removal
-      This version 1.4 implements a ring removal function based on Algorithm 3 from Vo et al. (2018).
-      The function is executed immediately before CBP calculation. This feature can be turned
-      ON/OFF using environment variables. Setting the KERNEL_SIZE environment variable to 1
-      turns it OFF. Using other positive odd numbers changes its effect. The default value
-      is set to 5 (it also defaults to 5 if the environment variable is not defined).
-      Additionally, CPU parallel processing is implemented, with OMP_NUM_THREADS defaulting to 40.
-      For information on how to set these environment variables, please refer to the instructions
-      at the beginning of the "sort_filter_omp.c".
+      Since version 1.4, a ring removal function based on Vo et al. (2018)
+      Algorithm 3 has been implemented. It is executed immediately before
+      the CBP computation. This function can be turned ON/OFF by setting
+      an environment variable.
+      Setting KERNEL_SIZE to 1 turns it OFF. Other positive odd numbers
+      change the strength of the effect. The default value is 5 (also used
+      when the environment variable is not defined).
+      The ring removal processing uses OpenMP-based CPU parallelization,
+      with a default of OMP_NUM_THREADS=40. This is independent of
+      CBP_THREADS (for back-projection computation, default 8) described
+      in section 1c.
 
-2. 180deg scan. image reconstruction of standard absorption contrast CT.
+   e. Missing Angle Handling
+      For plate-like samples, transmittance can drop drastically at certain
+      angles. In extreme cases, some processing is necessary. The "degree"
+      of this processing can be controlled.
+      Specify using the environment variable CT_REC_BLACK_THRESH (default
+      is 1 if not set).
+      When missing angles are present, change this value to 1, 10, 100,
+      1000, etc. and run ct_rec to adjust the reconstruction behavior.
 
-   a. Reconstruction one slice
+2. 180-degree Scan: Standard Absorption CT Reconstruction
+
+   a. Single Slice Reconstruction
       ct_rec_P_F layer {center} {pixel size} {offsetangle}
-      
-      layer: Layer to be reconstructed (height)
-      center: Position of the rotation axis (pixel). If omitted, it will be estimated automatically.
-      pixel: size: Position of the rotation axis (pixel). If omitted, it will be estimated automatically.
-      offset angle: Origin offset of the rotation axis. If omitted, the value is 0.0.
-      
-      *) Run it in the directory where q????.img is located.
-   
-   b. Reconstruction one slice
+
+      layer: Layer (height) to reconstruct
+      center: Rotation axis position (pixels). Auto-estimated if omitted.
+      pixel size: Pixel size (um). Defaults to 1.0 if omitted.
+      offset angle: Rotation axis origin offset. Defaults to 0.0 if omitted.
+
+      *) Run in the directory containing q????.img files.
+
+   b. Single Slice Reconstruction
       tf_rec_P_F layer {center} {pixel size} {offsetangle}
-      
-      layer: Layer to be reconstructed (height)
-      center: Position of the rotation axis (pixel). If omitted, it will be estimated automatically.
-      pixel: size: Position of the rotation axis (pixel). If omitted, it will be estimated automatically.
-      offset angle: Origin offset of the rotation axis. If omitted, the value is 0.0.
-      
-      *) Run it in the directory where q????.tif is located.
-   
-   c. Continuous reconstruction
-      hp_tg_P_F HiPic/ Dr RC RA0 rec/
-      tf_tg_P_F HiPic/ Dr RC RA0 rec/
+
+      layer: Layer (height) to reconstruct
+      center: Rotation axis position (pixels). Auto-estimated if omitted.
+      pixel size: Pixel size (um). Defaults to 1.0 if omitted.
+      offset angle: Rotation axis origin offset. Defaults to 0.0 if omitted.
+
+      *) Run in the directory containing q????.tif files.
+
+   c. Continuous Reconstruction
+      hp_tg_P_F HiPic Dr RC RA0 rec
+      tf_tg_P_F HiPic Dr RC RA0 rec
       (When the rotation axis is not tilted. All layers.)
-      
-      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
-      Dr: pixel size (um)
-      RC: position of rotation axis
-      RA0: offset angle of rotation
-      rec/: Directory for outputting reconstructed images(To be created before calculation)
-      
-      hp_tg_P_F HiPic/ Dr L1 C1 L2 C2 RA0 rec/
-      tf_tg_P_F HiPic/ Dr L1 C1 L2 C2 RA0 rec/
-      (If the rotation axis is tilted. or when calculating only a part of the area)
-      
-      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
-      Dr: pixel size (um)
-      L1: Calculation start layer
-      C1: position of rotation axis at L1
-      L2: Calculation end layer
-      C2: position of rotation axis at L2
-      RA0: offset angle of rotation
-      rec/: Directory for outputting reconstructed images(/ is not required。To be created before calculation)
-   
-      *) Run it on one of the directories where q???? .img is located.
 
-   d. Continuous reconstruction from p-images
-      p_rec_P_F p/ rec/ Dr RC RA0
+      HiPic: Directory containing q????.img or q????.tif files (no trailing /)
+      Dr: Pixel size (um)
+      RC: Rotation axis position
+      RA0: Rotation axis origin offset
+      rec: Output directory for reconstructed images (must be created
+           before execution)
+
+      hp_tg_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
+      tf_tg_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
+      (When the rotation axis is tilted, or for partial region computation.)
+
+      HiPic: Directory containing q????.img or q????.tif files (no trailing /)
+      Dr: Pixel size (um)
+      L1: Start layer
+      C1: Rotation axis position at L1
+      L2: End layer
+      C2: Rotation axis position at L2
+      RA0: Rotation axis origin offset
+      rec: Output directory for reconstructed images (no trailing /.
+           Must be created before execution.)
+
+      *) Run one directory above the directory containing q????.img files.
+
+   d. Continuous Reconstruction from p-images
+      p_rec_P_F p rec Dr RC RA0
       (When the rotation axis is not tilted. All layers.)
-      
-      p/: The name of the directory in which the p????.tif is stored.(/ is not required)
-      rec/: Directory for outputting reconstructed images(To be created before calculation)
-      Dr: pixel size (um)
-      RC: position of rotation axis
-      RA0: offset angle of rotation
-      
-      p_rec_P_F p/ rec/ Dr L1 C1 L2 C2 RA0
-      (If the rotation axis is tilted.)
-      
-      p/: The name of the directory in which the p????.tif is stored.(/ is not required)
-      rec/: Directory for outputting reconstructed images(To be created before calculation)
-      Dr: pixel size (um)
-      L1: Calculation start layer
-      C1: position of rotation axis at L1
-      L2: Calculation end layer
-      C2: position of rotation axis at L2
-      RA0: offset angle of rotation
 
-3. 360deg scan (offset CT)。Image reconstruction of standard absorption contrast.
-   a. Estimation of rotational axis position
-      ofct_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
-      oftf_xy HiPic/ {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
-      
-      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
-      Ox1: Starting point of the horizontal search area. (optional)
-      Ox2: End point of the horizontal search area. (optional)
-      Oy1: The starting point of the vertical search area. (optional)
-      Oy2: End point of vertical search range. (optional)
-      MSD.tif: Name of the MSD image output file. (optional)
+      p: Directory containing p?????.tif files (no trailing /)
+      rec: Output directory for reconstructed images (must be created
+           before execution)
+      Dr: Pixel size (um)
+      RC: Rotation axis position
+      RA0: Rotation axis origin offset
 
-      *) When outputting the image, the offset of the image is displayed in parentheses.
+      p_rec_P_F p rec Dr L1 C1 L2 C2 RA0
+      (When the rotation axis is tilted.)
 
-   b. Check the amount of memory required.
-      ofct_srec_P_F HiPic/ Rc Oy
-      oftf_srec_P_F HiPic/ Rc Oy
+      p: Directory containing p?????.tif files (no trailing /)
+      rec: Output directory for reconstructed images (must be created
+           before execution)
+      Dr: Pixel size (um)
+      L1: Start layer
+      C1: Rotation axis position at L1
+      L2: End layer
+      C2: Rotation axis position at L2
+      RA0: Rotation axis origin offset
 
-      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
-      Rc: position of rotation axis (Number of pixels from the left edge)
-      Oy: amount of vertical misalignment (Always set to 0).
+3. 360-degree Scan (Offset CT): Standard Absorption CT Reconstruction
+   a. Rotation Axis Position Estimation
+      ofct_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
+      oftf_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
 
-      This will output the amount of main memory needed to calculate everything at once.
-      It can be used as a guide to determine the rangeList.
+      HiPic: Directory containing q????.img or q????.tif files (no trailing /)
+      Ox1: Horizontal search range start (optional)
+      Ox2: Horizontal search range end (optional)
+      Oy1: Vertical search range start (optional)
+      Oy2: Vertical search range end (optional)
+      MSD.tif: Output filename for MSD image (optional)
 
-   c. Reconstruction of offset CT
-      ofct_srec_P_F HiPic/ Rc Oy rangeList Dr RA0 rec/
-      oftf_srec_P_F HiPic/ Rc Oy rangeList Dr RA0 rec/
-      
-      HiPic/: The name of the directory in which the q????.img or q????.tif is stored.(/ is not required)
-      Rc: position of rotation axis(Number of pixels from the left edge)
-      Oy: amount of vertical misalignment (Always set to 0).
-      rangeList: Specify the layer to be reconstructed.
-      Dr: pixel size
-      RA0: offset angle of rotation
-      rec/: Directory for outputting reconstructed images(To be created before calculation)
+      *) When outputting an image, the image offset is displayed in
+         parentheses.
 
-      *) rangeListのEx.。
-         For only 100 layers：100
-         100-150 layers: 100-150
+   b. Required Memory Check
+      ofct_srec_P_F HiPic Rc Oy
+
+      HiPic: Directory containing q????.img or q????.tif files (no trailing /)
+      Rc: Rotation axis position (pixels from left edge)
+      Oy: Vertical shift (always specify 0)
+
+      This outputs the amount of main memory required to compute
+      everything at once. Use as a guide when determining rangeList.
+
+   c. Reconstruction
+      ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
+      oftf_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
+
+      HiPic: Directory containing q????.img or q????.tif files (no trailing /)
+      Rc: Rotation axis position (pixels from left edge)
+      Oy: Vertical shift (always specify 0)
+      rangeList: Specify layers to reconstruct.
+      Dr: Pixel size
+      RA0: Rotation axis origin offset
+      rec: Output directory for reconstructed images (must be created
+           before execution)
+
+      *) rangeList examples:
+         Single layer 100: 100
+         Layers 100-150: 100-150
          All layers: -
 
-4. 32bit tiff image normalization.
-    tif_f2i bit rec/ out/ {LACmin LACmax} {x1 y1 x2 y2}
-    
-    bit: Number of bits. 0 or 8 or 16 (0 is for checking the range.)
-    rec/: Directory with 32bit tiff reconstructed images
-    out/: Directory for outputting the normalized images (to be created before execution)
-    LACmin: The minimum value of normalization. (optional)
-    LACmax: The maximum value of normalization. (optional)
-    x1: Beginning of lateral cutout. (optional)
-    y1: Beginning of the longitudinal cutout. (optional)
-    x2: End of the lateral cutout. (optional)
-    y2: End of the longitudinal cutout. (optional)
-    When the maximum and minimum values of LAC are omitted, the maximum and minimum values
-    in rec/ shall be used for normalization. The maximum and minimum values at the time of
-    normalization are added to the end of the tiff tag.
+   d. Single Slice Reconstruction from TIFF Data
+      otf_rec_P_F layer center {pixel size} {offsetangle}
 
-5. Applying gaussian filter to 32bit tiff CT image.
-    rec_gf rec/ radius out/
-    
-    rec/: Directory with 32bit tiff reconstructed images
-    radius: Radius of gaussian filter.
-    out/: Output directory (make beforehand)
+      layer: Layer (height) to reconstruct
+      center: Rotation axis position (pixels)
+      pixel size: Pixel size (um). Defaults to 1.0 if omitted.
+      offset angle: Rotation axis origin offset. Defaults to 0.0 if omitted.
 
-6. Others
-   a. print image description
+      *) Run in the directory containing q????.tif files.
+
+
+4. Normalization of 32-bit TIFF Images
+    tif_f2i bit rec out {LACmin LACmax} {x1 y1 x2 y2}
+
+    bit: Bit depth: 0, 8, or 16 (0 only checks the value range)
+    rec: Directory containing 32-bit TIFF reconstructed images
+    out: Output directory for normalized images (must be created
+         before execution)
+    LACmin: Minimum value for normalization (optional)
+    LACmax: Maximum value for normalization (optional)
+    x1: Horizontal crop start (optional)
+    y1: Vertical crop start (optional)
+    x2: Horizontal crop end (optional)
+    y2: Vertical crop end (optional)
+    If LAC min/max are omitted, the min/max values found in rec/ are used
+    for normalization.
+    The min/max values used for normalization are appended to the end of
+    the TIFF tags.
+
+5. Applying Gaussian Filter to 32-bit TIFF Images
+    rec_gf rec radius out
+
+    rec: Directory containing 32-bit TIFF reconstructed images
+    radius: Half-width of the Gaussian filter
+    out: Output directory for filtered images (must be created
+         before execution)
+
+6. Miscellaneous Utilities
+   a. Display Tags Embedded in TIFF Images
+      (pixel size, number of projections, etc.)
       pid tiff-file
-      Show tiff tags.
-      
-   b. make sinogram
+
+   b. Sinogram Generation
       sinog layer {skip}
-      32bit tiff output. Maximum and minimum values are described in tags.
-      If "skip" is specified, the number of projections is set to 1/skip and output.
+      Output as 32-bit TIFF. Tags contain only min and max values.
+      If skip is specified, the number of projections is reduced by
+      a factor of skip.
 
-   c. Reconstructed from the synogram of b
+   c. Reconstruction from Sinogram (generated by 6b)
       sf_rec_P_F input output {Dr RC RA0}
-      32bit tiff output.
-      input: file name of sinogram image with 32bit float tiff
-      output: file name of output CT image
-      Dr: pixel size
-      RC: position of rotation axis
-      RA0: offset angle of rotation
+      Output as 32-bit TIFF.
+      input: Sinogram as float TIFF
+      output: Output as float TIFF
+      Dr: Pixel size
+      RC: Rotation axis position
+      RA0: Rotation axis origin offset
 
-   d. averaging of img images
-      img_ave file1 file 2... output
+   d. Average img Images
+      img_ave file1 file2... output
+      Averages img images. Required when running conv.bat.
 
-   e. split his file to img files
+   e. Split his File
       spl N-shot N-split
-      N-shot: number of shot for a data set
-      N-split: number of data set
+      Likely used for Z-scans or energy scans.
+      Splits a his file and saves as img files.
 
-   f. Re-numbering "rec" files
+   f. Renumber rec Sequence
       rec_stk num_stack start end
-      num_stack: number of stack data set
-      start: 
-      end: 
-      Used for Z-scans, to renumber the recs to make a single stack.
+      Used for Z-scans. Renumbers rec files into a single stack.
 
-   g. Convert his file to a sequentially numbered img.
+   g. Convert his File to Sequential img Files
       his2img his-file (x1 x2 y1 y2)
-      crop is available when specified.
-      
-   h. Create projection images from a 180deg scan
-      ct_prj_f HiPic/ prj/
-      HiPic/: The name of the directory in which the q????.img is stored.(/ is not required)
-      prj/: Directory for projection images (make beforehand)
+      Cropping is possible by specifying the arguments in parentheses.
 
-   i. Histogram from 32bit tiff
-      tif2hst rec/ (x1 y1 x2 y2)
-      rec/: Directory for 32bit tiff CT images
-      x1: Beginning of lateral cutout. (optional)
-      y1: Beginning of the longitudinal cutout. (optional)
-      x2: End of the lateral cutout. (optional)
-      y2: End of the longitudinal cutout. (optional)
+   h. Generate Projection Images from 180-degree Scan
+      ct_prj_f HiPic prj
 
-   j. Orthogonal rotation of 8bit or 16bit CT image. 
+   i. Histogram from 32-bit TIFF
+      tif2hst rec (x1 y1 x2 y2)
+      rec: Directory containing 32-bit TIFF reconstructed images
+      x1: Horizontal crop start (optional)
+      y1: Vertical crop start (optional)
+      x2: Horizontal crop end (optional)
+      y2: Vertical crop end (optional)
+
+   j. Orthogonal Rotation of 8-bit or 16-bit CT Images
       si_rar orgDir nameFile hAxis vAxis dAxis newDir
       si_rar orgDir nameFile hAxis vAxis dAxis sliceNo newTIFF
 
-      Ex.: si_rar.exe ro_xy - +y +z +x ro_yz
-      Ex.: si_rar.exe ro_xy - +z +x +y ro_zx
+      Example: si_rar.exe ro_xy - +y +z +x ro_yz
+      Example: si_rar.exe ro_xy - +z +x +y ro_zx
 
-   k. Binning of 8bit or 16bit CT image.
+   k. Binning of 8-bit or 16-bit CT Images
       si_sir orgDir nameFile Bxyz newDir
       si_sir orgDir nameFile Bx By Bz newDir
 
-      Ex.: si_sir ro_xy - 2 ro_2x2x2
-      Ex.: si_sir ro_xy - 2 2 1 ro_2x2x1
+      Example: si_sir ro_xy - 2 ro_2x2x2
+      Example: si_sir ro_xy - 2 2 1 ro_2x2x1
 
-   l. Applying Gaussian filter to 8bit or 16bit CT image.
+   l. Gaussian Filter for 8-bit or 16-bit CT Images
       si_gf orgDir nameFile radius {bias} newDir
 
-      Ex.: si_gf rh - 1.0 rh_gf1
-      Ex.: si_gf rh - 1.0 0.0 rh_gf1
+      Example: si_gf rh - 1.0 rh_gf1
+      Example: si_gf rh - 1.0 0.0 rh_gf1
 
-   m. Example of auto stack for Z-scan
-      Number of images for a scan: 7501
-      Number of Z stack: 8
-      Overlapping layer: 17 140
-      pixel size: 11.31
-      
+   m. Automatic Z-scan Stacking (Example)
+      Number of shots per scan: 7501
+      Number of Z-stacks: 8
+      Overlap location: 17 140
+      Pixel size: 11.31
+
       spl 7501 8 > aaa.bat
       call aaa.bat
       chk-rc 8 75 > bbb.bat
@@ -264,28 +294,43 @@ K. Uesugi
       rec_stk 8 17 140 > ddd.bat
       call ddd.bat
 
-   n. cropping 32bit tiff files
-      rec_crop in/ out/ {x1 y1 x2 y2}
-    
-      in/:  input 32bit tiff files directory
-      out/: output directory
-      x1: Beginning of lateral cutout.
-      y1: Beginning of the longitudinal cutout.
-      x2: End of the lateral cutout.
-      y2: End of the longitudinal cutout.
+   n. Cropping 32-bit TIFF Images
+      rec_crop in out {x1 y1 x2 y2}
 
-   o. bilateral filter on CT image with any number of bits
-      tif_blf orgDir newDir [kernel_size] [spatial_sigma] [intensity_sigma]
-      If the three variables behind are omitted, the parameters are automatically determined.
-      _g uses cuda toolkit
+      in: Directory containing 32-bit TIFF reconstructed images
+      out: Output directory for cropped images (must be created
+           before execution)
+      x1: Horizontal crop start
+      y1: Vertical crop start
+      x2: Horizontal crop end
+      y2: Vertical crop end
 
-      Ex: tif_blf_g rh rh_blf1
-      Ex: tif_blf rh rh_blf1 5 20 200
+   o. Applying Filters to CT Images of Any Bit Depth
+      Available filters: Bilateral filter, Gaussian filter, Median filter.
+      Executables ending with _g are GPU versions (check your CUDA Toolkit
+      version).
+      tif_blf, tif_blf_g, tif_gsf, tif_gsf_g, tif_mdf, tif_mdf_g
 
-   p. Apply a medial filter to a tif image and then apply a gaussian filter.
+      Bilateral filter
+      tif_blf[_g] <input_dir> <output_dir> [kernel_size] [spatial_sigma] [intensity_sigma]
+
+      Gaussian filter
+      tif_gsf[_g] <input_dir> <output_dir> [sigma]
+
+      Median filter
+      tif_md[_g]f <input_dir> <output_dir> [kernel_size]
+
+      Parameters in [] are automatically determined if omitted.
+
+      Example: tif_blf_g rh rh_blf1
+      Example: tif_blf rh rh_blf1 5 20 200
+
+      See filter_readme.pdf for details on additional filters.
+
+   p. Apply Median Filter Followed by Gaussian Filter to TIFF Images
       tif_mgf <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
-      This filter is used to remove scattered noise in the X-ray transmission image.
-      
-      Ex: tif_mgf a000401.tif 001/raw/a0401.tif 3 1
-      Ex: tif_mgf a000401.tif 001/raw/a0401.tif 0 1
+      Used to remove noise such as scattered light in X-ray transmission
+      images.
 
+      Example: tif_mgf a000401.tif 001/raw/a0401.tif 3 1
+      Example: tif_mgf a000401.tif 001/raw/a0401.tif 0 1
