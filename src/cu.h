@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -84,8 +83,8 @@
 
 #define	SETUP_CUDA_GPU()	\
 {\
-	char		*ev=getenv("CUDA_GPU"),\
-			*nd="no device assigned by CUDA_GPU.\n";\
+	char		*ev=getenv("CUDA_GPU");\
+	const char	*nd="no device assigned by CUDA_GPU.\n";\
 	int		cg,dc;\
         cudaDeviceProp	dp;\
 \

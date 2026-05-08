@@ -1,6 +1,11 @@
 # MakefileGPU (Linux/gcc + nvcc) version
 # Usage: make all
 # Individual GPU targets: make ct_rec_g hp_tg_g tf_tg_g etc.
+#
+# CUDA 13.x: Maxwell/Pascal/Volta removed.  Minimum arch is sm_75 (Turing).
+#   Override CUDA_ARCH on command line if targeting a specific GPU:
+#     make all CUDA_ARCH="-arch=sm_89"     (Ada Lovelace)
+#     make all CUDA_ARCH="-arch=sm_100"    (Blackwell)
 
 CC      = gcc
 CFLAGS  = -O2 -D_USE_MATH_DEFINES
@@ -12,12 +17,16 @@ SIF_F   = sif_f_fast.c
 
 CUDA_HOME ?= /usr/local/cuda
 CUDAINCL  = $(CUDA_HOME)/include
-CUDART    = $(CUDA_HOME)/lib64/libcudart.so
-CUFFT     = $(CUDA_HOME)/lib64/libcufft.so
+CUDALIB   = $(CUDA_HOME)/lib64
+CUDART    = -L$(CUDALIB) -lcudart
+CUFFT     = -L$(CUDALIB) -lcufft
 
-NVCCFLAGS = -O3 -I$(CUDAINCL) -use_fast_math -Xcompiler "-Wno-unused-result"
+# Default: Turing (sm_75).  CUDA 13.x does not support older architectures.
+CUDA_ARCH ?= -arch=sm_75
 
-EXE_DIR = ../exe
+NVCCFLAGS = -O3 -I$(CUDAINCL) $(CUDA_ARCH) -use_fast_math -Xcompiler "-Wno-unused-result"
+
+EXE_DIR = ../bin
 
 .PHONY: all clean ct_rec_g tf_rec_g hp_tg_g tf_tg_g \
         ofct_srec_g otf_rec_g oftf_srec_g p_rec_g filters_g

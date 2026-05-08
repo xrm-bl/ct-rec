@@ -4,6 +4,7 @@
 #include <cufft.h>
 #include "cu.h"
 #include "cbp.h"
+#include "cuda13_compat.h"
 
 #ifndef	THREADS_1D
 #define THREADS_1D	256
@@ -15,10 +16,6 @@
 
 #ifndef	CUFFT_LIMIT
 #define CUFFT_LIMIT	(1U<<23)
-#endif
-
-#ifndef	TEXTURE_LIMIT
-#define TEXTURE_LIMIT	(1U<<27)
 #endif
 
 EXTERN double	Ramachandran(int i)
@@ -125,6 +122,7 @@ __global__ void	BP_GMF(int N,int M,int L1,
 		       float2 *Q,
 		       float *F)
 {
+	ENABLE_SMEM_SPILLING();
 	int	h,v,n;
 	float	r;
 
@@ -148,37 +146,8 @@ __global__ void	BP_GMF(int N,int M,int L1,
 	F[(size_t)v*(size_t)N+(size_t)h]=f;
 }}
 
-//texture<float2,1,cudaReadModeElementType> tex;
-
-//__global__ void	BP(int N,int M,int L1,
-//		   float xy0,float R2,
-//		   float s0,float c0,float ds,float dc,
-//		   float r0,
-//		   float *F)
-//{
-//	int	h,v,n0,n;
-//	float	r;
-//	float2	Q;
-//
-//	if ((h=blockIdx.x*blockDim.x+threadIdx.x)<N &&
-//	    (v=blockIdx.y*blockDim.y+threadIdx.y)<N)
-//{
-//	float	x=(float)h-xy0,
-//		y=xy0-(float)v,
-//		f=0.0f;
-//
-//	if (x*x+y*y<=R2) {
-//	    r=x; x=r*c0+y*s0;
-//		 y=y*c0-r*s0;
-//	    for (n0=0; --M>=0; n0+=L1) {
-//		Q=tex1Dfetch(tex,(n=__float2int_rd(r=x-r0))+n0);
-//		f+=(Q.x+Q.y*(r-(float)n));
-//		r=x; x=r*dc+y*ds;
-//		     y=y*dc-r*ds;
-//	    }
-//	}
-//	F[(size_t)v*(size_t)N+(size_t)h]=f;
-//}}
+/* NOTE: Legacy texture reference BP kernel removed for CUDA 13.x compatibility.
+ *       BP_GMF (global memory fetch) kernel is used for all cases. */
 
 static int		N,M,L,L1,L2,batch;
 static Float		**p,**f;
@@ -253,8 +222,7 @@ EXTERN void	PrepareCBP()
 	}
 }
 
-//static int	GMF;
-static char	*kef="kernel execution failed.";
+static const char	*kef="kernel execution failed.";
 
 #define KEF()	CUT_CHECK_ERROR(kef)
 
@@ -316,7 +284,6 @@ EXTERN void	ExecuteCBP(double dr,double r0,double t0)
 		threads_2d(THREADS_2D,THREADS_2D);
 	double	dt=M_PI/(double)MO;
 
-//	if (GMF=(size_t)L1*(size_t)MO*2>TEXTURE_LIMIT)
 	    BP_GMF<<<blocks_2d,threads_2d>>>
 		  (N,MO,L1,
 		   (float)(N1/2.0),(float)(R*R),
@@ -324,16 +291,6 @@ EXTERN void	ExecuteCBP(double dr,double r0,double t0)
 		   (float)r0,
 		   PQ,
 		   F);
-//	else {
-//	    CUDA_SAFE_CALL(cudaBindTexture(NULL,tex,PQ));
-//
-//	    BP<<<blocks_2d,threads_2d>>>
-//	      (N,MO,L1,
-//	       (float)(N1/2.0),(float)(R*R),
-//	       (float)sin(t0),(float)cos(t0),(float)sin(dt),(float)cos(dt),
-//	       (float)r0,
-//	       F);
-//	}
 }}
 
 EXTERN void	BeginCBP(double dr,double r0,double t0)
@@ -347,9 +304,6 @@ EXTERN Float	**EndCBP()
 
 	KEF();
 
-//	if (!GMF) {
-//	    CUDA_SAFE_CALL(cudaUnbindTexture(tex));
-//	}
 	for (y=0; y<N; y++) {
 	    CUDA_SAFE_CALL(cudaMemcpy(gpf,F+(size_t)y*(size_t)N,sof_N,
 				      cudaMemcpyDeviceToHost));

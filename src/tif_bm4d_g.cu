@@ -29,6 +29,7 @@
 #include <math.h>
 #include <float.h>
 #include <cuda_runtime.h>
+#include "cuda13_compat.h"
 
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
@@ -116,6 +117,7 @@ __global__ void bm4d_filter_kernel(
     int block_radius, int search_radius,
     float sigma_sq, float match_threshold)
 {
+    ENABLE_SMEM_SPILLING();
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = valid_start + blockIdx.z * blockDim.z + threadIdx.z;
@@ -365,7 +367,7 @@ static int get_tiff_files(const char *dp, char f[][MAX_PATH_LENGTH], int *fc){
 }
 
 static int get_image_info(const char *dp, const char *fn, ImageInfo *info){
-    TIFF *tif; char fp[MAX_PATH_LENGTH]; uint32 w,h; uint16 bps,spp,sf;
+    TIFF *tif; char fp[MAX_PATH_LENGTH]; uint32_t w,h; uint16_t bps,spp,sf;
     snprintf(fp,MAX_PATH_LENGTH,"%s%s%s",dp,PATH_SEPARATOR,fn);
     tif=TIFFOpen(fp,"r"); if(!tif)return -1;
     TIFFGetField(tif,TIFFTAG_IMAGEWIDTH,&w); TIFFGetField(tif,TIFFTAG_IMAGELENGTH,&h);

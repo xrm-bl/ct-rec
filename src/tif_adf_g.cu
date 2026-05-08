@@ -27,6 +27,7 @@
 #include <math.h>
 #include <float.h>
 #include <cuda_runtime.h>
+#include "cuda13_compat.h"
 
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
@@ -104,6 +105,7 @@ __global__ void aniso_diffusion_kernel(
     int width, int height, int depth,
     float K_sq_inv, float dt, int mode)
 {
+    ENABLE_SMEM_SPILLING();
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
@@ -289,7 +291,7 @@ static int get_tiff_files(const char *dir_path, char files[][MAX_PATH_LENGTH], i
 
 static int get_image_info(const char *dir_path, const char *filename, ImageInfo *info) {
     TIFF *tif; char full_path[MAX_PATH_LENGTH];
-    uint32 width, height; uint16 bps, spp, sf;
+    uint32_t width, height; uint16_t bps, spp, sf;
     snprintf(full_path, MAX_PATH_LENGTH, "%s%s%s", dir_path, PATH_SEPARATOR, filename);
     tif = TIFFOpen(full_path, "r"); if (tif == NULL) return -1;
     TIFFGetField(tif, TIFFTAG_IMAGEWIDTH, &width);
