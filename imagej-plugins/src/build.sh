@@ -44,9 +44,13 @@ echo "Compilation OK."
 cp plugins.config "$BUILDDIR/"
 
 # --- Create JAR ---
+# Include all .class EXCEPT HandleExtraFileTypes* (including $N inner classes)
 echo "Creating $JARNAME..."
 cd "$BUILDDIR"
-jar cf "../$JARNAME" .
+ls *.class | grep -v '^HandleExtraFileTypes' > _jarfiles.txt
+echo plugins.config >> _jarfiles.txt
+jar cf "../$JARNAME" @_jarfiles.txt
+rm _jarfiles.txt
 cd ..
 
 echo ""
@@ -54,6 +58,8 @@ echo "============================================================"
 echo " Build complete: $JARNAME"
 echo ""
 echo " Install:"
-echo "   Copy $JARNAME to ImageJ/plugins/ or Fiji.app/plugins/"
-echo "   and restart ImageJ/Fiji."
+echo "   1. Copy $JARNAME to ImageJ/plugins/"
+echo "   2. Copy $BUILDDIR/HandleExtraFileTypes.class"
+echo "      to ImageJ/plugins/ (for D&D support)"
+echo "   3. Restart ImageJ"
 echo "============================================================"

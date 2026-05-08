@@ -56,7 +56,7 @@ public class HandleExtraFileTypes extends ImagePlus implements PlugIn {
         }
 
         /* Delegate to Open_HIS_IMG to do the actual reading */
-        io.Open_HIS_IMG opener = new io.Open_HIS_IMG();
+        Open_HIS_IMG opener = new Open_HIS_IMG();
         ImagePlus imp = opener.openFile(path);
 
         if (imp == null) {

@@ -1,5 +1,3 @@
-package io;
-
 /*
  * Open_HIS_IMG.java
  *
