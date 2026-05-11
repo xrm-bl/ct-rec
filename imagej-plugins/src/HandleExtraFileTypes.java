@@ -61,11 +61,9 @@ public class HandleExtraFileTypes extends ImagePlus implements PlugIn {
 
         if (imp == null) {
             /* Reading failed or user cancelled.
-             * Set width to IMAGE_OPENED so Opener does NOT show
-             * "Format not supported" on top of our own error message.
+             * width remains 0 -> Opener may show "Format not supported".
+             * This is acceptable for user-initiated cancel.
              */
-            setStack(fileName, null);
-            /* Mark as handled even though no image was produced */
             return;
         }
 
