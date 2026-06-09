@@ -417,13 +417,81 @@ static int load_chunk(const char *dp, char f[][MAX_PATH_LENGTH], ImageInfo *info
     } c->end_z=c->start_z+z-1; return 0;
 }
 
-static int save_chunk_valid_region(const char *dp, char f[][MAX_PATH_LENGTH],
+/* Copy metadata tags from input TIFF (in) to output TIFF (out).
+ * Tags that affect pixel data layout (dimensions, bps, compression, photometric,
+ * planar config, strip/tile geometry) are intentionally NOT copied here, because
+ * the caller sets those explicitly to match the data actually being written.
+ * Call this BEFORE closing the input TIFF (string pointers belong to the input). */
+static void copy_tiff_metadata(TIFF *in, TIFF *out) {
+    uint32_t u32;
+    uint16_t u16, u16a, u16b, *u16ptr;
+    float f;
+    double dbl;
+    char *str;
+    uint32_t count;
+    void *data;
+
+    /* ASCII / string tags */
+    if (TIFFGetField(in, TIFFTAG_IMAGEDESCRIPTION, &str)) TIFFSetField(out, TIFFTAG_IMAGEDESCRIPTION, str);
+    if (TIFFGetField(in, TIFFTAG_MAKE,             &str)) TIFFSetField(out, TIFFTAG_MAKE,             str);
+    if (TIFFGetField(in, TIFFTAG_MODEL,            &str)) TIFFSetField(out, TIFFTAG_MODEL,            str);
+    if (TIFFGetField(in, TIFFTAG_SOFTWARE,         &str)) TIFFSetField(out, TIFFTAG_SOFTWARE,         str);
+    if (TIFFGetField(in, TIFFTAG_DATETIME,         &str)) TIFFSetField(out, TIFFTAG_DATETIME,         str);
+    if (TIFFGetField(in, TIFFTAG_ARTIST,           &str)) TIFFSetField(out, TIFFTAG_ARTIST,           str);
+    if (TIFFGetField(in, TIFFTAG_HOSTCOMPUTER,     &str)) TIFFSetField(out, TIFFTAG_HOSTCOMPUTER,     str);
+    if (TIFFGetField(in, TIFFTAG_COPYRIGHT,        &str)) TIFFSetField(out, TIFFTAG_COPYRIGHT,        str);
+    if (TIFFGetField(in, TIFFTAG_DOCUMENTNAME,     &str)) TIFFSetField(out, TIFFTAG_DOCUMENTNAME,     str);
+    if (TIFFGetField(in, TIFFTAG_PAGENAME,         &str)) TIFFSetField(out, TIFFTAG_PAGENAME,         str);
+    if (TIFFGetField(in, TIFFTAG_TARGETPRINTER,    &str)) TIFFSetField(out, TIFFTAG_TARGETPRINTER,    str);
+
+    /* uint32_t tags */
+    if (TIFFGetField(in, TIFFTAG_SUBFILETYPE, &u32)) TIFFSetField(out, TIFFTAG_SUBFILETYPE, u32);
+
+    /* uint16_t tags */
+    if (TIFFGetField(in, TIFFTAG_ORIENTATION,      &u16)) TIFFSetField(out, TIFFTAG_ORIENTATION,      u16);
+    if (TIFFGetField(in, TIFFTAG_RESOLUTIONUNIT,   &u16)) TIFFSetField(out, TIFFTAG_RESOLUTIONUNIT,   u16);
+    if (TIFFGetField(in, TIFFTAG_MINSAMPLEVALUE,   &u16)) TIFFSetField(out, TIFFTAG_MINSAMPLEVALUE,   u16);
+    if (TIFFGetField(in, TIFFTAG_MAXSAMPLEVALUE,   &u16)) TIFFSetField(out, TIFFTAG_MAXSAMPLEVALUE,   u16);
+
+    /* float tags */
+    if (TIFFGetField(in, TIFFTAG_XRESOLUTION, &f)) TIFFSetField(out, TIFFTAG_XRESOLUTION, f);
+    if (TIFFGetField(in, TIFFTAG_YRESOLUTION, &f)) TIFFSetField(out, TIFFTAG_YRESOLUTION, f);
+    if (TIFFGetField(in, TIFFTAG_XPOSITION,   &f)) TIFFSetField(out, TIFFTAG_XPOSITION,   f);
+    if (TIFFGetField(in, TIFFTAG_YPOSITION,   &f)) TIFFSetField(out, TIFFTAG_YPOSITION,   f);
+
+    /* double tags (libtiff 4.x: SMin/SMaxSampleValue are double) */
+    if (TIFFGetField(in, TIFFTAG_SMINSAMPLEVALUE, &dbl)) TIFFSetField(out, TIFFTAG_SMINSAMPLEVALUE, dbl);
+    if (TIFFGetField(in, TIFFTAG_SMAXSAMPLEVALUE, &dbl)) TIFFSetField(out, TIFFTAG_SMAXSAMPLEVALUE, dbl);
+    if (TIFFGetField(in, TIFFTAG_STONITS,         &dbl)) TIFFSetField(out, TIFFTAG_STONITS,         dbl);
+
+    /* PageNumber: two uint16_t values */
+    if (TIFFGetField(in, TIFFTAG_PAGENUMBER, &u16a, &u16b)) {
+        TIFFSetField(out, TIFFTAG_PAGENUMBER, u16a, u16b);
+    }
+
+    /* ICC profile: uint32_t count + data pointer */
+    if (TIFFGetField(in, TIFFTAG_ICCPROFILE, &count, &data)) {
+        TIFFSetField(out, TIFFTAG_ICCPROFILE, count, data);
+    }
+
+    /* ExtraSamples: uint16_t count + uint16_t array */
+    if (TIFFGetField(in, TIFFTAG_EXTRASAMPLES, &u16, &u16ptr)) {
+        TIFFSetField(out, TIFFTAG_EXTRASAMPLES, u16, u16ptr);
+    }
+}
+
+static int save_chunk_valid_region(const char *input_dir, const char *dp,
+                                   char f[][MAX_PATH_LENGTH],
                                    ImageInfo *info, ChunkData *c){
-    TIFF *tif; char fp[MAX_PATH_LENGTH]; int z,y; tsize_t ss; void *sd; int gz;
+    TIFF *tif, *tif_in; char fp[MAX_PATH_LENGTH]; char in_path[MAX_PATH_LENGTH];
+    int z,y; tsize_t ss; void *sd; int gz;
     for(z=c->valid_start;z<=c->valid_end;z++){
         gz=c->start_z+z; if(gz>=(int)info->depth)break;
         snprintf(fp,MAX_PATH_LENGTH,"%s%s%s",dp,PATH_SEPARATOR,f[gz]);
+        snprintf(in_path,MAX_PATH_LENGTH,"%s%s%s",input_dir,PATH_SEPARATOR,f[gz]);
         tif=TIFFOpen(fp,"w"); if(!tif)return -1;
+        tif_in=TIFFOpen(in_path,"r");
+        if(tif_in!=NULL){ copy_tiff_metadata(tif_in,tif); TIFFClose(tif_in); }
         TIFFSetField(tif,TIFFTAG_IMAGEWIDTH,info->width);
         TIFFSetField(tif,TIFFTAG_IMAGELENGTH,info->height);
         TIFFSetField(tif,TIFFTAG_BITSPERSAMPLE,info->bits_per_sample);
@@ -596,7 +664,7 @@ int main(int argc, char *argv[]){
         if(load_chunk(input_dir,files,&info,chunk)!=0){
             fprintf(stderr,"Error: Load failed\n");free_chunk(chunk);free(files);return 1;}
         process_chunk_on_gpu(chunk,&info,&params);
-        if(save_chunk_valid_region(output_dir,files,&info,chunk)!=0){
+        if(save_chunk_valid_region(input_dir,output_dir,files,&info,chunk)!=0){
             fprintf(stderr,"Error: Save failed\n");free_chunk(chunk);free(files);return 1;}
     }
 
