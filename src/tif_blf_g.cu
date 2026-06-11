@@ -89,6 +89,7 @@ __global__ void bilateral_filter_3d_kernel(
     int kernel_size,
     float spatial_sigma_sq_inv,
     float intensity_sigma_sq_inv,
+    float min_value,
     float max_value)
 {
     ENABLE_SMEM_SPILLING();
@@ -125,7 +126,7 @@ __global__ void bilateral_filter_3d_kernel(
     }
     if (weight_sum > 0.0f) {
         float result = weighted_sum / weight_sum;
-        result = fminf(fmaxf(result, 0.0f), max_value);
+        result = fminf(fmaxf(result, min_value), max_value);
         output[center_idx] = (T)result;
     } else {
         output[center_idx] = input[center_idx];
@@ -413,10 +414,15 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
     CUDA_CHECK(cudaMemcpy(chunk->d_output, chunk->d_data, chunk_bytes, cudaMemcpyDeviceToDevice));
     float spatial_sigma_sq_inv = 0.5f / (params->spatial_sigma * params->spatial_sigma);
     float intensity_sigma_sq_inv = 0.5f / (params->intensity_sigma * params->intensity_sigma);
-    float max_value;
-    if (info->bits_per_sample == 8) max_value = 255.0f;
-    else if (info->bits_per_sample == 16) max_value = 65535.0f;
-    else max_value = FLT_MAX;
+    float min_value, max_value;
+    if (info->bits_per_sample == 8) {
+        min_value = 0.0f;       max_value = 255.0f;
+    } else if (info->bits_per_sample == 16) {
+        min_value = 0.0f;       max_value = 65535.0f;
+    } else {
+        /* 32-bit float: allow negative values (e.g. background/air in CT recon). */
+        min_value = -FLT_MAX;   max_value =  FLT_MAX;
+    }
     dim3 block(BLOCK_SIZE_X, BLOCK_SIZE_Y, BLOCK_SIZE_Z);
     dim3 grid(
         (info->width + block.x - 1) / block.x,
@@ -428,19 +434,22 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
             (unsigned char*)chunk->d_data, (unsigned char*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
             chunk->valid_start, chunk->valid_end,
-            params->kernel_size, spatial_sigma_sq_inv, intensity_sigma_sq_inv, max_value);
+            params->kernel_size, spatial_sigma_sq_inv, intensity_sigma_sq_inv,
+            min_value, max_value);
     } else if (info->bits_per_sample == 16) {
         bilateral_filter_3d_kernel<unsigned short><<<grid, block>>>(
             (unsigned short*)chunk->d_data, (unsigned short*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
             chunk->valid_start, chunk->valid_end,
-            params->kernel_size, spatial_sigma_sq_inv, intensity_sigma_sq_inv, max_value);
+            params->kernel_size, spatial_sigma_sq_inv, intensity_sigma_sq_inv,
+            min_value, max_value);
     } else if (info->bits_per_sample == 32 && info->sample_format == SAMPLEFORMAT_IEEEFP) {
         bilateral_filter_3d_kernel<float><<<grid, block>>>(
             (float*)chunk->d_data, (float*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
             chunk->valid_start, chunk->valid_end,
-            params->kernel_size, spatial_sigma_sq_inv, intensity_sigma_sq_inv, max_value);
+            params->kernel_size, spatial_sigma_sq_inv, intensity_sigma_sq_inv,
+            min_value, max_value);
     }
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());

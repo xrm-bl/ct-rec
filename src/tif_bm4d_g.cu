@@ -281,13 +281,13 @@ __global__ void to_float_kernel(const T* __restrict__ input, float* __restrict__
 
 template<typename T>
 __global__ void from_float_kernel(const float* __restrict__ input, T* __restrict__ output,
-                                  int w, int h, int d, float mv) {
+                                  int w, int h, int d, float mn, float mv) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= w || y >= h || z >= d) return;
     size_t idx = (size_t)z * w * h + (size_t)y * w + x;
-    output[idx] = (T)fminf(fmaxf(input[idx], 0.0f), mv);
+    output[idx] = (T)fminf(fmaxf(input[idx], mn), mv);
 }
 
 /* ----------------------------------------------------------------
@@ -564,17 +564,19 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
     divide_kernel<<<nblocks,256>>>(d_numer,d_denom,d_float,d_result,nv);
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    float mv;
-    if(info->bits_per_sample==8)mv=255.0f;
-    else if(info->bits_per_sample==16)mv=65535.0f;
-    else mv=FLT_MAX;
+    float mn, mv;
+    if(info->bits_per_sample==8){ mn=0.0f;     mv=255.0f; }
+    else if(info->bits_per_sample==16){ mn=0.0f;     mv=65535.0f; }
+    else { /* 32-bit float: allow negative values. */
+        mn=-FLT_MAX; mv= FLT_MAX;
+    }
 
     if(info->bits_per_sample==8){
-        from_float_kernel<unsigned char><<<g3,b3>>>(d_result,(unsigned char*)chunk->d_output,w,h,d,mv);
+        from_float_kernel<unsigned char><<<g3,b3>>>(d_result,(unsigned char*)chunk->d_output,w,h,d,mn,mv);
     } else if(info->bits_per_sample==16){
-        from_float_kernel<unsigned short><<<g3,b3>>>(d_result,(unsigned short*)chunk->d_output,w,h,d,mv);
+        from_float_kernel<unsigned short><<<g3,b3>>>(d_result,(unsigned short*)chunk->d_output,w,h,d,mn,mv);
     } else {
-        from_float_kernel<float><<<g3,b3>>>(d_result,(float*)chunk->d_output,w,h,d,mv);
+        from_float_kernel<float><<<g3,b3>>>(d_result,(float*)chunk->d_output,w,h,d,mn,mv);
     }
     CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK(cudaMemcpy(chunk->h_data,chunk->d_output,cb,cudaMemcpyDeviceToHost));

@@ -86,6 +86,7 @@ __global__ void gaussian_filter_3d_kernel(
     int width, int height, int chunk_depth,
     int valid_start, int valid_end,
     int kernel_size,
+    float min_value,
     float max_value)
 {
     ENABLE_SMEM_SPILLING();
@@ -114,7 +115,7 @@ __global__ void gaussian_filter_3d_kernel(
         }
     }
     size_t center_idx = (size_t)z * slice_size + (size_t)y * width + x;
-    float result = fminf(fmaxf(weighted_sum, 0.0f), max_value);
+    float result = fminf(fmaxf(weighted_sum, min_value), max_value);
     output[center_idx] = (T)result;
 }
 
@@ -422,10 +423,15 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
     int valid_depth = chunk->valid_end - chunk->valid_start + 1;
     CUDA_CHECK(cudaMemcpy(chunk->d_data, chunk->h_data, chunk_bytes, cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(chunk->d_output, chunk->d_data, chunk_bytes, cudaMemcpyDeviceToDevice));
-    float max_value;
-    if (info->bits_per_sample == 8) max_value = 255.0f;
-    else if (info->bits_per_sample == 16) max_value = 65535.0f;
-    else max_value = FLT_MAX;
+    float min_value, max_value;
+    if (info->bits_per_sample == 8) {
+        min_value = 0.0f;     max_value = 255.0f;
+    } else if (info->bits_per_sample == 16) {
+        min_value = 0.0f;     max_value = 65535.0f;
+    } else {
+        /* 32-bit float: allow negative values. */
+        min_value = -FLT_MAX; max_value =  FLT_MAX;
+    }
     dim3 block(BLOCK_SIZE_X, BLOCK_SIZE_Y, BLOCK_SIZE_Z);
     dim3 grid(
         (info->width + block.x - 1) / block.x,
@@ -436,17 +442,17 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
         gaussian_filter_3d_kernel<unsigned char><<<grid, block>>>(
             (unsigned char*)chunk->d_data, (unsigned char*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
-            chunk->valid_start, chunk->valid_end, params->kernel_size, max_value);
+            chunk->valid_start, chunk->valid_end, params->kernel_size, min_value, max_value);
     } else if (info->bits_per_sample == 16) {
         gaussian_filter_3d_kernel<unsigned short><<<grid, block>>>(
             (unsigned short*)chunk->d_data, (unsigned short*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
-            chunk->valid_start, chunk->valid_end, params->kernel_size, max_value);
+            chunk->valid_start, chunk->valid_end, params->kernel_size, min_value, max_value);
     } else if (info->bits_per_sample == 32 && info->sample_format == SAMPLEFORMAT_IEEEFP) {
         gaussian_filter_3d_kernel<float><<<grid, block>>>(
             (float*)chunk->d_data, (float*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
-            chunk->valid_start, chunk->valid_end, params->kernel_size, max_value);
+            chunk->valid_start, chunk->valid_end, params->kernel_size, min_value, max_value);
     }
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());

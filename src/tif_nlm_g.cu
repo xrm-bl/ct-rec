@@ -102,6 +102,7 @@ __global__ void nlm_filter_3d_kernel(
     int valid_start, int valid_end,
     int patch_radius, int search_radius,
     float h_sq_inv,
+    float min_value,
     float max_value)
 {
     ENABLE_SMEM_SPILLING();
@@ -182,7 +183,7 @@ __global__ void nlm_filter_3d_kernel(
     float result;
     if (weight_sum > 0.0f) {
         result = weighted_sum / weight_sum;
-        result = fminf(fmaxf(result, 0.0f), max_value);
+        result = fminf(fmaxf(result, min_value), max_value);
     } else {
         result = self_value;
     }
@@ -572,10 +573,15 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
 
     float h_sq_inv = 1.0f / (params->h * params->h);
 
-    float max_value;
-    if (info->bits_per_sample == 8) max_value = 255.0f;
-    else if (info->bits_per_sample == 16) max_value = 65535.0f;
-    else max_value = FLT_MAX;
+    float min_value, max_value;
+    if (info->bits_per_sample == 8) {
+        min_value = 0.0f;     max_value = 255.0f;
+    } else if (info->bits_per_sample == 16) {
+        min_value = 0.0f;     max_value = 65535.0f;
+    } else {
+        /* 32-bit float: allow negative values. */
+        min_value = -FLT_MAX; max_value =  FLT_MAX;
+    }
 
     dim3 block(BLOCK_SIZE_X, BLOCK_SIZE_Y, BLOCK_SIZE_Z);
     dim3 grid(
@@ -590,21 +596,21 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
             info->width, info->height, chunk->chunk_depth,
             chunk->valid_start, chunk->valid_end,
             params->patch_radius, params->search_radius,
-            h_sq_inv, max_value);
+            h_sq_inv, min_value, max_value);
     } else if (info->bits_per_sample == 16) {
         nlm_filter_3d_kernel<unsigned short><<<grid, block>>>(
             (unsigned short*)chunk->d_data, (unsigned short*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
             chunk->valid_start, chunk->valid_end,
             params->patch_radius, params->search_radius,
-            h_sq_inv, max_value);
+            h_sq_inv, min_value, max_value);
     } else if (info->bits_per_sample == 32 && info->sample_format == SAMPLEFORMAT_IEEEFP) {
         nlm_filter_3d_kernel<float><<<grid, block>>>(
             (float*)chunk->d_data, (float*)chunk->d_output,
             info->width, info->height, chunk->chunk_depth,
             chunk->valid_start, chunk->valid_end,
             params->patch_radius, params->search_radius,
-            h_sq_inv, max_value);
+            h_sq_inv, min_value, max_value);
     }
 
     CUDA_CHECK(cudaGetLastError());

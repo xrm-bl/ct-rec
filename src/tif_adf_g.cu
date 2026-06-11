@@ -161,13 +161,14 @@ __global__ void to_float_kernel(const T* __restrict__ input, float* __restrict__
 
 template<typename T>
 __global__ void from_float_kernel(const float* __restrict__ input, T* __restrict__ output,
-                                  int width, int height, int depth, float max_value) {
+                                  int width, int height, int depth,
+                                  float min_value, float max_value) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
     int z = blockIdx.z * blockDim.z + threadIdx.z;
     if (x >= width || y >= height || z >= depth) return;
     size_t idx = (size_t)z * width * height + (size_t)y * width + x;
-    float val = fminf(fmaxf(input[idx], 0.0f), max_value);
+    float val = fminf(fmaxf(input[idx], min_value), max_value);
     output[idx] = (T)val;
 }
 
@@ -488,17 +489,22 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
         float *tmp = d_u; d_u = d_u_new; d_u_new = tmp;
     }
 
-    float max_value;
-    if (info->bits_per_sample == 8) max_value = 255.0f;
-    else if (info->bits_per_sample == 16) max_value = 65535.0f;
-    else max_value = FLT_MAX;
+    float min_value, max_value;
+    if (info->bits_per_sample == 8) {
+        min_value = 0.0f;     max_value = 255.0f;
+    } else if (info->bits_per_sample == 16) {
+        min_value = 0.0f;     max_value = 65535.0f;
+    } else {
+        /* 32-bit float: allow negative values. */
+        min_value = -FLT_MAX; max_value =  FLT_MAX;
+    }
 
     if (info->bits_per_sample == 8) {
-        from_float_kernel<unsigned char><<<grid, block>>>(d_u, (unsigned char*)chunk->d_output, w, h, d, max_value);
+        from_float_kernel<unsigned char><<<grid, block>>>(d_u, (unsigned char*)chunk->d_output, w, h, d, min_value, max_value);
     } else if (info->bits_per_sample == 16) {
-        from_float_kernel<unsigned short><<<grid, block>>>(d_u, (unsigned short*)chunk->d_output, w, h, d, max_value);
+        from_float_kernel<unsigned short><<<grid, block>>>(d_u, (unsigned short*)chunk->d_output, w, h, d, min_value, max_value);
     } else {
-        from_float_kernel<float><<<grid, block>>>(d_u, (float*)chunk->d_output, w, h, d, max_value);
+        from_float_kernel<float><<<grid, block>>>(d_u, (float*)chunk->d_output, w, h, d, min_value, max_value);
     }
     CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK(cudaMemcpy(chunk->h_data, chunk->d_output, chunk_bytes, cudaMemcpyDeviceToHost));
