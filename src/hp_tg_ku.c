@@ -6,7 +6,13 @@
 #include "cbp.h"
 //#include "sif_f.h"
 #include "tiffio.h"
-#include "sort_filter_omp.h"
+#ifdef USE_GPU
+  #include "sort_filter_g.h"
+  #define SORT_FILTER_RESTORE sort_filter_restore_gpu
+#else
+  #include "sort_filter_omp.h"
+  #define SORT_FILTER_RESTORE sort_filter_restore_omp
+#endif
 
 
 extern void	Error(char *msg);
@@ -304,7 +310,7 @@ int	main(int argc,char **argv)
 		}
 	}
 	// Execute OpenMP image processing
-	if (sort_filter_restore_omp(image_data, result_data, hp.Nx, hp.Nt, kernel_size, num_threads) != 0) {
+	if (SORT_FILTER_RESTORE(image_data, result_data, hp.Nx, hp.Nt, kernel_size, num_threads) != 0) {
 		fprintf(stderr, "OpenMP image processing failed\n");
 		return 5;
 	}

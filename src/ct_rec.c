@@ -11,7 +11,21 @@
 #include <time.h>
 #include "cbp.h"
 #include "sif_f.h"
-#include "sort_filter_omp.h"
+
+/*----------------------------------------------------------------------*/
+/* Ring removal backend selection (compile time).                        */
+/*   default          -> OpenMP/CPU  (sort_filter_omp.c)                 */
+/*   -DUSE_GPU         -> CUDA/GPU    (sort_filter_g.cu)                  */
+/* Both backends expose the same interface, so only the include and the  */
+/* called function name differ.                                          */
+/*----------------------------------------------------------------------*/
+#ifdef USE_GPU
+  #include "sort_filter_g.h"
+  #define SORT_FILTER_RESTORE sort_filter_restore_gpu
+#else
+  #include "sort_filter_omp.h"
+  #define SORT_FILTER_RESTORE sort_filter_restore_omp
+#endif
 
 /*----------------------------------------------------------------------*/
 #ifndef M_PI
@@ -563,9 +577,9 @@ char	**argv;
 			*(image_data+N*j+i)=P[j][i];
 		}
 	}
-	// Execute OpenMP image processing
-	if (sort_filter_restore_omp(image_data, result_data, N, M, kernel_size, num_threads) != 0) {
-		fprintf(stderr, "OpenMP image processing failed\n");
+	// Execute ring removal (CPU/OpenMP or GPU/CUDA, selected at compile time)
+	if (SORT_FILTER_RESTORE(image_data, result_data, N, M, kernel_size, num_threads) != 0) {
+		fprintf(stderr, "ring removal image processing failed\n");
 		return 5;
 	}
 	for (j=0; j<M; j++){
