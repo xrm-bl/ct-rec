@@ -33,6 +33,7 @@ extern void	Error(char *msg),
 	WaitForSingleObject(T,INFINITE)==WAIT_FAILED || CloseHandle(T)==0
 #else
 #include <pthread.h>
+#include <unistd.h>
 
 #define THREAD_T	pthread_t
 #define FUNCTION_T	void *
@@ -60,6 +61,37 @@ static char	path[LEN];
 	double		Dr,DO,RA;
 	int			hpNtM;
 /* insert end */
+
+
+/* ==========================================================================
+ *  メモリ量取得(プラットフォーム別) ― hp_tg と同じチャンク判定に使用
+ * ========================================================================== */
+static unsigned long long get_available_memory_bytes(void)
+{
+#ifdef _WIN32
+	MEMORYSTATUSEX st; st.dwLength=sizeof(st);
+	if (GlobalMemoryStatusEx(&st)) return (unsigned long long)st.ullAvailPhys;
+	return 0ull;
+#else
+	long pages = sysconf(_SC_AVPHYS_PAGES);
+	long psize = sysconf(_SC_PAGESIZE);
+	if (pages>0 && psize>0) return (unsigned long long)pages*(unsigned long long)psize;
+	return 0ull;
+#endif
+}
+static unsigned long long get_total_memory_bytes(void)
+{
+#ifdef _WIN32
+	MEMORYSTATUSEX st; st.dwLength=sizeof(st);
+	if (GlobalMemoryStatusEx(&st)) return (unsigned long long)st.ullTotalPhys;
+	return 0ull;
+#else
+	long pages = sysconf(_SC_PHYS_PAGES);
+	long psize = sysconf(_SC_PAGESIZE);
+	if (pages>0 && psize>0) return (unsigned long long)pages*(unsigned long long)psize;
+	return 0ull;
+#endif
+}
 
 void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
 {
@@ -189,14 +221,22 @@ int	main(int argc,char **argv)
 	THREAD_T	t;
 	size_t		ac=argc;
 
+	/* ---- chunk 関連 ---- */
+	int		*sel, nsel, slice_done;
+	int		rows_per_chunk, maxrows, nbands;
+
 	if ((target=(char *)malloc(sizeof(char)*L))==NULL)
 	    Error("memory allocation error for range list.");
 
 	RangeList(argv[4],(size_t)L-1,target);
 
-	l=0; for (z=0; z<L; z++) if (target[z]) ++l;
+	/* 選択スライスの実 z を sel[] に集約(コンパクト index = SG の行) */
+	if ((sel=(int *)malloc(sizeof(int)*L))==NULL)
+	    Error("memory allocation error for slice list.");
+	nsel=0;
+	for (z=0; z<L; z++) if (target[z]) sel[nsel++]=z;
 
-	if (l==0) Error("no slice.");
+	if (nsel==0) Error("no slice.");
 
 	Dr=atof(argv[5])/10000.;
 	DO=(double)(1-N)/2.0;
@@ -204,34 +244,91 @@ int	main(int argc,char **argv)
 
 	P=InitCBP(N,M);
 
-	if ((SG=(Float ***)malloc(sizeof(Float **)*l))==NULL ||
-	    (*SG=(Float **)malloc(sizeof(Float *)*l*M))==NULL ||
-	    (**SG=(Float *)malloc(sizeof(Float)*l*M*N))==NULL ||
-	    (fom=(FOM **)malloc(sizeof(FOM *)*N))==NULL ||
-	    (*fom=(FOM *)malloc(sizeof(FOM)*N*N))==NULL)
-	    Error("memory allocation error for sinograms or tomograms.");
-
-	for (m=1; m<M; m++) SG[0][m]=SG[0][m-1]+N;
-
-	for (z=1; z<l; z++) {
-	    SG[z]=SG[z-1]+M;
-
-	    for (m=0; m<M; m++) SG[z][m]=SG[z][m-1]+N;
-	}
+	if ((fom=(FOM **)malloc(sizeof(FOM *)*N))==NULL ||
+	    (*fom=(FOM *)malloc(sizeof(FOM)*(size_t)N*N))==NULL)
+	    Error("memory allocation error for tomogram.");
 	for (y=1; y<N; y++) fom[y]=fom[y-1]+N;
 
-	for (m=0; m<M; m++) {
-	    ReadHiPic(&hp,m);
-	    for (l=z=0; z<L; z++)
-		if (target[z]) {
-		    sg=SG[l++][m]+r0; T=hp.T[z+z0];
+	/* ============================================================
+	 *  メモリ上限チェック -> 1 バンドあたりのスライス数を決定
+	 *  巨大配列 SG = (スライス数) x M x N x sizeof(Float)
+	 * ============================================================ */
+	{
+		unsigned long long mem_avail = get_available_memory_bytes();
+		unsigned long long mem_total = get_total_memory_bytes();
+		unsigned long long mem_ref   = mem_avail ? mem_avail : mem_total;
+
+		double frac=0.8;
+		{ const char *e=getenv("HPTG_MEM_FRACTION"); if (e){ double v=atof(e); if (v>0.05 && v<=0.95) frac=v; } }
+
+		unsigned long long bytes_per_slice = (unsigned long long)M*(unsigned long long)N*sizeof(Float);
+
+		/* SG 以外の固定オーバヘッド見積り */
+		unsigned long long overhead =
+		      (unsigned long long)M*N*sizeof(Float)          /* P            */
+		    + (unsigned long long)N*N*sizeof(FOM)            /* fom          */
+		    + 2ull*(unsigned long long)N*M*sizeof(float);    /* ring 作業    */
+
+		unsigned long long budget = (unsigned long long)((double)mem_ref*frac);
+		if (budget>overhead) budget -= overhead;
+		else                 budget = bytes_per_slice;	/* 最低 1 スライス */
+
+		{ const char *e=getenv("HPTG_MEM_LIMIT_MB");
+		  if (e){ double mb=atof(e); if (mb>0) budget=(unsigned long long)(mb*1024.0*1024.0); } }
+
+		{ const char *e=getenv("HPTG_CHUNK_ROWS");
+		  if (e && atoi(e)>0) rows_per_chunk=atoi(e);
+		  else {
+		      unsigned long long rr = bytes_per_slice ? (budget/bytes_per_slice) : (unsigned long long)nsel;
+		      if (rr<1) rr=1;
+		      rows_per_chunk = (rr>(unsigned long long)nsel)? nsel : (int)rr;
+		  }
+		}
+		if (rows_per_chunk<1) rows_per_chunk=1;
+		if (rows_per_chunk>nsel) rows_per_chunk=nsel;
+
+		maxrows = rows_per_chunk;
+		nbands  = (nsel + rows_per_chunk - 1) / rows_per_chunk;
+
+		fprintf(stderr,
+		    "memory: avail=%.2f GB  total=%.2f GB  SG/slice=%.2f MB  slices/band=%d  bands=%d  (%s)\n",
+		    mem_avail/1073741824.0, mem_total/1073741824.0,
+		    bytes_per_slice/1048576.0, rows_per_chunk, nbands,
+		    (nbands>1)?"multi-pass":"single-pass");
+	}
+
+	/* ---- SG(最大バンド分)を確保 ---- */
+	if ((SG=(Float ***)malloc(sizeof(Float **)*maxrows))==NULL ||
+	    (*SG=(Float **)malloc(sizeof(Float *)*(size_t)maxrows*M))==NULL ||
+	    (**SG=(Float *)malloc(sizeof(Float)*(size_t)maxrows*M*N))==NULL)
+	    Error("memory allocation error for sinograms.");
+
+	for (m=1; m<M; m++) SG[0][m]=SG[0][m-1]+N;
+	for (z=1; z<maxrows; z++) {
+	    SG[z]=SG[z-1]+M;
+	    for (m=0; m<M; m++) SG[z][m]=SG[z][m-1]+N;
+	}
+
+	slice_done=0;
+
+	/* ============================================================
+	 *  バンドループ(必要に応じて複数パス)
+	 * ============================================================ */
+	for (int cs=0; cs<nsel; cs+=rows_per_chunk) {
+	    int ce = cs+rows_per_chunk; if (ce>nsel) ce=nsel;
+	    int k;
+
+	    /* ---- 投影読み込み: バンド内スライスの SG を構築 ---- */
+	    for (m=0; m<M; m++) {
+		ReadHiPic(&hp,m);
+		for (k=cs; k<ce; k++) {
+		    z=sel[k]; sg=SG[k-cs][m]+r0; T=hp.T[z+z0];
 		    for (r=0; r<hp.Nx; r++) sg[r]=(-Log(T[r]));
 		}
 
-	    ReadHiPic(&hp,m+M);
-	    for (l=z=0; z<L; z++)
-		if (target[z]) {
-		    sg=SG[l++][m]; T=hp.T[z+z1]+r1;
+		ReadHiPic(&hp,m+M);
+		for (k=cs; k<ce; k++) {
+		    z=sel[k]; sg=SG[k-cs][m]; T=hp.T[z+z1]+r1;
 		    for (r=r2; r<r3; r++) sg[r]=(-Log(T[-r]));
 #ifdef	OCT_SBS	/* side by side */
 	r=r4+(r5-r4-1)/2; if ((r5-r4)%2) sg[r]=(sg[r]-Log(T[-r]))/2.0;
@@ -246,12 +343,16 @@ int	main(int argc,char **argv)
 #endif
 #endif
 		}
-	}
-	for (l=z=0; z<L; z++)
-	    if (target[z]) {
-			sg=SG[l][0];
-			for (m=0; m<M; m++)
-			for (r=0; r<N; r++) P[m][r]=(*(sg++));
+		fprintf(stderr,"band[%d-%d] read %d / %d\r",cs,ce-1,m+1,M);
+	    }
+	    fprintf(stderr,"\n");
+
+	    /* ---- バンド内スライスを再構成 ---- */
+	    for (k=cs; k<ce; k++) {
+		z=sel[k];
+		sg=SG[k-cs][0];
+		for (m=0; m<M; m++)
+		for (r=0; r<N; r++) P[m][r]=(*(sg++));
 
 /* ----------------  black projection correction start ---------------- */
 /*                                                                       */
@@ -338,18 +439,19 @@ int	main(int argc,char **argv)
 /*                                                       */
 			F=CBP(Dr,DO,RA);
 
-			if (++l!=1) TERM_MT(t,Store);
+			if (slice_done++ != 0) TERM_MT(t,Store);
 
 			for (y=0; y<N; y++)
 			for (x=0; x<N; x++) fom[y][x]=F[y][x];
-	    	
+
 #ifdef WINDOWS
 			(void)sprintf(path,"%s\\rec%05d.tif",argv[argc-1],Z=z);
 #else
 	    	(void)sprintf(path,"%s/rec%05d.tif",argv[argc-1],Z=z);
 #endif
 	    	INIT_MT(t,Store,ac);
-		}
+	    }
+	}
 
 	
 	// append to log file
@@ -359,6 +461,7 @@ int	main(int argc,char **argv)
 	}
 	for(i=0;i<argc;++i) fprintf(f,"%s ",argv[i]);
 	fprintf(f,"   %% kernel_size %d",kernel_size);
+	fprintf(f,"   %% bands %d",nbands);
 	fprintf(f,"\n");
 	fclose(f);
 
@@ -367,6 +470,7 @@ int	main(int argc,char **argv)
 
 	free(*fom); free(fom); free(**SG); free(*SG); free(SG); TermCBP();
 
+	free(sel);
 	free(target);
 }
 	TermReadHiPic(&hp);

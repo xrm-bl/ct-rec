@@ -14,6 +14,12 @@
   #define SORT_FILTER_RESTORE sort_filter_restore_omp
 #endif
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
+
 #define MA(cnt,ptr)	malloc((cnt)*sizeof(*(ptr)))
 
 static long long	Nx, Ny, Nt, M;
@@ -26,6 +32,36 @@ static void Error(char *msg)
 	fputs(msg, stderr);
 	fputc('\n', stderr);
 	exit(1);
+}
+
+/* ==========================================================================
+ *  メモリ量取得(プラットフォーム別) ― hp_tg と同じチャンク判定に使用
+ * ========================================================================== */
+static unsigned long long get_available_memory_bytes(void)
+{
+#ifdef _WIN32
+	MEMORYSTATUSEX st; st.dwLength=sizeof(st);
+	if (GlobalMemoryStatusEx(&st)) return (unsigned long long)st.ullAvailPhys;
+	return 0ull;
+#else
+	long pages = sysconf(_SC_AVPHYS_PAGES);
+	long psize = sysconf(_SC_PAGESIZE);
+	if (pages>0 && psize>0) return (unsigned long long)pages*(unsigned long long)psize;
+	return 0ull;
+#endif
+}
+static unsigned long long get_total_memory_bytes(void)
+{
+#ifdef _WIN32
+	MEMORYSTATUSEX st; st.dwLength=sizeof(st);
+	if (GlobalMemoryStatusEx(&st)) return (unsigned long long)st.ullTotalPhys;
+	return 0ull;
+#else
+	long pages = sysconf(_SC_PHYS_PAGES);
+	long psize = sysconf(_SC_PAGESIZE);
+	if (pages>0 && psize>0) return (unsigned long long)pages*(unsigned long long)psize;
+	return 0ull;
+#endif
 }
 
 /*----------------------------------------------------------------------*/
@@ -124,16 +160,19 @@ int	main(int argc, char *argv[])
 	long long	l, m, n;
 	long		i, j, p_sta, p_dst;
 	Float		**P, **F;			// full size of reconstructed image
-	char		dirin[25], dirout[25], wdesc[300];
-	char		fh[25], fo[25];
+	char		fh[256], fo[256];
 	int			z1, z2;
-	Float		*po, f_temp;
-	int			vv, hh, jx;
+	Float		*po_band, *out32;
+	int			vv, hh;
 	char		*comm = NULL;
 	double		data_max, data_min;
 	double		Dr,RC,RA0,Ct;
 	double		Clock, t1,t2,t3;					// timer setting
-	
+
+	/* ---- chunk 関連 ---- */
+	int			rows_per_chunk, maxrows, nbands;
+	long long	total_rows;
+
     int kernel_size = 5; // Default kernel size
     int num_threads = 40; // Default number of threads
 
@@ -143,7 +182,7 @@ int	main(int argc, char *argv[])
 		p_sta = -1;
 		p_dst = -1;
 		for (i = 1; i<100000; i++) {
-			sprintf(fh, "%s/p%05d.tif", argv[1], i);
+			sprintf(fh, "%s/p%05ld.tif", argv[1], i);
 			if (existFile(fh)) {
 				if (p_sta == -1) {
 					p_sta = i;
@@ -179,55 +218,104 @@ int	main(int argc, char *argv[])
 	}
 	printf("%lld\t%lld\t%lld\t%d\t%d\n", Nx, Ny, Nt,z1,z2-1);
 
-	if ((po = (Float *)malloc(sizeof(Float)*Nx*Ny*Nt)) == NULL) {
-		printf("cannot allocate memory for whole volume.\n");
+	/* ============================================================
+	 *  メモリ上限チェック -> 1 バンドあたりの行(スライス)数を決定
+	 *  巨大配列 po(全投影ボリューム) = Nt x (行数) x Nx x sizeof(float)
+	 *  -> 行方向に分割し、各バンドで p ファイル群を読み直す。
+	 * ============================================================ */
+	unsigned long long mem_avail = get_available_memory_bytes();
+	unsigned long long mem_total = get_total_memory_bytes();
+	unsigned long long mem_ref   = mem_avail ? mem_avail : mem_total;
+
+	double frac=0.8;
+	{ const char *e=getenv("HPTG_MEM_FRACTION"); if (e){ double v=atof(e); if (v>0.05 && v<=0.95) frac=v; } }
+
+	unsigned long long bytes_per_row = (unsigned long long)Nt*(unsigned long long)Nx*sizeof(float);
+
+	/* po 以外の固定オーバヘッド見積り */
+	unsigned long long overhead =
+	      (unsigned long long)Nt*Nx*sizeof(Float)            /* P            */
+	    + (unsigned long long)Nx*Ny*sizeof(float)            /* 読み込みバッファ data32 */
+	    + (unsigned long long)Nx*Nx*sizeof(float)            /* 出力バッファ out32 */
+	    + 2ull*(unsigned long long)Nx*Nt*sizeof(float);      /* ring 作業    */
+
+	unsigned long long budget = (unsigned long long)((double)mem_ref*frac);
+	if (budget>overhead) budget -= overhead;
+	else                 budget = bytes_per_row;	/* 最低 1 行 */
+
+	{ const char *e=getenv("HPTG_MEM_LIMIT_MB");
+	  if (e){ double mb=atof(e); if (mb>0) budget=(unsigned long long)(mb*1024.0*1024.0); } }
+
+	total_rows = (long long)z2 - (long long)z1;
+	if (total_rows < 1) total_rows = 1;
+
+	{ const char *e=getenv("HPTG_CHUNK_ROWS");
+	  if (e && atoi(e)>0) rows_per_chunk=atoi(e);
+	  else {
+	      unsigned long long rr = bytes_per_row ? (budget/bytes_per_row) : (unsigned long long)total_rows;
+	      if (rr<1) rr=1;
+	      rows_per_chunk = (rr>(unsigned long long)total_rows)? (int)total_rows : (int)rr;
+	  }
+	}
+	if (rows_per_chunk<1) rows_per_chunk=1;
+	if ((long long)rows_per_chunk>total_rows) rows_per_chunk=(int)total_rows;
+
+	maxrows = rows_per_chunk;
+	nbands  = (int)((total_rows + rows_per_chunk - 1) / rows_per_chunk);
+
+	fprintf(stderr,
+	    "memory: avail=%.2f GB  total=%.2f GB  po/row=%.2f MB  rows/band=%d  bands=%d  (%s)\n",
+	    mem_avail/1073741824.0, mem_total/1073741824.0,
+	    bytes_per_row/1048576.0, rows_per_chunk, nbands,
+	    (nbands>1)?"multi-pass":"single-pass");
+
+	/* po(バンド分)= Nt x maxrows x Nx */
+	if ((po_band = (Float *)malloc(sizeof(Float)*(size_t)Nt*maxrows*Nx)) == NULL) {
+		printf("cannot allocate memory for projection band.\n");
 		return 1;
 	}
-	for(l=0;l<Nt;++l){
-		for(m=0;m<Ny;m++) {
-			for(n=0;n<Nx;n++) {
-				*(po+Nx*Ny*l+m*Nx+n) =0.0;
-			}
-		}
-	}
 
+	/* 読み込みバッファ(1 投影 = Nx*Ny)。Read32TiffFile が使うグローバル data32 */
 	if ((data32 = (float *)malloc(sizeof(float) * Nx * Ny)) == NULL) {
 		printf("cannot allocate memory for input 32bit TIFF image\n");
 		return 1;
 	}
-	
-	// store p-data from float tiff files
-//	for(l=0;l<Nt;++l) {
-	for(l=p_sta;l<p_dst;++l) {
-		sprintf(fh, "%s/p%05lld.tif", argv[1], l+1);
-		fprintf(stderr, "\rread:\t%s\t", fh);
-		(void)Read32TiffFile(fh,0);
-
-		for(m=0;m<Ny;m++) {
-			for(n=0;n<Nx;n++) {
-//				f_temp = *(data32+m*Nx+n);
-				*(po+Nx*Ny*l+m*Nx+n) =*(data32+m*Nx+n);
-	//			fprintf(stderr, "%d\t%d\t%f\t%f\n", n,m,*(po+Nx*Ny*i+m*Nx+n),*(data32+m*Nx+n));
-			}
-		}
-	}
-	t1=CLOCK()-Clock;
-	fprintf(stderr, "\t%lf\n",t1);
-
-	free(data32);
 
 	// initilaize for CBP
 	if ((P=InitCBP(Nx,Nt))==NULL){
 		Error("memory allocation error.");
 	}
 
-	// loop z1 to z2
-	t1=CLOCK();
-		for(m=z1;m<z2;++m){
+	/* ============================================================
+	 *  バンドループ(必要に応じて複数パス)
+	 * ============================================================ */
+	for (long long cs=z1; cs<z2; cs+=rows_per_chunk) {
+		long long ce = cs+rows_per_chunk; if (ce>z2) ce=z2;
+
+		/* バンドをゼロ初期化(未読スロット 0..p_sta-1 を 0 に保つ:元コードと同じ) */
+		memset(po_band, 0, sizeof(Float)*(size_t)Nt*maxrows*Nx);
+
+		// store p-data (このバンドの行 [cs,ce) のみ) from float tiff files
+		t1=CLOCK();
+		for(l=p_sta;l<p_dst;++l) {
+			sprintf(fh, "%s/p%05lld.tif", argv[1], (long long)l+1);
+			fprintf(stderr, "\rband[%lld-%lld] read:\t%s\t", cs, ce-1, fh);
+			(void)Read32TiffFile(fh,0);
+
+			for(m=cs;m<ce;m++) {
+				for(n=0;n<Nx;n++) {
+					*(po_band + ((size_t)l*maxrows + (m-cs))*Nx + n) = *(data32 + m*Nx + n);
+				}
+			}
+		}
+		fprintf(stderr, "\t%lf\n",CLOCK()-t1);
+
+		// loop cs to ce
+		for(m=cs;m<ce;++m){
 			for (l=0;l<Nt;l++){
 				for (n=0; n<Nx; n++){
-					if(abs(*(po+Nx*Ny*l+m*Nx+n))<100.){
-						P[l][n]=*(po+Nx*Ny*l+m*Nx+n);
+					if(abs(*(po_band + ((size_t)l*maxrows + (m-cs))*Nx + n))<100.){
+						P[l][n]=*(po_band + ((size_t)l*maxrows + (m-cs))*Nx + n);
 					}
 				}
 			}
@@ -262,23 +350,23 @@ int	main(int argc, char *argv[])
     if (result_data) free(result_data);
 /* ----------------  ring removal finish --------------- */
 /*                                                       */
-			
+
 // CBP
 			Clock=CLOCK();
 			F=CBP(1.0,-RC,RA0);
 			t2=CLOCK()-Clock;
 
 // Store CT images
-			data32= (float *)malloc(Nx*Nx*sizeof(float));
+			out32 = (float *)malloc(Nx*Nx*sizeof(float));
 			data_max =-32000.;
 			data_min = 32000.;
 
 			Clock=CLOCK();
 			for(vv=0; vv<Nx; vv++){
 				for (hh=0; hh<Nx; hh++){
-					*(data32+Nx*vv+hh) = F[vv][hh]*10000./Dr;	/* unit change  um -> cm */;
-					if(data_max<*(data32+Nx*vv+hh)) data_max=*(data32+Nx*vv+hh);
-					if(data_min>*(data32+Nx*vv+hh)) data_min=*(data32+Nx*vv+hh);
+					*(out32+Nx*vv+hh) = F[vv][hh]*10000./Dr;	/* unit change  um -> cm */;
+					if(data_max<*(out32+Nx*vv+hh)) data_max=*(out32+Nx*vv+hh);
+					if(data_min>*(out32+Nx*vv+hh)) data_min=*(out32+Nx*vv+hh);
 				}
 			}
 			if ((comm=(char *)malloc(150))==NULL){
@@ -291,18 +379,19 @@ int	main(int argc, char *argv[])
 #else
 			sprintf(fo, "%s/rec%05lld.tif", argv[2], m);
 #endif
-			(void)Store32TiffFile(fo, Nx, Nx, 32, data32, comm);
-			free(data32); free(comm);
+			(void)Store32TiffFile(fo, Nx, Nx, 32, out32, comm);
+			free(out32); free(comm);
 			t3=CLOCK()-Clock;
 			fprintf(stderr, "\rstore:\t%s/rec%05lld.tif\t%lf\t%lf", argv[2], m, t2, t3);
 
 			RC=RC+Ct;
 		}
+	}
 
-
-	printf("\t%f\n",CLOCK()-t1);
 	printf("\nfinish.\n");
-	free(po);
+	free(po_band);
+	free(data32);
+	TermCBP();
 
 	// append to log file
 	FILE		*ff;
@@ -311,6 +400,7 @@ int	main(int argc, char *argv[])
 	}
 	for (i = 0; i<argc; ++i) fprintf(ff, "%s ", argv[i]);
 	fprintf(ff, "   %% kernel_size %d", kernel_size);
+	fprintf(ff, "   %% bands %d", nbands);
 	fprintf(ff, "\n");
 	fclose(ff);
 
