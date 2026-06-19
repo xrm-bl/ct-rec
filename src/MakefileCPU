@@ -12,7 +12,7 @@ CBP     = cbp_thread_int.c
 CBPd    = cbp_thread_nai.c
 SIF_F   = sif_f_fast.c
 
-EXE_DIR = ../exe
+EXE_DIR = ../bin
 
 .PHONY: all clean ct_rec tf_rec hp_tg tf_tg ofct_srec otf_rec oftf_srec \
         p_rec sf_rec misc si_tools filters
@@ -164,7 +164,7 @@ tf_prj_f:
 tif2hst:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/tif2hst tif2hst.c $(TIFFLIB) $(LIBS)
 rec_gf:
-	$(CC) -Ox $(CFLAGS) -o $(EXE_DIR)/rec_gf fft.c rec_gf.c rif_f.c $(TIFFLIB) $(LIBS)
+	$(CC) $(CFLAGS) -o $(EXE_DIR)/rec_gf fft.c rec_gf.c rif_f.c $(TIFFLIB) $(LIBS)
 hp2DO:
 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/hp2DO hp2DO.c $(TIFFLIB) $(LIBS)
 tif_ave:

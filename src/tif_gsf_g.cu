@@ -26,6 +26,7 @@
     #define PATH_SEPARATOR "\\"
     #define snprintf _snprintf
 #else
+    #include <stdint.h>
     #include <unistd.h>
     #include <dirent.h>
     #include <sys/stat.h>

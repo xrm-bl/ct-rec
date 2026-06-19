@@ -40,6 +40,7 @@
         #define isfinite(x) _finite(x)
     #endif
 #else
+    #include <stdint.h>
     #include <unistd.h>
     #include <dirent.h>
     #include <sys/stat.h>
