@@ -222,7 +222,7 @@ void	InitReadHiPic(char *dir,HiPic *hp)
 
 	Read(dir,dark_img,hp->Nx,hp->Ny,hp->D);
 
-	qsort(hp->OL,hp->Nq+1,sizeof(OutputLog),(int (*)())Compare);
+	qsort(hp->OL,hp->Nq+1,sizeof(OutputLog),(int (*)(const void *,const void *))Compare);
 
 	OL=hp->OL+hp->Nt;
 	for (i=0; i<hp->Ni; i++) {

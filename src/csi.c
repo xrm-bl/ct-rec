@@ -257,14 +257,14 @@ int	*Nx,*Ny,*Nz,*BPS;
 	(void)closedir(dir);
 
 	if (nameFile[1]=='\0')
-	    qsort(paths,(size_t)nz,sizeof(*paths),Normal);
+	    qsort(paths,(size_t)nz,sizeof(*paths),(int (*)(const void *,const void *))Normal);
 	else if (nameFile[2]=='r' && nameFile[3]=='\0')
-	    qsort(paths,(size_t)nz,sizeof(*paths),Reverse);
+	    qsort(paths,(size_t)nz,sizeof(*paths),(int (*)(const void *,const void *))Reverse);
 	else if (nameFile[2]=='n' && nameFile[3]=='\0')
-	    qsort(paths,(size_t)nz,sizeof(*paths),Ascending);
+	    qsort(paths,(size_t)nz,sizeof(*paths),(int (*)(const void *,const void *))Ascending);
 	else if ((nameFile[2]=='r' && nameFile[3]=='n') ||
 		 (nameFile[2]=='n' && nameFile[3]=='r'))
-	    qsort(paths,(size_t)nz,sizeof(*paths),Descending);
+	    qsort(paths,(size_t)nz,sizeof(*paths),(int (*)(const void *,const void *))Descending);
 	else
 	    Error(nameFile+1,"unknown sorting option");
 }

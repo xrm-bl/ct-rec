@@ -172,7 +172,7 @@ int	main(int argc, char *argv[])
 //				Read32TiffFile(fh,1);
 				if (ReadImageFile_Float(fh,&Nx,&Ny,NULL,&desc))
 	    			(void)fprintf(stderr, "%s : containing non-float pixel values (warning).\n", fh);
-				sscanf(desc, "%f\t%f\t%d\t%f\t%lf\t%lf", &dmd, &dmd, &dml, &dmd, &dmmin, &dmmax);
+				sscanf(desc, "%lf\t%lf\t%ld\t%lf\t%lf\t%lf", &dmd, &dmd, &dml, &dmd, &dmmin, &dmmax);
 				if (Nx_min>Nx) Nx_min = Nx;
 				if (Ny_min>Ny) Ny_min = Ny;
 				if (d_min>dmmin) d_min = dmmin;

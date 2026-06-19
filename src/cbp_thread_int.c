@@ -12,7 +12,7 @@
 #define THREAD_NULL	0
 
 #define THREAD_CREATE(var,func,arg) \
-	(var=CreateThread(NULL,0,func,(THREAD_ARG)(arg),0,NULL))==0
+	(var=CreateThread(NULL,0,(LPTHREAD_START_ROUTINE)(func),(THREAD_ARG)(size_t)(arg),0,NULL))==0
 
 #define THREAD_JOIN(var) \
 	(void)WaitForSingleObject(var,INFINITE); (void)CloseHandle(var)
