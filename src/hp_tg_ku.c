@@ -1,3 +1,21 @@
+/* ============================================================================
+ * hp_tg_ku.c  (HiPic 入力 + メインメモリ上限チェック / チャンク分割版)
+ * ----------------------------------------------------------------------------
+ * 入力は rhp.h のリーダ(InitReadHiPic / ReadHiPic / TermReadHiPic / HiPic)
+ * 経由で読む。出力は従来どおり rec*.tif (32bit float TIFF)。
+ *
+ * メモリ上限チェックとチャンク(複数パス)実行:
+ *   巨大配列 W (= 行数 x Nt x Nx x sizeof(Float)) が空き物理メモリに
+ *   収まらない場合、z(スライス=行)方向に分割して複数回に分けて処理する。
+ *   収まる場合は従来どおり 1 パス(投影は 1 回だけ読む)。
+ *   分割時は各パスで投影を読み直す(I/O は分割数に比例)。
+ *   調整用環境変数:
+ *       HPTG_MEM_FRACTION : 空きメモリに対する使用率 (既定 0.8)
+ *       HPTG_MEM_LIMIT_MB : W に割り当てる上限を MB で直接指定(優先)
+ *       HPTG_CHUNK_ROWS   : 1 チャンクあたりの行数を直接指定(最優先)
+ *
+ * 注意: 本プログラムは Dz==0 固定(スライス z = 行 y)。
+ * ==========================================================================*/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +49,7 @@ extern void	Error(char *msg);
 	WaitForSingleObject(T,INFINITE)==WAIT_FAILED || CloseHandle(T)==0
 #else
 #include <pthread.h>
+#include <unistd.h>
 
 #define THREAD_T	pthread_t
 #define FUNCTION_T	void *
@@ -57,6 +76,38 @@ typedef struct {
 	double		Dr,RC,RA0,Ct;
 	int			hpNtM;
 /* insert end */
+
+
+/* ==========================================================================
+ *  メモリ量取得(プラットフォーム別)
+ * ========================================================================== */
+static unsigned long long get_available_memory_bytes(void)
+{
+#ifdef _WIN32
+	MEMORYSTATUSEX st; st.dwLength=sizeof(st);
+	if (GlobalMemoryStatusEx(&st)) return (unsigned long long)st.ullAvailPhys;
+	return 0ull;
+#else
+	long pages = sysconf(_SC_AVPHYS_PAGES);
+	long psize = sysconf(_SC_PAGESIZE);
+	if (pages>0 && psize>0) return (unsigned long long)pages*(unsigned long long)psize;
+	return 0ull;
+#endif
+}
+static unsigned long long get_total_memory_bytes(void)
+{
+#ifdef _WIN32
+	MEMORYSTATUSEX st; st.dwLength=sizeof(st);
+	if (GlobalMemoryStatusEx(&st)) return (unsigned long long)st.ullTotalPhys;
+	return 0ull;
+#else
+	long pages = sysconf(_SC_PHYS_PAGES);
+	long psize = sysconf(_SC_PAGESIZE);
+	if (pages>0 && psize>0) return (unsigned long long)pages*(unsigned long long)psize;
+	return 0ull;
+#endif
+}
+
 
 void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
 {
@@ -145,8 +196,9 @@ static FUNCTION_T	Store(void *a)
 int	main(int argc,char **argv)
 {
 	HiPic		hp;
-	double		y0,dy,Dz=0.0, cc;
-	int		Nz,z1,z2,y1,y2,y,z,t,x,len,i,j;
+	double		y0,dy,Dz=0.0;
+	int		Nz,z1,z2,y,z,t,x,i,j;
+	int		Nx,Ny,Nt;
 	Float		**P,***W,*w,*P_F,**F;
 	Struct		S;
 	FOM		*hp_T,fom,*S_F;
@@ -161,20 +213,21 @@ int	main(int argc,char **argv)
 	}
 
 	InitReadHiPic(argv[1],&hp);
+	Nx=hp.Nx; Ny=hp.Ny; Nt=hp.Nt;
 
-	if (hp.Nt<2) Error("too few views.");
+	if (Nt<2) Error("too few views.");
 
 	if ((Dr=0.0001*atof(argv[2]))<EPS)   // um -> cm
 	    Error("bad horizontal interval of detectors on HiPic image.");
 
 	if (argc==6){
-	    Nz=hp.Ny; z1=0; z2=Nz-1; RC=atof(argv[3]); Ct=0.0;
+	    Nz=Ny; z1=0; z2=Nz-1; RC=atof(argv[3]); Ct=0.0;
 	}
 	else{
 		z1=atoi(argv[3]);
 		z2=atoi(argv[5]);
 		if (z1<0) z1=0;
-		if (z2>hp.Ny) z2=hp.Ny-1;
+		if (z2>Ny) z2=Ny-1;
 		RC=atof(argv[4]);
 		Ct = (atof(argv[6])-atof(argv[4]))/(double)(z2-z1);
 	}
@@ -182,46 +235,77 @@ int	main(int argc,char **argv)
 //	RC=RC-1.0;
 	RA0=atof(argv[argc-2])*DEG;
 
-	P=InitCBP(hp.Nx,hp.Nt);
+	P=InitCBP(Nx,Nt);
 
-	hpNtM=hp.Nt;
-	
-	if (Dz<0.0) {
-	    y0=0.5+Dz; if ((y1=z1+(int)floor(y0))<0) y1=0;
+	hpNtM=Nt;
+
+	/* ---- 行範囲 y0 / dy(Dz==0 固定) ---- */
+	if (Dz<0.0) { y0=0.5+Dz; }
+	else        { y0=0.5; }
+	dy=Dz/(double)Nt;
+
+	/* ============================================================
+	 *  メモリ上限チェック -> 1 チャンクあたりの行数を決定
+	 * ============================================================ */
+	unsigned long long mem_avail = get_available_memory_bytes();
+	unsigned long long mem_total = get_total_memory_bytes();
+	unsigned long long mem_ref   = mem_avail ? mem_avail : mem_total;
+
+	double frac=0.8;
+	{ const char *e=getenv("HPTG_MEM_FRACTION"); if (e){ double v=atof(e); if (v>0.05 && v<=0.95) frac=v; } }
+
+	unsigned long long bytes_per_row = (unsigned long long)Nt*(unsigned long long)Nx*sizeof(Float);
+
+	/* W 以外の固定オーバヘッド見積り */
+	unsigned long long overhead =
+	      (unsigned long long)Nt*Nx*sizeof(Float)            /* P            */
+	    + 2ull*(unsigned long long)Nx*Nx*sizeof(Float)       /* S.F + CBP(F) */
+	    + 2ull*(unsigned long long)Nx*Nt*sizeof(float);      /* ring 作業    */
+
+	unsigned long long budget = (unsigned long long)((double)mem_ref*frac);
+	if (budget>overhead) budget -= overhead;
+	else                 budget = bytes_per_row;	/* 最低 1 行 */
+
+	{ const char *e=getenv("HPTG_MEM_LIMIT_MB");
+	  if (e){ double mb=atof(e); if (mb>0) budget=(unsigned long long)(mb*1024.0*1024.0); } }
+
+	int total_rows = z2-z1+1;
+	int rows_per_chunk;
+	{ const char *e=getenv("HPTG_CHUNK_ROWS");
+	  if (e && atoi(e)>0) rows_per_chunk=atoi(e);
+	  else {
+	      unsigned long long r = bytes_per_row ? (budget/bytes_per_row) : (unsigned long long)total_rows;
+	      if (r<1) r=1;
+	      rows_per_chunk = (r>(unsigned long long)total_rows)? total_rows : (int)r;
+	  }
 	}
-	else {
-	    y0=0.5; if ((y1=z1+(int)floor(y0-Dz))<0) y1=0;
-	}
-	y=(y2=(z2<hp.Ny)?z2:hp.Ny-1)-y1+1;
-	if ((W=(Float ***)malloc(sizeof(Float **)*y))==NULL ||
-	    (*W=(Float **)malloc(sizeof(Float *)*y*hp.Nt))==NULL ||
-	    (**W=(Float *)malloc(sizeof(Float)*y*hp.Nt*hp.Nx))==NULL ||
-	    (S.F=(FOM **)malloc(sizeof(FOM *)*hp.Nx))==NULL ||
-	    (*(S.F)=(FOM *)malloc(sizeof(FOM)*hp.Nx*hp.Nx))==NULL)
+	if (rows_per_chunk<1) rows_per_chunk=1;
+	if (rows_per_chunk>total_rows) rows_per_chunk=total_rows;
+
+	int maxrows = rows_per_chunk;
+	int nchunks = (total_rows + rows_per_chunk - 1) / rows_per_chunk;
+
+	fprintf(stderr,
+	    "memory: avail=%.2f GB  total=%.2f GB  W/row=%.2f MB  rows/chunk=%d  chunks=%d  (%s)\n",
+	    mem_avail/1073741824.0, mem_total/1073741824.0,
+	    bytes_per_row/1048576.0, rows_per_chunk, nchunks,
+	    (nchunks>1)?"multi-pass":"single-pass");
+
+	/* ---- W(最大チャンク分)と S.F を確保 ---- */
+	if ((W=(Float ***)malloc(sizeof(Float **)*maxrows))==NULL ||
+	    (*W=(Float **)malloc(sizeof(Float *)*(size_t)maxrows*Nt))==NULL ||
+	    (**W=(Float *)malloc(sizeof(Float)*(size_t)maxrows*Nt*Nx))==NULL ||
+	    (S.F=(FOM **)malloc(sizeof(FOM *)*Nx))==NULL ||
+	    (*(S.F)=(FOM *)malloc(sizeof(FOM)*(size_t)Nx*Nx))==NULL)
 	    Error("memory allocation error.");
 
-	for (z=0; z<y; z++) {
-	    if (z!=0) W[z]=W[z-1]+hp.Nt;
-
-	    for (t=z==0; t<hp.Nt; t++) W[z][t]=W[z][t-1]+hp.Nx;
+	for (z=0; z<maxrows; z++) {
+	    if (z!=0) W[z]=W[z-1]+Nt;
+	    for (t=(z==0); t<Nt; t++) W[z][t]=W[z][t-1]+Nx;
 	}
-	for (y=1; y<hp.Nx; y++) S.F[y]=S.F[y-1]+hp.Nx;
+	for (y=1; y<Nx; y++) S.F[y]=S.F[y-1]+Nx;
 
-	for (t=0; t<hp.Nt; t++) {
-	    ReadHiPic(&hp,t); fprintf(stderr, "%d / %d\r",t+1,hp.Nt);
-
-	    for (y=y1; y<=y2; y++) {
-		w=W[y-y1][t]; hp_T=hp.T[y];
-		for (x=0; x<hp.Nx; x++)
-		    *(w++)=((fom=(*(hp_T++)))>0.0)?-log(fom):0.0;
-	    }
-	}
-	TermReadHiPic(&hp); printf("\n");
-
-	S.N=hp.Nx;
-
-//	len=1; for (z=10; z<Nz; z*=10) ++len;
-//	(void)sprintf(S.form,"%s/rec%05d.tif",argv[argc-1],len);
+	S.N=Nx;
 
 #ifdef WINDOWS
 	(void)sprintf(S.form,"%s\\rec%%0%dd.tif",argv[argc-1],5);
@@ -229,16 +313,40 @@ int	main(int argc,char **argv)
 	(void)sprintf(S.form,"%s/rec%%0%dd.tif",argv[argc-1],5);
 #endif
 
-	dy=Dz/(double)hp.Nt; 
-	for (z=z1; z<=z2; z++) {
-	    for (t=0; t<hp.Nt; t++) {
-		P_F=P[t];
-		if ((y=z+(int)floor(y0-dy*(double)t))<y1 || y>y2)
-		    for (x=0; x<hp.Nx; x++) *(P_F++)=0.0;
-		else {
-		    w=W[y-y1][t]; for (x=0; x<hp.Nx; x++) *(P_F++)=(*(w++));
+	/* ============================================================
+	 *  チャンクループ(必要に応じて複数パス)
+	 * ============================================================ */
+	for (int cs=z1; cs<=z2; cs+=rows_per_chunk) {
+	    int ce = cs+rows_per_chunk-1; if (ce>z2) ce=z2;
+
+	    /* このチャンクで必要となる行範囲(Dz==0 では cy1=cs, cy2=ce) */
+	    int cy1 = cs + (int)floor(y0 - dy*(double)(Nt-1));
+	    int cy2 = ce + (int)floor(y0);
+	    if (cy1<0)     cy1=0;
+	    if (cy2>Ny-1)  cy2=Ny-1;
+
+	    /* ---- 投影読み込み: 行 [cy1,cy2] を W へ ---- */
+	    for (t=0; t<Nt; t++) {
+		ReadHiPic(&hp,t);
+		for (y=cy1; y<=cy2; y++) {
+		    w=W[y-cy1][t]; hp_T=hp.T[y];
+		    for (x=0; x<Nx; x++)
+			*(w++)=((fom=(*(hp_T++)))>0.0)?-log(fom):0.0;
 		}
+		fprintf(stderr,"chunk[%d-%d] read %d / %d\r",cs,ce,t+1,Nt);
 	    }
+	    fprintf(stderr,"\n");
+
+	    /* ---- スライス cs..ce を再構成 ---- */
+	    for (z=cs; z<=ce; z++) {
+		for (t=0; t<Nt; t++) {
+		    P_F=P[t];
+		    if ((y=z+(int)floor(y0-dy*(double)t))<cy1 || y>cy2)
+			for (x=0; x<Nx; x++) *(P_F++)=0.0;
+		    else {
+			w=W[y-cy1][t]; for (x=0; x<Nx; x++) *(P_F++)=(*(w++));
+		    }
+		}
 
 /* ----------------  black projection correction start ---------------- */
 /*                                                                       */
@@ -248,17 +356,17 @@ int	main(int argc,char **argv)
 		int		*blk_flag;
 		double	*blk_avg;
 
-		blk_flag = (int *)malloc(hp.Nt * sizeof(int));
-		blk_avg  = (double *)malloc(hp.Nx * sizeof(double));
+		blk_flag = (int *)malloc(Nt * sizeof(int));
+		blk_avg  = (double *)malloc(Nx * sizeof(double));
 
 		/* initialize average profile */
-		for (blk_r = 0; blk_r < hp.Nx; blk_r++) blk_avg[blk_r] = 0.0;
+		for (blk_r = 0; blk_r < Nx; blk_r++) blk_avg[blk_r] = 0.0;
 		blk_good = 0;
 
 		/* detect black projections: all pixels == 0 */
-		for (blk_t = 0; blk_t < hp.Nt; blk_t++){
+		for (blk_t = 0; blk_t < Nt; blk_t++){
 			blk_sum = 0.0;
-			for (blk_r = 0; blk_r < hp.Nx; blk_r++){
+			for (blk_r = 0; blk_r < Nx; blk_r++){
 				blk_sum += P[blk_t][blk_r];
 			}
 			if (blk_sum == 0.0){
@@ -267,7 +375,7 @@ int	main(int argc,char **argv)
 			} else {
 				blk_flag[blk_t] = 0;
 				blk_good++;
-				for (blk_r = 0; blk_r < hp.Nx; blk_r++){
+				for (blk_r = 0; blk_r < Nx; blk_r++){
 					blk_avg[blk_r] += P[blk_t][blk_r];
 				}
 			}
@@ -275,12 +383,12 @@ int	main(int argc,char **argv)
 
 		/* replace black projections with average profile */
 		if (blk_good > 0){
-			for (blk_r = 0; blk_r < hp.Nx; blk_r++){
+			for (blk_r = 0; blk_r < Nx; blk_r++){
 				blk_avg[blk_r] /= (double)blk_good;
 			}
-			for (blk_t = 0; blk_t < hp.Nt; blk_t++){
+			for (blk_t = 0; blk_t < Nt; blk_t++){
 				if (blk_flag[blk_t] == 1){
-					for (blk_r = 0; blk_r < hp.Nx; blk_r++){
+					for (blk_r = 0; blk_r < Nx; blk_r++){
 						P[blk_t][blk_r] = blk_avg[blk_r];
 					}
 				}
@@ -295,48 +403,52 @@ int	main(int argc,char **argv)
 
 /* ----------------  ring removal start ---------------- */
 /*                                                       */
-    float		*image_data = NULL, *result_data = NULL;
-    // Get kernel size from environment variable
-    kernel_size = get_kernel_size_from_env();
-	// Get number of threads from environment variable
-    num_threads = get_num_threads_from_env();
-    // Allocate memory
-	image_data = (float *)malloc(hp.Nx * hp.Nt * sizeof(float));
-	result_data = (float *)malloc(hp.Nx * hp.Nt * sizeof(float));
+	    float		*image_data = NULL, *result_data = NULL;
+	    // Get kernel size from environment variable
+	    kernel_size = get_kernel_size_from_env();
+		// Get number of threads from environment variable
+	    num_threads = get_num_threads_from_env();
+	    // Allocate memory
+		image_data = (float *)malloc(Nx * Nt * sizeof(float));
+		result_data = (float *)malloc(Nx * Nt * sizeof(float));
 
-	for (j=0; j<hp.Nt; j++){
-		for (i=0; i<hp.Nx; i++){
-			*(image_data+hp.Nx*j+i)=P[j][i];
+		for (j=0; j<Nt; j++){
+			for (i=0; i<Nx; i++){
+				*(image_data+Nx*j+i)=P[j][i];
+			}
 		}
-	}
-	// Execute OpenMP image processing
-	if (SORT_FILTER_RESTORE(image_data, result_data, hp.Nx, hp.Nt, kernel_size, num_threads) != 0) {
-		fprintf(stderr, "OpenMP image processing failed\n");
-		return 5;
-	}
-	for (j=0; j<hp.Nt; j++){
-		for (i=0; i<hp.Nx; i++){
-				P[j][i]=*(result_data+hp.Nx*j+i);
+		// Execute OpenMP image processing
+		if (SORT_FILTER_RESTORE(image_data, result_data, Nx, Nt, kernel_size, num_threads) != 0) {
+			fprintf(stderr, "OpenMP image processing failed\n");
+			return 5;
 		}
-	}
-    if (image_data) free(image_data);
-    if (result_data) free(result_data);
+		for (j=0; j<Nt; j++){
+			for (i=0; i<Nx; i++){
+					P[j][i]=*(result_data+Nx*j+i);
+			}
+		}
+	    if (image_data) free(image_data);
+	    if (result_data) free(result_data);
 /* ----------------  ring removal finish --------------- */
 /*                                                       */
-		
-	    F=CBP(Dr,-RC,RA0);
+
+		F=CBP(Dr,-RC,RA0);
 		RC=RC+Ct;
 
-	    if (z!=z1) TERM_MT(T);
+		if (z!=z1) TERM_MT(T);
 
-	    S.z=z;
+		S.z=z;
 
-	    for (y=0; y<hp.Nx; y++) {
-		S_F=S.F[y]; P_F=F[y];
-		for (x=0; x<hp.Nx; x++) *(S_F++)=(*(P_F++));
+		for (y=0; y<Nx; y++) {
+		    S_F=S.F[y]; P_F=F[y];
+		    for (x=0; x<Nx; x++) *(S_F++)=(*(P_F++));
+		}
+		INIT_MT(T,Store,&S);
 	    }
-	    INIT_MT(T,Store,&S);
 	}
+
+	TermReadHiPic(&hp);
+
 	// append to log file
 	FILE		*f;
 	if((f = fopen("cmd-hst.log","a")) == NULL){
@@ -344,6 +456,7 @@ int	main(int argc,char **argv)
 	}
 	for(i=0;i<argc;++i) fprintf(f,"%s ",argv[i]);
 	fprintf(f,"   %% kernel_size %d",kernel_size);
+	fprintf(f,"   %% chunks %d",nchunks);
 	fprintf(f,"\n");
 	fclose(f);
 
