@@ -178,7 +178,7 @@ IMGHeader	*img;
 		}
 	}
 
-	sprintf(img->head,"IM");
+	memcpy(img->head, "IM", 2);
 //	img->comment_length=his->comment_length;
 	img->comment_length=0;
 	img->width=his->width;

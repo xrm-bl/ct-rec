@@ -8,7 +8,7 @@ set   CUDART="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\lib\x
 set    CUFFT="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\lib\x64\cufft.lib"
 set CUDAINCL="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\include"
 rem CUDA 13.x minimum: Turing (sm_75).  Change to sm_89 (Ada) or sm_100 (Blackwell) as needed.
-set CUDA_ARCH=-arch=sm_75
+set CUDA_ARCH=-arch=all-major
 set NVCC=nvcc -O3 -I%CUDAINCL% %CUDA_ARCH% -use_fast_math -Xcompiler "/wd 4819"
 
 rem GPU ring removal object (pure CUDA C replacement for sort_filter_omp.c).
