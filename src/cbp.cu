@@ -115,32 +115,40 @@ __global__ void	PQ2PQ(int N,int M,int L1,float2 *PQ)
 	}
 }}
 
+/* 改良版 BP_GMF:
+ *   旧版はピクセル座標(x,y)を float で M 回 dθ 増分回転していたため、
+ *   投影番号 m と半径に比例して角度・ノルムがドリフトし、CPU(double)版との
+ *   差分に半月状バイアス＋外周の縞が出ていた。
+ *   ここでは投影角の cos/sin を host 側で一度だけ double 計算し、配列 SC[m]
+ *   (=(cosθ_m, sinθ_m)) として渡す。各スレッドは固定ピクセル座標(X,Y)から
+ *   毎投影 r = X cosθ_m + Y sinθ_m - r0 を直接求める(累積誤差ゼロ)。
+ *   SC[m] はワープ内全スレッドで同一アドレス参照になりブロードキャストされる。 */
 __global__ void	BP_GMF(int N,int M,int L1,
-		       float xy0,float R2,
-		       float s0,float c0,float ds,float dc,
-		       float r0,
-		       float2 *Q,
+		       float xy0,float R2,float r0,
+		       const float2 * __restrict__ SC,
+		       const float2 * __restrict__ Q,
 		       float *F)
 {
 	ENABLE_SMEM_SPILLING();
-	int	h,v,n;
-	float	r;
+	int	h,v,m,n;
 
 	if ((h=blockIdx.x*blockDim.x+threadIdx.x)<N &&
 	    (v=blockIdx.y*blockDim.y+threadIdx.y)<N)
 {
-	float	x=(float)h-xy0,
-		y=xy0-(float)v,
+	float	X=(float)h-xy0,
+		Y=xy0-(float)v,
 		f=0.0f;
 
-	if (x*x+y*y<=R2) {
-	    r=x; x=r*c0+y*s0;
-		 y=y*c0-r*s0;
-	    for (; --M>=0; Q+=L1) {
-		n=__float2int_rd(r=x-r0);
-		f+=(Q[n].x+Q[n].y*(r-(float)n));
-		r=x; x=r*dc+y*ds;
-		     y=y*dc-r*ds;
+	if (X*X+Y*Y<=R2) {
+	    for (m=0; m<M; m++, Q+=L1) {
+		float2	sc=__ldg(&SC[m]);		/* (cosθ_m, sinθ_m) */
+		float	r=fmaf(Y,sc.y,fmaf(X,sc.x,-r0));/* X cosθ + Y sinθ - r0 */
+
+		n=__float2int_rd(r);			/* floor (負側も正しい) */
+		if ((unsigned)n<(unsigned)N) {		/* 上下の範囲外を保護 */
+		    float2 q=Q[n];
+		    f+=fmaf(q.y,(r-(float)n),q.x);	/* q.x + q.y*(r-n) */
+		}
 	    }
 	}
 	F[(size_t)v*(size_t)N+(size_t)h]=f;
@@ -151,9 +159,9 @@ __global__ void	BP_GMF(int N,int M,int L1,
 
 static int		N,M,L,L1,L2,batch;
 static Float		**p,**f;
-static size_t		sof_L2,sof2_L1,sof_N;
+static size_t		sof_L2,sof2_L1,sof_N,MOmax;
 static float		*gpf,*F;
-static float2		*G,*PQ,*B;
+static float2		*G,*PQ,*B,*SC,*scf;	/* SC:角度表(device) scf:host転送用 */
 static cufftHandle	R2C,C2R;
 
 EXTERN Float	**InitCBP(int n,int m)
@@ -187,6 +195,16 @@ EXTERN Float	**InitCBP(int n,int m)
 	CUDA_SAFE_CALL(cudaMalloc((void **)&PQ,sof2_L1*(size_t)M));
 #endif
 	CUDA_SAFE_CALL(cudaMalloc((void **)&F, sof_N*(size_t)N));
+
+	/* 投影角表 SC[m]=(cosθ_m,sinθ_m) 用バッファ。角度オーバーサンプリング
+	 * (WAI) を使う場合は MO=M*O まで増えるので PQ と同じ最大数で確保する。 */
+#ifdef	WAI
+	MOmax=(size_t)M*(size_t)NAI(M,(double)(N-1)/2.0);
+#else
+	MOmax=(size_t)M;
+#endif
+	CUDA_SAFE_CALL(cudaMalloc((void **)&SC,sizeof(float2)*MOmax));
+	CUDA_SAFE_CALL(cudaMallocHost((void **)&scf,sizeof(float2)*MOmax));
 
 	for (n=0; n<L2; n++) gpf[n]=Filter(n-L);
 
@@ -284,11 +302,19 @@ EXTERN void	ExecuteCBP(double dr,double r0,double t0)
 		threads_2d(THREADS_2D,THREADS_2D);
 	double	dt=M_PI/(double)MO;
 
+	/* 投影角の cos/sin を double で一度だけ生成して転送(ドリフト除去の要) */
+	for (m=0; m<MO; m++) {
+	    double th=t0+dt*(double)m;
+	    scf[m].x=(float)cos(th); scf[m].y=(float)sin(th);
+	}
+	CUDA_SAFE_CALL(cudaMemcpy(SC,scf,sizeof(float2)*(size_t)MO,
+				  cudaMemcpyHostToDevice));
+
 	    BP_GMF<<<blocks_2d,threads_2d>>>
 		  (N,MO,L1,
 		   (float)(N1/2.0),(float)(R*R),
-		   (float)sin(t0),(float)cos(t0),(float)sin(dt),(float)cos(dt),
 		   (float)r0,
+		   SC,
 		   PQ,
 		   F);
 }}
@@ -329,7 +355,9 @@ EXTERN void	TermCBP()
 	CUDA_SAFE_CALL(cudaFree(F));
 	CUDA_SAFE_CALL(cudaFree(PQ));
 	CUDA_SAFE_CALL(cudaFree(G));
+	CUDA_SAFE_CALL(cudaFree(SC));
 
+	CUDA_SAFE_CALL(cudaFreeHost(scf));
 	CUDA_SAFE_CALL(cudaFreeHost(gpf));
 
 	free(*f); free(f); free(*p); free(p);
