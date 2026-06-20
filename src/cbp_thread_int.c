@@ -25,7 +25,7 @@
 #define THREAD_NULL	NULL
 
 #define THREAD_CREATE(var,func,arg) \
-	pthread_create(&(var),NULL,func,(THREAD_ARG)(arg))
+	pthread_create(&(var),NULL,func,(THREAD_ARG)(size_t)(arg))
 
 #define THREAD_JOIN(var) \
 	if (pthread_join(var,NULL)) Error("can not join CBP_thread.")

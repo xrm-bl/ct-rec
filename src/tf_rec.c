@@ -20,6 +20,11 @@
   #define SORT_FILTER_RESTORE sort_filter_restore_omp
 #endif
 
+/* defined in error.c (not declared in cbp.h).
+ * Use an explicit parameter type: bare Error() means Error(void) under C23
+ * and would reject the string argument. */
+extern void	Error(char *);
+
 /*----------------------------------------------------------------------*/
 #ifndef M_PI
 #define M_PI				3.1415926535897932385

@@ -126,8 +126,6 @@ __global__ void bm4d_filter_kernel(
     if (x >= width || y >= height || z > valid_end) return;
 
     const size_t slice = (size_t)width * height;
-    const int bs = 2 * block_radius + 1;
-    const int block_vol = bs * bs * bs;
 
     /* Collect matched blocks: store (distance, sx, sy, sz) */
     float match_dist[MAX_MATCHED_BLOCKS];
@@ -545,7 +543,6 @@ static void process_chunk_on_gpu(ChunkData *chunk, ImageInfo *info, FilterParams
 
     /* Match threshold: blocks with normalized SSD < threshold are considered similar
      * Typically 2.7 * sigma^2 * block_vol for hard thresholding step */
-    int bs = 2*params->block_radius+1;
     float match_threshold = 2.7f * params->sigma * params->sigma;
 
     dim3 g_valid((w+b3.x-1)/b3.x,(h+b3.y-1)/b3.y,(vd+b3.z-1)/b3.z);
