@@ -132,6 +132,8 @@ public class Open_HIS_IMG implements PlugIn {
                 return readIMG(file);
             } else if (lowerName.endsWith(".kif")) {
                 return useVirtualStack ? readKIFVirtual(file) : readKIF(file);
+            } else if (lowerName.endsWith(".fpi")) {
+                return readFPI(file);
             } else {
                 return tryOpenByMagic(file);
             }
@@ -653,6 +655,70 @@ public class Open_HIS_IMG implements PlugIn {
                 "\nComment: " + comment + "\nSource: " + file.getAbsolutePath());
             IJ.showStatus("IMG file loaded: " + width + " x " + height);
             return imp;
+        } finally {
+            raf.close();
+        }
+    }
+
+
+    /* ================================================================
+     * FPI format reader (single frame, float projection image)
+     * Header: short width (2 bytes) + short height (2 bytes)
+     * Data:   float[width * height] (little-endian)
+     * ================================================================ */
+
+    private ImagePlus readFPI(File file) throws IOException {
+        IJ.showStatus("Reading FPI file: " + file.getName());
+
+        RandomAccessFile raf = new RandomAccessFile(file, "r");
+        try {
+            if (raf.length() < 4) {
+                IJ.error("Open FPI", "File too small: " + file.getName());
+                return null;
+            }
+
+            byte[] headerBuf = new byte[4];
+            raf.readFully(headerBuf);
+            ByteBuffer hdr = ByteBuffer.wrap(headerBuf).order(ByteOrder.LITTLE_ENDIAN);
+
+            int width  = hdr.getShort(0);
+            int height = hdr.getShort(2);
+
+            if (width <= 0 || height <= 0) {
+                IJ.error("Open FPI", "Invalid dimensions: " + width + " x " + height);
+                return null;
+            }
+
+            int pixelCount = width * height;
+            long expectedSize = 4L + (long) pixelCount * 4;
+            if (raf.length() < expectedSize) {
+                IJ.error("Open FPI", "File too small for " + width + " x " + height
+                    + " float image.\nExpected: " + expectedSize
+                    + " bytes, actual: " + raf.length() + " bytes.");
+                return null;
+            }
+
+            byte[] raw = new byte[pixelCount * 4];
+            raf.readFully(raw);
+            ByteBuffer bb = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN);
+
+            float[] pixels = new float[pixelCount];
+            for (int i = 0; i < pixelCount; i++) {
+                pixels[i] = bb.getFloat();
+            }
+
+            IJ.log("FPI file: " + file.getName());
+            IJ.log("  Dimensions: " + width + " x " + height);
+
+            FloatProcessor fp = new FloatProcessor(width, height, pixels, null);
+            ImagePlus imp = new ImagePlus(file.getName(), fp);
+            imp.setProperty("Info",
+                "Format: FPI (Float Projection Image)\n" +
+                "Dimensions: " + width + " x " + height + "\n" +
+                "Source: " + file.getAbsolutePath());
+            IJ.showStatus("FPI file loaded: " + width + " x " + height);
+            return imp;
+
         } finally {
             raf.close();
         }

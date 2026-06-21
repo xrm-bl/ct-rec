@@ -50,9 +50,9 @@ public class HandleExtraFileTypes extends ImagePlus implements PlugIn {
         String fileName = theFile.getName();
         String lowerName = fileName.toLowerCase();
 
-        /* Only handle .his, .img, and .kif extensions */
+        /* Only handle .his, .img, .kif, and .fpi extensions */
         if (!lowerName.endsWith(".his") && !lowerName.endsWith(".img")
-                && !lowerName.endsWith(".kif")) {
+                && !lowerName.endsWith(".kif") && !lowerName.endsWith(".fpi")) {
             return;  /* width remains 0 -> Opener knows we didn't handle it */
         }
 
