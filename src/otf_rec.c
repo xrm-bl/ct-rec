@@ -51,7 +51,7 @@ char	flhead[]   = "q";
 char	darkfile[] = "dark.tif";
 
 // output file name
-char	fn[15];
+char	fn[256];
 
 // flag for q001.tif or q0001.tif
 int		iFlag, nfq, BPS;
@@ -228,7 +228,7 @@ long		ln;
 	int			i, j, k, jx, nshot, ilp, idcN, l;
 	double		t1, t2;
 	double		a[MAXPIXL], b[MAXPIXL];
-	char		ffi01[25], ffi02[25], fii[25];
+	char		ffi01[1024], ffi02[25], fii[25];
 	double		I01, I02;
 
 	double		*po;
@@ -262,8 +262,8 @@ long		ln;
 	for (j=0;j<NI0-1;++j){
 
 // open IIO[j] and IIO[j+1] 
-		if(iFlag==0) sprintf(ffi01, "%s%03d.tif", flhead, II0[j]);
-		if(iFlag==1) sprintf(ffi01, "%s%04d.tif", flhead, II0[j]);
+		if(iFlag==0) snprintf(ffi01, sizeof(ffi01), "%s%03d.tif", flhead, II0[j]);
+		if(iFlag==1) snprintf(ffi01, sizeof(ffi01), "%s%04d.tif", flhead, II0[j]);
 		if ((i = Read16TiffFileLine(ffi01, 0)) != 0){
 			printf("something wrong -- return value is %d(II01)", i);
 			return -1;
@@ -440,7 +440,7 @@ char	**argv;
 	double		r0;
 	int			vv, hh, jx;			// 
 	char	*comm = NULL;
-	char	fout[15];
+	char	fout[1024];
 	long	val;
 	int	ifilter;
 
@@ -589,7 +589,7 @@ char	**argv;
 		Error("comment memory allocation error.");
 	sprintf(comm,"%f\t%f\t%d\t%f\t%f\t%f",f_size, f_center, NNST, theta0, (float)data_min, (float)data_max);
 
-	(void)sprintf(fout, "rec%05d.tif", (int)s_layer);
+	(void)snprintf(fout, sizeof(fout), "rec%05d.tif", (int)s_layer);
 	printf("%s\r",fout);
 	Store32TiffFile(fout, NN, NN, 32, frec, comm);
 	printf("%s\t%f\t%f\t%d\t%f\t%f\t%f\t%f\t%f\n",fout, f_size, f_center, NNST, theta0, (float)data_min, (float)data_max, (float)t1, (float)t2);

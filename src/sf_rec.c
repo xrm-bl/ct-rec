@@ -122,8 +122,8 @@ float	center;
 
 
 // calculate center with RMSD
-		p000=(double *)malloc(Nx*sizeof(double));
-		p180=(double *)malloc(Nx*sizeof(double));
+		p000=(double *)malloc((size_t)Nx*sizeof(double));
+		p180=(double *)malloc((size_t)Nx*sizeof(double));
 		for(j=0;j<Nx;++j){
 			*(p000+j)=*(data32+0*Nx+j);
 			*(p180+j)=*(data32+(Nt-1)*Nx+j);
@@ -189,7 +189,7 @@ int	main(int argc, char *argv[])
 	long		i, j, p_sta, p_dst;
 	Float		**P, **F;			// full size of reconstructed image
 	char		wdesc[300];
-	char		fh[25], fo[25];
+	char		fh[1024], fo[25];
 	int			vv, hh, jx;
 	char		*comm = NULL;
 	double		data_max, data_min;
@@ -204,7 +204,7 @@ int	main(int argc, char *argv[])
 	//	printf("%d\n", argc);
 	t0=CLOCK();
 	if (argc == 3 || argc == 6 ) {
-			sprintf(fh, "%s", argv[1]);
+			snprintf(fh, sizeof(fh), "%s", argv[1]);
 			if (existFile(fh)) {
 				(void)Read32TiffFile(fh,1);
 //				fprintf(stderr, "%s\r", fh);
@@ -258,8 +258,8 @@ int	main(int argc, char *argv[])
 	// Get number of threads from environment variable
     num_threads = get_num_threads_from_env();
     // Allocate memory
-	image_data = (float *)malloc(Nx * Nt * sizeof(float));
-	result_data = (float *)malloc(Nx * Nt * sizeof(float));
+	image_data = (float *)malloc((size_t)Nx * Nt * sizeof(float));
+	result_data = (float *)malloc((size_t)Nx * Nt * sizeof(float));
 
 	for (j=0; j<Nt; j++){
 		for (i=0; i<Nx; i++){
@@ -299,7 +299,7 @@ int	main(int argc, char *argv[])
 //	fprintf(stderr, "\t%lf\n",t2);
 
 	free(data32);
-	data32=(float *)malloc(Nx*Nx*sizeof(float));
+	data32=(float *)malloc((size_t)Nx*Nx*sizeof(float));
 
 // Store CT images
 			data_max =-32000.;

@@ -117,7 +117,7 @@ int	main(int argc, char *argv[])
 	long		i, j, p_sta, p_dst;
 	Float		**P, **F;			// full size of reconstructed image
 	char		dirin[25], dirout[25], wdesc[300];
-	char		fh[25], fo[25];
+	char		fh[1024], fo[25];
 	int			z1, z2;
 	Float		*po, f_temp;
 	int			vv, hh, jx;
@@ -136,7 +136,7 @@ int	main(int argc, char *argv[])
 		p_sta = -1;
 		p_dst = -1;
 		for (i = 1; i<100000; i++) {
-			sprintf(fh, "%s/p%05d.tif", argv[1], i);
+			snprintf(fh, sizeof(fh), "%s/p%05d.tif", argv[1], i);
 			if (existFile(fh)) {
 				if (p_sta == -1) {
 					p_sta = i;
@@ -174,7 +174,7 @@ int	main(int argc, char *argv[])
 
 //open output files
 	for(m=z1;m<z2;++m){
-		sprintf(fh,"s%05d.sin", (int)(m));
+		snprintf(fh, sizeof(fh),"s%05d.sin", (int)(m));
 		if((fs[m] = fopen(fh,"wb")) == NULL){ 
 			printf("can not open %s for output\n", fh);
 			return(2);
@@ -188,7 +188,7 @@ int	main(int argc, char *argv[])
 	
 	// store p-data from float tiff files
 	for(i=0;i<Nt;++i) {
-		sprintf(fh, "%s/p%05d.tif", argv[1], i+1);
+		snprintf(fh, sizeof(fh), "%s/p%05d.tif", argv[1], i+1);
 		fprintf(stderr, "\rread:\t%s\t", fh);
 		(void)Read32TiffFile(fh,0);
 
@@ -215,14 +215,14 @@ int	main(int argc, char *argv[])
 		Error("memory allocation error.");
 	}
 
-	po=(float *)malloc(Nx*Nt*sizeof(float));
-	data32=(float *)malloc(Nx*Nx*sizeof(float));
+	po=(float *)malloc((size_t)Nx*Nt*sizeof(float));
+	data32=(float *)malloc((size_t)Nx*Nx*sizeof(float));
 
 	// loop z1 to z2
 	
 	t1=CLOCK();
 		for(m=z1;m<z2;++m){
-			sprintf(fh,"s%05d.sin", (int)(m));
+			snprintf(fh, sizeof(fh),"s%05d.sin", (int)(m));
 			if((fs[m] = fopen(fh,"rb")) == NULL){ 
 				printf("can not open %s for output\n", fh);
 				return(2);

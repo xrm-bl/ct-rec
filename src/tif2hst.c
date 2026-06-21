@@ -84,7 +84,7 @@ int	main(int argc, char *argv[])
 	double	d_min, d_max, ccc, dmd, dmmin, dmmax, wd;
 	long	val, iwd;
 	double	base, div;
-	char	fh[25], fo[25], wdesc[300];
+	char	fh[1024], fo[25], wdesc[300];
 	unsigned short	swid;
 	unsigned long	*data;
 	int		m, n;
@@ -96,7 +96,7 @@ int	main(int argc, char *argv[])
 		d_min = 10000.;
 		d_max = -10000.;
 		for (i = 0; i<99999; i++) {
-			sprintf(fh, "%s/rec%05ld.tif", argv[1], i);
+			snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[1], i);
 			//			fprintf(stderr,"%s\t",fh);
 			if (existFile(fh)) {
 				if (l_sta == -1) {
@@ -153,7 +153,7 @@ int	main(int argc, char *argv[])
 	}
 
 	for (i = l_sta; i < l_dst + 1; ++i) {
-		sprintf(fh, "%s/rec%05ld.tif", argv[1], i);
+		snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[1], i);
 //		fprintf(stderr, "%s(32bit float) -> ", fh);
 		Read32TiffFile(fh,0);
 

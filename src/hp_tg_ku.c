@@ -356,8 +356,8 @@ int	main(int argc,char **argv)
 		int		*blk_flag;
 		double	*blk_avg;
 
-		blk_flag = (int *)malloc(Nt * sizeof(int));
-		blk_avg  = (double *)malloc(Nx * sizeof(double));
+		blk_flag = (int *)malloc((size_t)Nt * sizeof(int));
+		blk_avg  = (double *)malloc((size_t)Nx * sizeof(double));
 
 		/* initialize average profile */
 		for (blk_r = 0; blk_r < Nx; blk_r++) blk_avg[blk_r] = 0.0;
@@ -409,8 +409,8 @@ int	main(int argc,char **argv)
 		// Get number of threads from environment variable
 	    num_threads = get_num_threads_from_env();
 	    // Allocate memory
-		image_data = (float *)malloc(Nx * Nt * sizeof(float));
-		result_data = (float *)malloc(Nx * Nt * sizeof(float));
+		image_data = (float *)malloc((size_t)Nx * Nt * sizeof(float));
+		result_data = (float *)malloc((size_t)Nx * Nt * sizeof(float));
 
 		for (j=0; j<Nt; j++){
 			for (i=0; i<Nx; i++){

@@ -328,8 +328,8 @@ int	main(int argc, char *argv[])
 	// Get number of threads from environment variable
     num_threads = get_num_threads_from_env();
     // Allocate memory
-	image_data = (float *)malloc(Nx * Nt * sizeof(float));
-	result_data = (float *)malloc(Nx * Nt * sizeof(float));
+	image_data = (float *)malloc((size_t)Nx * Nt * sizeof(float));
+	result_data = (float *)malloc((size_t)Nx * Nt * sizeof(float));
 
 	for (j=0; j<Nt; j++){
 		for (i=0; i<Nx; i++){
@@ -357,7 +357,7 @@ int	main(int argc, char *argv[])
 			t2=CLOCK()-Clock;
 
 // Store CT images
-			out32 = (float *)malloc(Nx*Nx*sizeof(float));
+			out32 = (float *)malloc((size_t)Nx*Nx*sizeof(float));
 			data_max =-32000.;
 			data_min = 32000.;
 

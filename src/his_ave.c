@@ -15,7 +15,7 @@
 struct HIS_Header
 {
 	char			head[2];			/*0-1*/
-	short			comment_length;		/*2-3*/
+	unsigned short			comment_length;		/*2-3*/
 	short			width;				/*4-5*/
 	short			height;				/*6-7*/
 	short			x_offset;			/*8-9*/
@@ -130,7 +130,7 @@ HISHeader	*his;
 
 // read comment and image data from file1
 	if (fread(his, sizeof(char), HIS_Header_Size, fi) != HIS_Header_Size){
-		fprintf(stderr, "EOF in input file (header)\n"); free(his->comment); return(-1);
+		fprintf(stderr, "EOF in input file (header)\n"); return(-1); /* 修正: ファイル由来ポインタを free しない */
 	}
 	if (strncmp(his->head, "IM", 2)){
 		fclose(fi); free(his->comment);
@@ -195,7 +195,7 @@ char	*argv[];
 {
 	unsigned short	*image1, *outimg;
 	long	i, j, jj, kk;
-	char	readfile[20], outfile[20];
+	char	readfile[1024], outfile[1024];
 	char	*cmt;
 	short	clg;
 	unsigned long	i_end, k, *sumimg;
@@ -214,8 +214,8 @@ char	*argv[];
 		printf("Usage is 'his_ave hisfile outfile (from to)'\n");
 		return 1;
 	}
-	sprintf(readfile, ("%s"), argv[1]);
-	sprintf(outfile, ("%s"), argv[2]);
+	snprintf(readfile, sizeof(readfile), ("%s"), argv[1]);
+	snprintf(outfile, sizeof(outfile), ("%s"), argv[2]);
 
 	if(argc==3){
 		i_from=1;
@@ -233,6 +233,7 @@ char	*argv[];
 		free(his.comment); 
 		return(-1);
 	}
+	if (his.width <= 0 || his.height <= 0){ fprintf(stderr,"error: bad image size %d x %d\n", his.width, his.height); free(his.comment); return(-1); }
 	i_end=his.n_image1+65536*his.n_image2;
 	if(i_to==0) i_to=i_end;
 	if(his.type==6) printf("%s: 12 bits %ld images\n", readfile, i_end);
@@ -243,18 +244,20 @@ char	*argv[];
 	
 // initialize
 
-	sumimg = (unsigned long *) malloc(Nx*Ny*sizeof(unsigned long));
+	sumimg = (unsigned long *) malloc((size_t)Nx*Ny*sizeof(unsigned long));
 	for (j=0; j<Nx*Ny; j++){
 		*(sumimg+j)=0;
 	}
 
 	if(his.type==2){
 		NP=Nx*Ny;
-		data=(unsigned short *)malloc(NP*sizeof(unsigned short));
+		data=(unsigned short *)malloc((size_t)NP*sizeof(unsigned short));
+		if(data==NULL){ fprintf(stderr,"out of memory (data)\n"); free(his.comment); return(-1); }
 	}
 	if(his.type==6){
-		NP=(Nx*Ny)*3/2;
-		cdata=(unsigned char *)malloc(NP*sizeof(unsigned char));
+		NP=(long)((size_t)Nx*(size_t)Ny*3/2);
+		cdata=(unsigned char *)malloc((size_t)NP*sizeof(unsigned char));
+		if(cdata==NULL){ fprintf(stderr,"out of memory (cdata)\n"); free(his.comment); return(-1); }
 	}
 		if ((cell=(Cell **)MA(Ny,cell))==NULL)
 		    Error("cell memory allocation error (1).");
@@ -287,7 +290,8 @@ char	*argv[];
 				return(-1);
 			}
 			kk=kk+1;
-			outimg = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
+			outimg = (unsigned short *) malloc((size_t)Nx*(size_t)Ny*sizeof(unsigned short));
+		if(outimg==NULL){ fprintf(stderr,"out of memory (outimg)\n"); fclose(fi); return(-1); }
 			if(his.type==2){
 				for(jj=0;jj<NP;++jj){
 					*(outimg+jj)=*(data+jj);
@@ -344,7 +348,7 @@ char	*argv[];
 		}
 	}
 	sprintf(comm,("average %d to %d in %s"), i_from, i_to, readfile);
-//	sprintf(outfile, ("%s"), argv[2]);
+//	snprintf(outfile, sizeof(outfile), ("%s"), argv[2]);
 	StoreImageFile(outfile,(int)his.width,(int)his.height,(int)bits,cell,comm);
 	
 //finish!

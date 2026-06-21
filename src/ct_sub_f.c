@@ -23,7 +23,7 @@
 /*----------------------------------------------------------------------*/
 struct HiPic_Header{
 	char			head[2];
-	short			comment_length;
+	unsigned short			comment_length;
 	short			width;
 	short			height;
 	short			x_offset;
@@ -173,7 +173,7 @@ Header	*h;
 		Nx = h->width;
 		Ny = h->height;
 
-		data = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
+		data = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
 		if ((j = fread(data, sizeof(unsigned short), Nx*Ny, fi)) != Nx*Ny){
 			fclose(fi);
 			free(h->comment); 
@@ -267,7 +267,7 @@ int StoreProjection(char *dirin, char *dirout)
 	double		DI1, DI2, DI3, DI4, DI5; 
 	Header		h;
 	char		path[2048];
-	char		fname[20];
+	char		fname[1024];
 	double		I01, I02;
 
 	double		*po;
@@ -283,9 +283,9 @@ int StoreProjection(char *dirin, char *dirout)
 	srand((unsigned int)time(NULL));
 
 // p initialization
-	po = (double *)malloc(Nx*Ny*sizeof(double));
-	a  = (double *)malloc(Nx*Ny*sizeof(double));
-	b  = (double *)malloc(Nx*Ny*sizeof(double));
+	po = (double *)malloc((size_t)Nx*Ny*sizeof(double));
+	a  = (double *)malloc((size_t)Nx*Ny*sizeof(double));
+	b  = (double *)malloc((size_t)Nx*Ny*sizeof(double));
 
 	if ((data16 = (unsigned short *)malloc(sizeof(unsigned short)*Nx*Ny)) == NULL) {
 		printf("cannot allocate memory for input 32bit TIFF image\n");
@@ -303,9 +303,9 @@ int StoreProjection(char *dirin, char *dirout)
 //		printf("%d\n",j);
 
 //IIO[j] and IIO[j+1] are opened
-		if(iFlag==0) sprintf(fname, "%s/q%03d.img", dirin, II0[j]);
-		if(iFlag==1) sprintf(fname, "%s/q%04d.img", dirin, II0[j]);
-		if(iFlag==2) sprintf(fname, "%s/q%05d.img", dirin, II0[j]);
+		if(iFlag==0) snprintf(fname, sizeof(fname), "%s/q%03d.img", dirin, II0[j]);
+		if(iFlag==1) snprintf(fname, sizeof(fname), "%s/q%04d.img", dirin, II0[j]);
+		if(iFlag==2) snprintf(fname, sizeof(fname), "%s/q%05d.img", dirin, II0[j]);
 		if ((i = read_hipic(fname, &h)) != 0){
 			printf("something wrong -- return value is %d(II01)", i);
 			return(-1);
@@ -329,9 +329,9 @@ int StoreProjection(char *dirin, char *dirout)
 		}
 		free(data);
 		
-		if(iFlag==0) sprintf(fname, "%s/q%03d.img", dirin, II0[j+1]);
-		if(iFlag==1) sprintf(fname, "%s/q%04d.img", dirin, II0[j+1]);
-		if(iFlag==2) sprintf(fname, "%s/q%05d.img", dirin, II0[j+1]);
+		if(iFlag==0) snprintf(fname, sizeof(fname), "%s/q%03d.img", dirin, II0[j+1]);
+		if(iFlag==1) snprintf(fname, sizeof(fname), "%s/q%04d.img", dirin, II0[j+1]);
+		if(iFlag==2) snprintf(fname, sizeof(fname), "%s/q%05d.img", dirin, II0[j+1]);
 		if ((i = read_hipic(fname, &h)) != 0){
 			printf("something wrong -- return value is %d(II02)", i);
 			return(-1);
@@ -368,9 +368,9 @@ int StoreProjection(char *dirin, char *dirout)
 		}
 		for ( k = II0[j] + 1; k < II0[j+1]; ++k){
 			// obtain p(x) from a[jx], b[jx] using shottime[k]
-			if(iFlag==0) sprintf(fname, "%s/q%03d.img", dirin, k);
-			if(iFlag==1) sprintf(fname, "%s/q%04d.img", dirin, k);
-			if(iFlag==2) sprintf(fname, "%s/q%05d.img", dirin, k);
+			if(iFlag==0) snprintf(fname, sizeof(fname), "%s/q%03d.img", dirin, k);
+			if(iFlag==1) snprintf(fname, sizeof(fname), "%s/q%04d.img", dirin, k);
+			if(iFlag==2) snprintf(fname, sizeof(fname), "%s/q%05d.img", dirin, k);
 			if ((i = read_hipic(fname, &h)) != 0){
 				printf("something wrong -- return value is %d(II01)", i);
 				return(-1);
@@ -445,7 +445,7 @@ char	**argv;
 	int			i;
 	Header		h;
 //	FILE		*fo;
-	char		darkfile[100];
+	char		darkfile[1024];
 
 // parameter setting
 	if (argc!=3){
@@ -463,12 +463,12 @@ char	**argv;
 	printf("%s/dark.img\n",argv[1]);
 
 // read dark image
-	sprintf(darkfile,"%s/dark.img",argv[1]);
+	snprintf(darkfile, sizeof(darkfile),"%s/dark.img",argv[1]);
 	if ((i = read_hipic(darkfile, &h)) != 0){
 		fprintf(stderr, "something wrong in dark file (%d)\n", i);
 		return(1);
 	}
-	dark = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
+	dark = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
 	for(i=0;i<Nx*Ny;++i){
 		*(dark+i)=*(data+i);
 //		printf("%d\t%d\t%d\r",i,*(data+i),*(dark+i));
@@ -476,10 +476,10 @@ char	**argv;
 	free(data);
 //	fprintf(stderr, "Nx, Ny= %d %d \n", Nx,Ny);
 
-	II01 = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
-	II02 = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
-	I    = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
-	I0   = (double *) malloc(Nx*Ny*sizeof(double));
+	II01 = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
+	II02 = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
+	I    = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
+	I0   = (double *) malloc((size_t)Nx*Ny*sizeof(double));
 	fprintf(stderr, "Nx, Ny= %d %d \n", Nx,Ny);
 
 	if((i=StoreProjection(argv[1], argv[2])) !=0){

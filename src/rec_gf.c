@@ -124,7 +124,7 @@ int	main(int argc,char **argv)
 	COMPLEX	***C;
 	FOM	**D;
 
-	char	fh[25];
+	char	fh[1024];
 	long	i, j;
 	long	l_sta, l_dst;
 	double	d_min, d_max, ccc, dmd1, dmd2, dmd3, dmd4, dmmin, dmmax;
@@ -140,9 +140,9 @@ int	main(int argc,char **argv)
 	l_dst = -1;
 	for (i = 0; i<99999; i++) {
 #ifdef WINDOWS
-		sprintf(fh, "%s\\rec%05ld.tif", argv[1], i);
+		snprintf(fh, sizeof(fh), "%s\\rec%05ld.tif", argv[1], i);
 #else
-		sprintf(fh, "%s/rec%05ld.tif", argv[1], i);
+		snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[1], i);
 #endif
 //			fprintf(stderr,"%s\t%d\r",fh,existFile(fh));
 		if (existFile(fh)==1) {
@@ -186,9 +186,9 @@ int	main(int argc,char **argv)
 	    if (z>0) C[z]=C[z-1]+Ly;
 
 #ifdef WINDOWS
-		sprintf(fh, "%s\\rec%05ld.tif", argv[1], z+l_sta);
+		snprintf(fh, sizeof(fh), "%s\\rec%05ld.tif", argv[1], z+l_sta);
 #else
-		sprintf(fh, "%s/rec%05ld.tif", argv[1], z+l_sta);
+		snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[1], z+l_sta);
 #endif
 		Read32TiffFile(fh,0);
 //		if (ReadImageFile_Float(fh,&Nx,&Ny,&D,&desc))
@@ -286,9 +286,9 @@ int	main(int argc,char **argv)
 	    	}
 		}
 #ifdef WINDOWS
-		(void)sprintf(fh, "%s\\rec%05ld.tif", argv[1], z+l_sta);
+		(void)snprintf(fh, sizeof(fh), "%s\\rec%05ld.tif", argv[1], z+l_sta);
 #else
-		(void)sprintf(fh, "%s/rec%05ld.tif", argv[1], z+l_sta);
+		(void)snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[1], z+l_sta);
 #endif
 //		Read32TiffFile(fh,1);
 			if (ReadImageFile_Float(fh,&Nx,&Ny,NULL,&desc))
@@ -299,9 +299,9 @@ int	main(int argc,char **argv)
 //		(void)printf("%s\r",desc);
 
 #ifdef WINDOWS
-		(void)sprintf(fh, "%s\\rec%05ld.tif", argv[3], z+l_sta);
+		(void)snprintf(fh, sizeof(fh), "%s\\rec%05ld.tif", argv[3], z+l_sta);
 #else
-		(void)sprintf(fh, "%s/rec%05ld.tif", argv[3], z+l_sta);
+		(void)snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[3], z+l_sta);
 #endif
 		Store32TiffFile(fh, Nx, Ny, 32, data32, desc);
 //		fprintf(stderr,"%s\r",fh);

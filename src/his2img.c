@@ -14,7 +14,7 @@
 struct HIS_Header
 {
 	char			head[2];			/*0-1*/
-	short			comment_length;		/*2-3*/
+	unsigned short			comment_length;		/*2-3*/
 	short			width;				/*4-5*/
 	short			height;				/*6-7*/
 	short			x_offset;			/*8-9*/
@@ -33,7 +33,7 @@ typedef struct HIS_Header HISHeader;
 
 struct IMG_Header{
 	char			head[2];
-	short			comment_length;
+	unsigned short			comment_length;
 	short			width;
 	short			height;
 	short			x_offset;
@@ -208,7 +208,7 @@ char	*argv[];
 {
 	unsigned short	*image1, *outimg, *pimg, x1, x2, y1, y2, Nx, Ny;
 	long	i, j, jj, jx, jy;
-	char	readfile[20], outfile[20];
+	char	readfile[1024], outfile[1024];
 	char	*cmt;
 	short	clg;
 	unsigned long	i_end, k;
@@ -231,13 +231,14 @@ char	*argv[];
 		return(-1);
 	}
 
-	sprintf(readfile, ("%s"), argv[1]);
+	snprintf(readfile, sizeof(readfile), ("%s"), argv[1]);
 
 	if ((j = read_hishead(readfile, &his)) != 0){
 		printf("error, read his-head - %ld", j);
 		// free(his.comment); 
 		return(-1);
 	}
+	if (his.width <= 0 || his.height <= 0){ fprintf(stderr,"error: bad image size %d x %d\n", his.width, his.height); free(his.comment); return(-1); }
 	i_end=his.n_image1+65536*his.n_image2;
 //	i_end=1000000;
 	if(his.type==6) printf("12 bits %ld images\n", i_end); /* ŠÔˆá‚¦‚Ä‚È‚¢‚©H*/
@@ -257,15 +258,18 @@ char	*argv[];
 	
 	if(his.type==2){
 		NP=his.width*his.height;
-		data=(unsigned short *)malloc(NP*sizeof(unsigned short));
+		data=(unsigned short *)malloc((size_t)NP*sizeof(unsigned short));
+		if(data==NULL){ fprintf(stderr,"out of memory (data)\n"); free(his.comment); return(-1); }
 	}
 	if(his.type==6){
-		NP=(his.width*his.height)*3/2;
-		cdata=(unsigned char *)malloc(NP*sizeof(unsigned char));
+		NP=(long)((size_t)his.width*(size_t)his.height*3/2);
+		cdata=(unsigned char *)malloc((size_t)NP*sizeof(unsigned char));
+		if(cdata==NULL){ fprintf(stderr,"out of memory (cdata)\n"); free(his.comment); return(-1); }
 	}
 	if(his.type==0){
 		NP=his.width*his.height;
-		odata=(unsigned char *)malloc(NP*sizeof(unsigned char));
+		odata=(unsigned char *)malloc((size_t)NP*sizeof(unsigned char));
+		if(odata==NULL){ fprintf(stderr,"out of memory (odata)\n"); free(his.comment); return(-1); }
 	}
 
 //open input files
@@ -282,7 +286,8 @@ char	*argv[];
 			return(-1);
 		}
 
-		outimg = (unsigned short *) malloc(img.width * img.height * sizeof(unsigned short));
+		outimg = (unsigned short *) malloc((size_t)img.width * (size_t)img.height * sizeof(unsigned short));
+		if(outimg==NULL){ fprintf(stderr,"out of memory (outimg)\n"); fclose(fi); return(-1); }
 		if(his.type==2){
 			for(jj=0;jj<NP;++jj){
 				*(outimg+jj)=*(data+jj);
@@ -311,18 +316,19 @@ char	*argv[];
 //		if(j!=img.width * img.height) printf("\nerror\n");
 //		if(j==img.width * img.height) printf("\nok\n");
 
-		if (i_end<10)     {sprintf(outfile, ("%s%01d.img"), flhead, (int)(k+1));}
-		if (i_end>9)      {sprintf(outfile, ("%s%02d.img"), flhead, (int)(k+1));}
-		if (i_end>99)     {sprintf(outfile, ("%s%03d.img"), flhead, (int)(k+1));}
-		if (i_end>999)    {sprintf(outfile, ("%s%04d.img"), flhead, (int)(k+1));}
-		if (i_end>9999)   {sprintf(outfile, ("%s%05d.img"), flhead, (int)(k+1));}
-		if (i_end>99999)  {sprintf(outfile, ("%s%06d.img"), flhead, (int)(k+1));}
-		if (i_end>999999) {sprintf(outfile, ("%s%07d.img"), flhead, (int)(k+1));}
+		if (i_end<10)     {snprintf(outfile, sizeof(outfile), ("%s%01d.img"), flhead, (int)(k+1));}
+		if (i_end>9)      {snprintf(outfile, sizeof(outfile), ("%s%02d.img"), flhead, (int)(k+1));}
+		if (i_end>99)     {snprintf(outfile, sizeof(outfile), ("%s%03d.img"), flhead, (int)(k+1));}
+		if (i_end>999)    {snprintf(outfile, sizeof(outfile), ("%s%04d.img"), flhead, (int)(k+1));}
+		if (i_end>9999)   {snprintf(outfile, sizeof(outfile), ("%s%05d.img"), flhead, (int)(k+1));}
+		if (i_end>99999)  {snprintf(outfile, sizeof(outfile), ("%s%06d.img"), flhead, (int)(k+1));}
+		if (i_end>999999) {snprintf(outfile, sizeof(outfile), ("%s%07d.img"), flhead, (int)(k+1));}
 
 		if(argc==6){
 			img.width=Nx;
 			img.height=Ny;
-			pimg = (unsigned short *) malloc(img.width * img.height * sizeof(unsigned short));
+			pimg = (unsigned short *) malloc((size_t)img.width * (size_t)img.height * sizeof(unsigned short));
+		if(pimg==NULL){ fprintf(stderr,"out of memory (pimg)\n"); fclose(fi); return(-1); }
 			jj=0;
 			for(jy=y1;jy<y2;++jy){
 				for(jx=x1;jx<x2;++jx){

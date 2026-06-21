@@ -135,7 +135,7 @@ int	main(int argc, char *argv[])
 	double	d_min, d_max, ccc, dmd, dmmin, dmmax;
 	long	val;
 	double	base, div;
-	char	fh[25], fo[25], wdesc[300];
+	char	fh[1024], fo[25], wdesc[300];
 	unsigned short	swid;
 	unsigned short	*data16;
 	unsigned char	*data8;
@@ -159,7 +159,7 @@ int	main(int argc, char *argv[])
 		}
 		//for (i = 0; i<99999; i++) {
 		for (i = s_layer; i<=e_layer; i++) {
-			sprintf(fh, "%s/rec%05ld.tif", argv[2], i);
+			snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[2], i);
 //						fprintf(stderr,"%s\r",fh);
 			if (existFile(fh)) {
 				if (l_sta == -1) {
@@ -234,7 +234,7 @@ int	main(int argc, char *argv[])
 	}
 
 	for (i = l_sta; i < l_dst + 1; ++i) {
-		sprintf(fh, "%s/rec%05ld.tif", argv[2], i);
+		snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[2], i);
 		fprintf(stderr, "%s(32bit float) -> ", fh);
 		Read32TiffFile(fh,0);
 //		if (ReadImageFile_Float(fh,&Nx,&Ny,&F,&desc))

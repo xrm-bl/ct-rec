@@ -83,7 +83,8 @@ Header	*h;
 		x_size = h->width;
 		y_size = h->height;
 
-		data = (unsigned short *) malloc(x_size * y_size * sizeof(unsigned short));
+		data = (unsigned short *) malloc((size_t)x_size * y_size * sizeof(unsigned short));
+	if(data==NULL){ fprintf(stderr,"out of memory (data)\n"); exit(1); }
 		if ((j = fread(data, sizeof(unsigned short), x_size*y_size, fi)) != x_size*y_size)
 		{
 			fclose(fi);
@@ -120,7 +121,7 @@ char	*argv[];
 {
 	unsigned short		*image1, *outimg;
 	int			x_size1, y_size1, x_size2, y_size2;
-	char		readfile[20];
+	char		readfile[1024];
 	long		i, j, jj;
 	int			i_start, i_end, i_num;
 	unsigned long 		*sumdata;
@@ -141,14 +142,15 @@ char	*argv[];
 	jj=0;
 	for(i=i_start;i<i_end+1;++i){
 		jj=jj+1;
-		sprintf(readfile, ("q%03d.img"), i);
+		snprintf(readfile, sizeof(readfile), ("q%03d.img"), i);
 		printf("read %s\r",readfile);
 		if ((j = read_hipic(readfile, &h)) != 0){
 			printf("something wrong -- return value is %ld", i);
 			exit(-1);
 		}
 		if (jj==1){
-			sumdata = (unsigned long *) malloc(h.width*h.height*sizeof(unsigned long));
+			sumdata = (unsigned long *) malloc((size_t)h.width*h.height*sizeof(unsigned long));
+		if(sumdata==NULL){ fprintf(stderr,"out of memory (sumdata)\n"); exit(1); }
 			for(jj=0;jj<h.width*h.height;++jj) *(sumdata+jj)=0;
 		}
 		for(jj=0;jj<h.width*h.height;++jj){
@@ -157,7 +159,8 @@ char	*argv[];
 		free(data);
 	}
 
-	outimg = (unsigned short *) malloc(h.width * h.height * sizeof(unsigned short));
+	outimg = (unsigned short *) malloc((size_t)h.width * h.height * sizeof(unsigned short));
+		if(outimg==NULL){ fprintf(stderr,"out of memory (outimg)\n"); exit(1); }
 	for(jj=0;jj<h.width * h.height;++jj) *(outimg+jj)=*(sumdata+jj)/i_num;
 
 // open output file

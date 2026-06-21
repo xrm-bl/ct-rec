@@ -184,8 +184,8 @@ int sort_filter_restore_omp(float *image_data, float *result_data,
     omp_set_num_threads(num_threads);
     
     /* Allocate memory for intermediate results */
-    sorted_data = (float *)malloc(Nx * Ny * sizeof(float));
-    filtered_data = (float *)malloc(Nx * Ny * sizeof(float));
+    sorted_data = (float *)malloc((size_t)Nx * Ny * sizeof(float));
+    filtered_data = (float *)malloc((size_t)Nx * Ny * sizeof(float));
     
     if (!sorted_data || !filtered_data) {
         fprintf(stderr, "Failed to allocate memory\n");
@@ -199,7 +199,7 @@ int sort_filter_restore_omp(float *image_data, float *result_data,
     #pragma omp parallel private(i)
     {
         PixelInfo *column_info;
-        column_info = (PixelInfo *)malloc(Ny * sizeof(PixelInfo));
+        column_info = (PixelInfo *)malloc((size_t)Ny * sizeof(PixelInfo));
         
         if (column_info) {
             /* Process columns in parallel - C89 style */
@@ -226,7 +226,7 @@ int sort_filter_restore_omp(float *image_data, float *result_data,
     #pragma omp parallel private(i)
     {
         PixelInfo *column_info;
-        column_info = (PixelInfo *)malloc(Ny * sizeof(PixelInfo));
+        column_info = (PixelInfo *)malloc((size_t)Ny * sizeof(PixelInfo));
         
         if (column_info) {
             /* Process columns in parallel - C89 style */

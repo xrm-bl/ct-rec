@@ -416,7 +416,7 @@ static int process_tiff_file(const char* input_file, const char* output_file,
     scanline_size = TIFFScanlineSize(in_tiff);
     
     /* Allocate memory for the entire image */
-    data = malloc(height * scanline_size);
+    data = malloc((size_t)height * scanline_size);
     if (!data) {
         fprintf(stderr, "Error: Cannot allocate memory\n");
 //        write_log("Error: Cannot allocate memory");
@@ -528,7 +528,7 @@ static int apply_median_filter(void* data, int width, int height, int kernel_siz
     
     /* Allocate temporary buffer */
     data_size = is_16bit ? sizeof(unsigned short) : sizeof(unsigned char);
-    temp_data = malloc(width * height * data_size);
+    temp_data = malloc((size_t)width * height * data_size);
     if (!temp_data) {
         fprintf(stderr, "Error: Cannot allocate memory for median filter\n");
 //        write_log("Error: Cannot allocate memory for median filter");
@@ -652,7 +652,7 @@ static int apply_gaussian_filter_separable(void* data, int width, int height,
     }
     
     /* Allocate temporary buffer */
-    temp_data = (double*)malloc(width * height * sizeof(double));
+    temp_data = (double*)malloc((size_t)width * height * sizeof(double));
     if (!temp_data) {
         fprintf(stderr, "Error: Cannot allocate temp buffer\n");
 //        write_log("Error: Cannot allocate temp buffer");

@@ -11,6 +11,23 @@
 #define HIS_Header_Size 64
 #define IMG_Header_Size	64
 
+/*----------------------------------------------------------------------*/
+/* セキュリティ修正: comment_length を符号なし(0..65535)として扱い，       */
+/* malloc サイズの符号拡張・負値を排除し，必ず NUL 終端する．              */
+static int read_comment_safe(FILE *fp, short raw_len, char **out)
+{
+	unsigned int clen = (unsigned short)raw_len;   /* 符号拡張を排除 */
+	char *c;
+
+	*out = NULL;
+	c = (char *)malloc((size_t)clen + 1);
+	if (c == NULL) return (-1);
+	if (clen != 0 && fread(c, 1, clen, fp) != clen) { free(c); return (-2); }
+	c[clen] = '\0';
+	*out = c;
+	return (0);
+}
+
 struct HIS_Header
 {
 	char			head[2];			/*0-1*/
@@ -89,18 +106,11 @@ char *fname;
 	memcpy(&his->maker,          buffer + 30,  4);	// long
 	memcpy(&his->reserved,       buffer + 34, 30);	// char x 30
 
-	his->comment=(char *)malloc(his->comment_length+1);
-	if (his->comment == NULL){
-		fclose(f); free(his->comment); 
-		fprintf(stderr, "Connot allocate memory (HIS_Header.comment)\n"); 
-		return(-22);
+	{	/* セキュリティ修正: 符号なし長さ・範囲検査・NUL終端 */
+		int rc = read_comment_safe(f, his->comment_length, &his->comment);
+		if (rc == -1){ fclose(f); fprintf(stderr, "Cannot allocate memory (HIS_Header.comment)\n"); return(-22); }
+		if (rc == -2){ fclose(f); fprintf(stderr, "EOF found (comment)\n"); return(-23); }
 	}
-	if (fread(his->comment, sizeof(char), his->comment_length, f) != his->comment_length){
-		fclose(f); free(his->comment); 
-		fprintf(stderr, "EOF found (comment)\n"); 
-		return(-23);
-	}
-	his->comment[his->comment_length] = '\0';
 
 // check for correct reading of HIS file
 //printf("-------------------------------\n");
@@ -135,26 +145,21 @@ IMGHeader	*img;
 
 // read comment and image data from file1
 	if (fread(his, sizeof(char), HIS_Header_Size, fi) != HIS_Header_Size){
-		fprintf(stderr, "EOF in input file (header)\n"); free(his->comment); return(-1);
+		/* 修正: ここでの his->comment はファイル由来のゴミポインタなので free しない */
+		fprintf(stderr, "EOF in input file (header)\n"); return(-1);
 	}
+	his->comment = NULL;	/* 修正: 生ヘッダ読み込みで上書きされたゴミポインタを無効化 */
 //	if (strncmp(his->head, "IM", 2)){
 //		fclose(fi); free(his->comment);
 //		fprintf(stderr, "This is not HIS image file.\n"); 
 //		return(-11);
 //	}
 
-	his->comment=(char *)malloc(his->comment_length+1);
-	if (his->comment == NULL){
-		fclose(fi); free(his->comment); 
-		fprintf(stderr, "Connot allocate memory (HIS_Header.comment)\n"); 
-		return(-12);
+	{	/* セキュリティ修正: 符号なし長さ・範囲検査・NUL終端 */
+		int rc = read_comment_safe(fi, his->comment_length, &his->comment);
+		if (rc == -1){ fclose(fi); fprintf(stderr, "Cannot allocate memory (HIS_Header.comment)\n"); return(-12); }
+		if (rc == -2){ fclose(fi); fprintf(stderr, "EOF found (comment)\n"); return(-13); }
 	}
-	if (fread(his->comment, sizeof(char), his->comment_length, fi) != his->comment_length){ 
-		fclose(fi); free(his->comment); 
-		fprintf(stderr, "EOF found (comment)\n"); 
-		return(-13);
-	}
-//	his->comment[his->comment_length] = '\0';
 
 	
 	if(his->type==2){
@@ -198,7 +203,7 @@ char	*argv[];
 	unsigned short	*image1, *outimg;
 	long	i, j, jj;
 	unsigned long	PN, NL;
-	char	readfile[20], outfile[20];
+	char	readfile[1024], outfile[1024];	/* 修正: 20->1024 (argv・大インデックスでのオーバーフロー防止) */
 	char	*cmt;
 	short	clg;
 	unsigned long	i_end, k, kk;
@@ -210,7 +215,7 @@ char	*argv[];
 		printf("Usage is 'his_spl_K hisfile partnum loopnum'\n");
 		return(-1);
 	}
-	sprintf(readfile, ("%s"), argv[1]);
+	snprintf(readfile, sizeof(readfile), "%s", argv[1]);
 	PN=atol(argv[2]);
 	NL=atol(argv[3]);
 
@@ -218,6 +223,10 @@ char	*argv[];
 		printf("error, read his-head - %ld", j);
 		free(his.comment); 
 		return(-1);
+	}
+	if (his.width <= 0 || his.height <= 0){	/* 修正: 不正な画像サイズを拒否 */
+		fprintf(stderr, "error: bad image size %d x %d\n", his.width, his.height);
+		free(his.comment); return(-1);
 	}
 	i_end=his.n_image1+65536*his.n_image2;
 	if(his.type==6) printf("12 bits %ld images\n", i_end); /* 間違えてないか？*/
@@ -235,17 +244,23 @@ char	*argv[];
 
 // initialize
 	
-	if(his.type==2){
-		NP=his.width*his.height;
-		data=(unsigned short *)malloc(NP*sizeof(unsigned short));
-	}
-	if(his.type==6){
-		NP=(his.width*his.height)*3/2;
-		cdata=(unsigned char *)malloc(NP*sizeof(unsigned char));
-	}
-	if(his.type==0){
-		NP=his.width*his.height;
-		odata=(unsigned char *)malloc(NP*sizeof(unsigned char));
+	{	/* 修正: size_t で計算しオーバーフローを防止，malloc 失敗を検査 */
+		size_t npix = (size_t)his.width * (size_t)his.height;
+		if(his.type==2){
+			NP=(long)npix;
+			data=(unsigned short *)malloc(npix*sizeof(unsigned short));
+			if(data==NULL){ fprintf(stderr,"out of memory (data)\n"); free(his.comment); return(-1); }
+		}
+		if(his.type==6){
+			NP=(long)(npix*3/2);
+			cdata=(unsigned char *)malloc((npix*3/2)*sizeof(unsigned char));
+			if(cdata==NULL){ fprintf(stderr,"out of memory (cdata)\n"); free(his.comment); return(-1); }
+		}
+		if(his.type==0){
+			NP=(long)npix;
+			odata=(unsigned char *)malloc(npix*sizeof(unsigned char));
+			if(odata==NULL){ fprintf(stderr,"out of memory (odata)\n"); free(his.comment); return(-1); }
+		}
 	}
 
 //open input files
@@ -263,7 +278,8 @@ char	*argv[];
 				return(-1);
 			}
 
-			outimg = (unsigned short *) malloc(img.width * img.height * sizeof(unsigned short));
+			outimg = (unsigned short *) malloc((size_t)img.width * (size_t)img.height * sizeof(unsigned short));
+			if(outimg==NULL){ fprintf(stderr,"out of memory (outimg)\n"); fclose(fi); return(-1); }
 			if(his.type==2){
 				for(jj=0;jj<NP;++jj){
 					*(outimg+jj)=*(data+jj);
@@ -287,21 +303,21 @@ char	*argv[];
 //		if(j!=img.width * img.height) printf("\nerror\n");
 //		if(j==img.width * img.height) printf("\nok\n");
 #ifdef WINDOWS
-			if (PN<10)     {sprintf(outfile, ("%03d\\raw\\a%01d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>9)      {sprintf(outfile, ("%03d\\raw\\a%02d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>99)     {sprintf(outfile, ("%03d\\raw\\a%03d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>999)    {sprintf(outfile, ("%03d\\raw\\a%04d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>9999)   {sprintf(outfile, ("%03d\\raw\\a%05d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>99999)  {sprintf(outfile, ("%03d\\raw\\a%06d.img"), (int)(k+1), (int)(kk+1));}
-//			if (PN>999999) {sprintf(outfile, ("%03d\\raw\\a%07d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN<10)     {snprintf(outfile, sizeof(outfile), ("%03d\\raw\\a%01d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>9)      {snprintf(outfile, sizeof(outfile), ("%03d\\raw\\a%02d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>99)     {snprintf(outfile, sizeof(outfile), ("%03d\\raw\\a%03d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>999)    {snprintf(outfile, sizeof(outfile), ("%03d\\raw\\a%04d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>9999)   {snprintf(outfile, sizeof(outfile), ("%03d\\raw\\a%05d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>99999)  {snprintf(outfile, sizeof(outfile), ("%03d\\raw\\a%06d.img"), (int)(k+1), (int)(kk+1));}
+//			if (PN>999999) {snprintf(outfile, sizeof(outfile), ("%03d\\raw\\a%07d.img"), (int)(k+1), (int)(kk+1));}
 #else
-			if (PN<10)     {sprintf(outfile, ("%03d/raw/a%01d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>9)      {sprintf(outfile, ("%03d/raw/a%02d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>99)     {sprintf(outfile, ("%03d/raw/a%03d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>999)    {sprintf(outfile, ("%03d/raw/a%04d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>9999)   {sprintf(outfile, ("%03d/raw/a%05d.img"), (int)(k+1), (int)(kk+1));}
-			if (PN>99999)  {sprintf(outfile, ("%03d/raw/a%06d.img"), (int)(k+1), (int)(kk+1));}
-//			if (PN>999999) {sprintf(outfile, ("%03d/raw/a%07d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN<10)     {snprintf(outfile, sizeof(outfile), ("%03d/raw/a%01d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>9)      {snprintf(outfile, sizeof(outfile), ("%03d/raw/a%02d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>99)     {snprintf(outfile, sizeof(outfile), ("%03d/raw/a%03d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>999)    {snprintf(outfile, sizeof(outfile), ("%03d/raw/a%04d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>9999)   {snprintf(outfile, sizeof(outfile), ("%03d/raw/a%05d.img"), (int)(k+1), (int)(kk+1));}
+			if (PN>99999)  {snprintf(outfile, sizeof(outfile), ("%03d/raw/a%06d.img"), (int)(k+1), (int)(kk+1));}
+//			if (PN>999999) {snprintf(outfile, sizeof(outfile), ("%03d/raw/a%07d.img"), (int)(k+1), (int)(kk+1));}
 #endif
 // open output file
 			if((fo  = fopen(outfile,"wb")) == NULL){
@@ -326,6 +342,7 @@ char	*argv[];
 // close files
 			fclose(fo);
 			free(outimg);
+			free(his.comment); his.comment = NULL;	/* 修正: 反復ごとのリーク防止 */
 
 			printf("%s\r",outfile);
 		}

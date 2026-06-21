@@ -33,12 +33,23 @@ static int StrCmp(char *s1, char *s2)
 
 #define LEN 2048
 
+/* セキュリティ修正: 要素数の積を size_t で計算し，オーバーフロー時は停止する */
+static size_t safe_count(size_t a, size_t b, size_t c)
+{
+    if (b != 0 && a > SIZE_MAX / b) goto over;
+    a *= b;
+    if (c != 0 && a > SIZE_MAX / c) goto over;
+    return a * c;
+over:
+    (void)fprintf(stderr, "size overflow in image allocation.\n"); exit(1);
+}
+
 static TIFF* OpenTiff(char *dir, char *name, int *Nx, int *Ny)
 {
     char path[LEN];
     TIFF *tif;
     
-    (void)sprintf(path, "%s/%s", dir, name);
+    if (snprintf(path, LEN, "%s/%s", dir, name) >= LEN) Error(dir, name, "path too long.");
     if ((tif = TIFFOpen(path, "r")) == NULL) Error(dir, name, "file not open.");
     
     // TIFF画像のサイズを取得
@@ -114,8 +125,14 @@ void InitReadHiPic(char *dir, HiPic *hp)
     OutputLog *OL;
     
     // 環境変数の読み込み
-    if ((env = getenv("RHP_O")) != NULL) (void)strcpy(output_log, env);
-    if ((env = getenv("RHP_D")) != NULL) (void)strcpy(dark_img, env);
+    if ((env = getenv("RHP_O")) != NULL){   /* 修正: 長さ検査付きコピー */
+        if (strlen(env) >= LEN) Error("", "RHP_O", "environment value too long.");
+        (void)snprintf(output_log, LEN, "%s", env);
+    }
+    if ((env = getenv("RHP_D")) != NULL){
+        if (strlen(env) >= LEN) Error("", "RHP_D", "environment value too long.");
+        (void)snprintf(dark_img, LEN, "%s", env);
+    }
     
     // TIFFファイルのパターンを設定
     (void)sprintf(q_img,
@@ -131,9 +148,9 @@ void InitReadHiPic(char *dir, HiPic *hp)
     
     while ((sd = readdir(Dir)) != NULL)
         if (*output_log == '\0' && !StrCmp(NAME, "output.log"))
-            (void)sprintf(output_log, "%s/%s", dir, NAME);
+            { if (snprintf(output_log, LEN, "%s/%s", dir, NAME) >= LEN) Error(dir, NAME, "path too long."); }
         else if (*dark_img == '\0' && !StrCmp(NAME, "dark.tif"))
-            (void)strcpy(dark_img, NAME);
+            (void)snprintf(dark_img, LEN, "%s", NAME);
         else if ((NAME[0] | 32) == q_img[0] &&
                  (l = (int)strlen(NAME)) > 5 &&
                  !StrCmp(NAME + l - 4, ".tif") &&
@@ -221,11 +238,11 @@ void InitReadHiPic(char *dir, HiPic *hp)
     if (hp->Ni == 0) Error(dir, q_img, "no file referred as I0-image.");
     if (hp->Nt == 0) Error(dir, q_img, "no file referred as I-image.");
     
-    if ((hp->D = MALLOC(WORD, hp->Ny * hp->Nx)) == NULL ||
+    if ((hp->D = MALLOC(WORD, safe_count((size_t)hp->Ny, (size_t)hp->Nx, 1))) == NULL ||
         (hp->I = MALLOC(WORD *, hp->Ni + (hp->Ni == 1))) == NULL ||
-        (*(hp->I) = MALLOC(WORD, hp->Ni * hp->Ny * hp->Nx)) == NULL ||
+        (*(hp->I) = MALLOC(WORD, safe_count((size_t)hp->Ni, (size_t)hp->Ny, (size_t)hp->Nx))) == NULL ||
         (hp->T = MALLOC(FOM *, hp->Ny)) == NULL ||
-        (*(hp->T) = MALLOC(FOM, hp->Ny * hp->Nx)) == NULL)
+        (*(hp->T) = MALLOC(FOM, safe_count((size_t)hp->Ny, (size_t)hp->Nx, 1))) == NULL)
         Error("", dir, "no memory for image data.");
     
     ReadTiff(dir, dark_img, hp->Nx, hp->Ny, hp->D);

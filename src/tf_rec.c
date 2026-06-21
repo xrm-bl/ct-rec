@@ -58,7 +58,7 @@ char	flhead[]   = "q";
 char	darkfile[] = "dark.tif";
 
 // output file name
-char	fn[15];
+char	fn[256];
 
 // flag for q001.img or q0001.img
 int		iFlag, nfq, BPS;
@@ -220,7 +220,7 @@ long		ln;
 	double		id_sum;
 	char		*env_bt;
 	FILE		*fi;
-	char		fname[15];
+	char		fname[1024];
 
 	env_bt = getenv("CT_REC_BLACK_THRESH");
 	if (env_bt != NULL){
@@ -245,16 +245,16 @@ long		ln;
 	for (j=0;j<NI0-1;++j){
 
 //IIO[j] and IIO[j+1] are opened
-		if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, II0[j]);
-		if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, II0[j]);
+		if(iFlag==0) snprintf(fname, sizeof(fname), "%s%03d.tif", flhead, II0[j]);
+		if(iFlag==1) snprintf(fname, sizeof(fname), "%s%04d.tif", flhead, II0[j]);
 		if ((i = Read16TiffFileLine(fname, 0)) != 0){
 			printf("something wrong -- return value is %d(II01)", i);
 			return -1;
 		}
 		for(i=0;i<N;++i) II01[i]=data[i];
 //		printf("\n");
-		if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, II0[j+1]);
-		if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, II0[j+1]);
+		if(iFlag==0) snprintf(fname, sizeof(fname), "%s%03d.tif", flhead, II0[j+1]);
+		if(iFlag==1) snprintf(fname, sizeof(fname), "%s%04d.tif", flhead, II0[j+1]);
 		if ((i = Read16TiffFileLine(fname, 0)) != 0){
 			printf("something wrong -- return value is %d(II02)", i);
 			return -1;
@@ -274,8 +274,8 @@ long		ln;
 		}
 		for (k=II0[j]+1;k<II0[j+1];++k){
 			// obtain p(x) from a[jx], b[jx] using shottime[k]
-			if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, k);
-			if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, k);
+			if(iFlag==0) snprintf(fname, sizeof(fname), "%s%03d.tif", flhead, k);
+			if(iFlag==1) snprintf(fname, sizeof(fname), "%s%04d.tif", flhead, k);
 			if ((i = Read16TiffFileLine(fname, 0)) != 0){
 				printf("something wrong -- return value is %d(I)", i);
 				return -1;
@@ -351,7 +351,7 @@ long	j, dx, dx0, N1;
 double	mm1, mx1, mm2, mx2;
 double	*p000, *p180, rsum, rd, rmsd0, rmsd;
 float	center;
-char		fname[15];
+char		fname[1024];
 
 // file name and data for calculation of rotation center (data[y][x])
 // odd = I_0, even = transmitted
@@ -361,8 +361,8 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 
 // read center file
 //I_0 file
-	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, 1);
-	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, 1);
+	if(iFlag==0) snprintf(fname, sizeof(fname), "%s%03d.tif", flhead, 1);
+	if(iFlag==1) snprintf(fname, sizeof(fname), "%s%04d.tif", flhead, 1);
 	if ((i = Read16TiffFileLine(fname, 0)) != 0){
 		printf("something wrong -- return value is %d(II01)", i);
 		return -1;
@@ -370,8 +370,8 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 	for(i=0;i<N;++i) cent_1[i]=data[i];
 
 // zero degree file(transmitted)
-	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, 3);
-	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, 3);
+	if(iFlag==0) snprintf(fname, sizeof(fname), "%s%03d.tif", flhead, 3);
+	if(iFlag==1) snprintf(fname, sizeof(fname), "%s%04d.tif", flhead, 3);
 	if ((i = Read16TiffFileLine(fname, 0)) != 0){
 		printf("something wrong -- return value is %d(II01)", i);
 		return -1;
@@ -379,8 +379,8 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 	for(i=0;i<N;++i) cent_2[i]=data[i];
 
 //I_0 file
-	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, n_total-1);
-	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, n_total-1);
+	if(iFlag==0) snprintf(fname, sizeof(fname), "%s%03d.tif", flhead, n_total-1);
+	if(iFlag==1) snprintf(fname, sizeof(fname), "%s%04d.tif", flhead, n_total-1);
 	if ((i = Read16TiffFileLine(fname, 0)) != 0){
 		printf("something wrong -- return value is %d(II01)", i);
 		return -1;
@@ -388,8 +388,8 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 	for(i=0;i<N;++i) cent_3[i]=data[i];
 
 //  180 degree file(transmitted)
-	if(iFlag==0) sprintf(fname, "%s%03d.tif", flhead, n_total);
-	if(iFlag==1) sprintf(fname, "%s%04d.tif", flhead, n_total);
+	if(iFlag==0) snprintf(fname, sizeof(fname), "%s%03d.tif", flhead, n_total);
+	if(iFlag==1) snprintf(fname, sizeof(fname), "%s%04d.tif", flhead, n_total);
 	if ((i = Read16TiffFileLine(fname, 0)) != 0){
 		printf("something wrong -- return value is %d(II01)", i);
 		return -1;

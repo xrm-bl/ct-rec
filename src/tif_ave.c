@@ -124,7 +124,7 @@ char	**argv;
 //		Read16TiffFile(argv[i],0);
 	    ReadImageFile(argv[i],&Nx,&Ny,&BPS,&cell,&desc);
 		if (i==1){
-			sumdata = (long *) malloc(Nx*Ny*sizeof(long));
+			sumdata = (long *) malloc((size_t)Nx*Ny*sizeof(long));
 			for(jj=0;jj<Nx*Ny;++jj) *(sumdata+jj)=0;
 		}
 		printf("read %s\t%d\t%d\r",argv[i],Nx,Ny);
@@ -143,7 +143,7 @@ char	**argv;
 
 
 // initialize outimg
-	outimg = (unsigned short *)malloc(Nx*Ny*sizeof(short));
+	outimg = (unsigned short *)malloc((size_t)Nx*Ny*sizeof(short));
 	jj=0;
 	for (vv=0; vv<Ny; vv++){			// vertical loop (in reconstructed image)
 		for (hh=0; hh<Nx; hh++){		// horizontal loop

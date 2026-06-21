@@ -39,7 +39,7 @@
 /*----------------------------------------------------------------------*/
 struct HiPic_Header{
 	char			head[2];
-	short			comment_length;
+	unsigned short			comment_length;
 	short			width;
 	short			height;
 	short			x_offset;
@@ -75,7 +75,7 @@ char	flhead[]   = "q";
 char	darkfile[] = "dark.img";
 
 // output file name
-char	fn[15];
+char	fn[256];
 
 // flag for q001.img or q0001.img
 int		iFlag;
@@ -106,14 +106,14 @@ int read_hipic(int nfq, short *data, Header *h, long ln)
 {
 	int		j, i_res;
 	FILE	*fi;
-	char	fname[20];
+	char	fname[1024];
 
 	if(nfq==0){
-		sprintf(fname,"%s",darkfile);
+		snprintf(fname, sizeof(fname),"%s",darkfile);
 	}
 	else{
-		if(iFlag==0) sprintf(fname, "%s%03d.img", flhead, nfq);
-		if(iFlag==1) sprintf(fname, "%s%04d.img", flhead, nfq);
+		if(iFlag==0) snprintf(fname, sizeof(fname), "%s%03d.img", flhead, nfq);
+		if(iFlag==1) snprintf(fname, sizeof(fname), "%s%04d.img", flhead, nfq);
 	}
 	
 //open input files

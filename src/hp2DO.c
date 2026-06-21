@@ -274,7 +274,7 @@ static void StoreTiffFile(const char *path, int width, int height,
     if (desc != NULL && strlen(desc) > 0)
         TIFFSetField(tif, TIFFTAG_IMAGEDESCRIPTION, desc);
 
-    buf = (uint16_t *)_TIFFmalloc(width * sizeof(uint16_t));
+    buf = (uint16_t *)_TIFFmalloc((size_t)width * sizeof(uint16_t));
     if (buf == NULL) {
         fprintf(stderr, "%s : memory allocation error.\n", path);
         TIFFClose(tif);

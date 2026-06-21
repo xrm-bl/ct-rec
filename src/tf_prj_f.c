@@ -148,7 +148,7 @@ int StoreProjection(char *dirin, char *dirout)
 	double		t1, t2;
 	double		*a, *b;
 	char		path[2048];
-	char		fname[20];
+	char		fname[1024];
 	double		I01, I02;
 
 	double		*po;
@@ -163,9 +163,9 @@ int StoreProjection(char *dirin, char *dirout)
 	Cell	**cell;
 
 // p initialization
-	po = (double *)malloc(Nx*Ny*sizeof(double));
-	a  = (double *)malloc(Nx*Ny*sizeof(double));
-	b  = (double *)malloc(Nx*Ny*sizeof(double));
+	po = (double *)malloc((size_t)Nx*Ny*sizeof(double));
+	a  = (double *)malloc((size_t)Nx*Ny*sizeof(double));
+	b  = (double *)malloc((size_t)Nx*Ny*sizeof(double));
 
 	if ((data32 = (float*)malloc(sizeof(float)*Nx*Ny)) == NULL) {
 		printf("cannot allocate memory for input 32bit TIFF image\n");
@@ -183,9 +183,9 @@ int StoreProjection(char *dirin, char *dirout)
 //		printf("j %d\n",j);
 
 //IIO[j] and IIO[j+1] are opened
-		if(iFlag==0) sprintf(fname, "%s/q%03d.tif", dirin, II0[j]);
-		if(iFlag==1) sprintf(fname, "%s/q%04d.tif", dirin, II0[j]);
-		if(iFlag==2) sprintf(fname, "%s/q%05d.tif", dirin, II0[j]);
+		if(iFlag==0) snprintf(fname, sizeof(fname), "%s/q%03d.tif", dirin, II0[j]);
+		if(iFlag==1) snprintf(fname, sizeof(fname), "%s/q%04d.tif", dirin, II0[j]);
+		if(iFlag==2) snprintf(fname, sizeof(fname), "%s/q%05d.tif", dirin, II0[j]);
 		ReadImageFile(fname,&Nx,&Ny,&BPS,&cell,&desc);
 		for(jy=0;jy<Ny;++jy){
 			for(jx=0;jx<Nx;++jx){
@@ -195,9 +195,9 @@ int StoreProjection(char *dirin, char *dirout)
 		for (jy=0; jy<Ny ; jy++) free(cell[jy]);
 		free(cell);
 		
-		if(iFlag==0) sprintf(fname, "%s/q%03d.tif", dirin, II0[j+1]);
-		if(iFlag==1) sprintf(fname, "%s/q%04d.tif", dirin, II0[j+1]);
-		if(iFlag==2) sprintf(fname, "%s/q%05d.tif", dirin, II0[j+1]);
+		if(iFlag==0) snprintf(fname, sizeof(fname), "%s/q%03d.tif", dirin, II0[j+1]);
+		if(iFlag==1) snprintf(fname, sizeof(fname), "%s/q%04d.tif", dirin, II0[j+1]);
+		if(iFlag==2) snprintf(fname, sizeof(fname), "%s/q%05d.tif", dirin, II0[j+1]);
 		ReadImageFile(fname,&Nx,&Ny,&BPS,&cell,&desc);
 		for(jy=0;jy<Ny;++jy){
 			for(jx=0;jx<Nx;++jx){
@@ -222,9 +222,9 @@ int StoreProjection(char *dirin, char *dirout)
 		for ( k = II0[j] + 1; k < II0[j+1]; ++k){
 //			fprintf(stderr, "%d\r",k);
 			// obtain p(x) from a[jx], b[jx] using shottime[k]
-			if(iFlag==0) sprintf(fname, "%s/q%03d.tif", dirin, k);
-			if(iFlag==1) sprintf(fname, "%s/q%04d.tif", dirin, k);
-			if(iFlag==2) sprintf(fname, "%s/q%05d.tif", dirin, k);
+			if(iFlag==0) snprintf(fname, sizeof(fname), "%s/q%03d.tif", dirin, k);
+			if(iFlag==1) snprintf(fname, sizeof(fname), "%s/q%04d.tif", dirin, k);
+			if(iFlag==2) snprintf(fname, sizeof(fname), "%s/q%05d.tif", dirin, k);
 			ReadImageFile(fname,&Nx,&Ny,&BPS,&cell,&desc);
 //			printf("k %d %s\n",k,fname);
 			Is =0.0;
@@ -323,7 +323,7 @@ char	**argv;
 //	double		Clock;					// timer setting
 	int			i, jx, jy;
 //	FILE		*fo;
-	char		darkfile[100];
+	char		darkfile[1024];
 
 		Cell	**cell;
 
@@ -353,10 +353,10 @@ char	**argv;
 //	printf("%s/dark.tif\n",argv[1]);
 
 // read dark image
-	sprintf(darkfile,"%s/dark.tif",argv[1]);
+	snprintf(darkfile, sizeof(darkfile),"%s/dark.tif",argv[1]);
 	ReadImageFile(darkfile,&Nx,&Ny,&BPS,&cell,&desc);
 	fprintf(stderr, "Nx, Ny= %d %d \n", Nx,Ny);
-	dark = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
+	dark = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
 	for(jy=0;jy<Ny;++jy){
 		for(jx=0;jx<Nx;++jx){
 			*(dark+Nx*jy+jx)=cell[jy][jx];
@@ -365,10 +365,10 @@ char	**argv;
 	for (jy=0; jy<Ny ; jy++) free(cell[jy]);
 	free(cell);
 
-	II01 = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
-	II02 = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
-	I    = (unsigned short *) malloc(Nx*Ny*sizeof(unsigned short));
-	I0   = (double *) malloc(Nx*Ny*sizeof(double));
+	II01 = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
+	II02 = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
+	I    = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
+	I0   = (double *) malloc((size_t)Nx*Ny*sizeof(double));
 //	fprintf(stderr, "Nx, Ny= %d %d \n", Nx,Ny);
 
 	if((i=StoreProjection(argv[1], argv[2])) !=0){

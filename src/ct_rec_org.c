@@ -25,7 +25,7 @@
 /*----------------------------------------------------------------------*/
 struct HiPic_Header{
 	char			head[2];
-	short			comment_length;
+	unsigned short			comment_length;
 	short			width;
 	short			height;
 	short			x_offset;
@@ -61,7 +61,7 @@ char	flhead[]   = "q";
 char	darkfile[] = "dark.img";
 
 // output file name
-char	fn[15];
+char	fn[256];
 
 // flag for q001.img or q0001.img
 int		iFlag;
@@ -92,14 +92,14 @@ int read_hipic(int nfq, short *data, Header *h, long ln)
 {
 	int		j, i_res;
 	FILE	*fi;
-	char	fname[20];
+	char	fname[1024];
 
 	if(nfq==0){
-		sprintf(fname,"%s",darkfile);
+		snprintf(fname, sizeof(fname),"%s",darkfile);
 	}
 	else{
-		if(iFlag==0) sprintf(fname, "%s%03d.img", flhead, nfq);
-		if(iFlag==1) sprintf(fname, "%s%04d.img", flhead, nfq);
+		if(iFlag==0) snprintf(fname, sizeof(fname), "%s%03d.img", flhead, nfq);
+		if(iFlag==1) snprintf(fname, sizeof(fname), "%s%04d.img", flhead, nfq);
 	}
 	
 //open input files
@@ -464,7 +464,7 @@ char	**argv;
 	double		r0;
 	int			vv, hh, jx;			// 
 	char	*comm = NULL;
-	char	fout[15];
+	char	fout[1024];
 	long	val, j;
 	int	ifilter;
 	FOM			**fom;
@@ -611,7 +611,7 @@ char	**argv;
 //	printf("%f\t%f\t%d\t%f\t%f\t%f",f_size, f_center, M, theta0, (float)data_max, (float)data_min);
 	//sprintf(desc, "%lf\t%lf\n%d\t%lf\n%lf\t%lf\n%lf\t%lf", delta, r0, M, theta0, f1, f2, f0, df);
 
-	(void)sprintf(fout, "rec%05d.tif", (int)s_layer);
+	(void)snprintf(fout, sizeof(fout), "rec%05d.tif", (int)s_layer);
 //	printf("%s\r",fout);
 	StoreImageFile_Float(fout,N,N,fom,comm);
 	for(vv=0;vv<N;++vv){

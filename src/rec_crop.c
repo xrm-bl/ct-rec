@@ -112,7 +112,7 @@ int	main(int argc, char *argv[])
 	double	d_min, d_max, ccc, dmd, dmmin, dmmax;
 	long	val;
 	double	base, div;
-	char	fh[25], fo[25], wdesc[300];
+	char	fh[1024], fo[25], wdesc[300];
 	unsigned short	swid;
 	float	*dataout;
 	int		m, n;
@@ -124,7 +124,7 @@ int	main(int argc, char *argv[])
 		l_sta = -1;
 		l_dst = -1;
 		for (i = 0; i<99999; i++) {
-			sprintf(fh, "%s/rec%05ld.tif", argv[1], i);
+			snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[1], i);
 //						fprintf(stderr,"%s\r",fh);
 			if (existFile(fh)) {
 				if (l_sta == -1) {
@@ -172,7 +172,7 @@ int	main(int argc, char *argv[])
 	dataout = (float*)malloc(sizeof(float)*cNx*cNy);
 
 	for (i = l_sta; i < l_dst + 1; ++i) {
-		sprintf(fh, "%s/rec%05ld.tif", argv[1], i);
+		snprintf(fh, sizeof(fh), "%s/rec%05ld.tif", argv[1], i);
 		fprintf(stderr, "%s -> ", fh);
 		Read32TiffFile(fh,0);
 //		if (ReadImageFile_Float(fh,&Nx,&Ny,&F,&desc))
