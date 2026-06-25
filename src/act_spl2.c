@@ -1,4 +1,4 @@
-// program spl.c
+ï»¿// program spl.c
 
 /*----------------------------------------------------------------------*/
 #include <stdio.h>
@@ -21,14 +21,14 @@ char        *msg;
 void replace_in_file(const char *filename, const char *search, const char *replace) {
 	FILE *file = fopen(filename, "r");
 	if (!file) {
-		perror("ƒtƒ@ƒCƒ‹‚ðŠJ‚¯‚Ü‚¹‚ñ‚Å‚µ‚½");
+		perror("ãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ã‘ã¾ã›ã‚“ã§ã—ãŸ");
 		return;
 	}
 
 	char temp_filename[] = "temp.txt";
 	FILE *temp_file = fopen(temp_filename, "w");
 	if (!temp_file) {
-		perror("ˆêŽžƒtƒ@ƒCƒ‹‚ðì¬‚Å‚«‚Ü‚¹‚ñ‚Å‚µ‚½");
+		perror("ä¸€æ™‚ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ä½œæˆã§ãã¾ã›ã‚“ã§ã—ãŸ");
 		fclose(file);
 		return;
 	}
@@ -39,7 +39,7 @@ void replace_in_file(const char *filename, const char *search, const char *repla
 		while ((pos = strstr(buffer, search)) != NULL) {
 			*pos = '\0';
 			fprintf(temp_file, "%s%s", buffer, replace);
-			strcpy(buffer, pos + strlen(search));
+			memmove(buffer, pos + strlen(search), strlen(pos + strlen(search)) + 1);
 		}
 		fprintf(temp_file, "%s", buffer);
 	}
@@ -61,7 +61,7 @@ char	**argv;
 	int	L, M, N;
 	long	KK, k;
 
-	char    command[50];
+	char    command[512];
 
 // parameter setting
 	gk=0;
@@ -86,42 +86,42 @@ char	**argv;
 #ifdef WINDOWS
 	replace_in_file("conv.bat", "img", "tif");
 #else
-	sprintf(command, "sed -i -e 's/\r//g' conv.bat");				// CRLF -> LF
+	snprintf(command, sizeof(command), "sed -i -e 's/\r//g' conv.bat");				// CRLF -> LF
 	if (system(command) == -1) {printf("command error at conv.\n");}
-	sprintf(command, "sed -i -e 's/img/tif/g' conv.bat");			// img -> tif
+	snprintf(command, sizeof(command), "sed -i -e 's/img/tif/g' conv.bat");			// img -> tif
 	if (system(command) == -1) {printf("command error at conv.\n");}
-	sprintf(command, "sed -i -e 's/ren/mv/g' conv.bat");			// ren -> mv
+	snprintf(command, sizeof(command), "sed -i -e 's/ren/mv/g' conv.bat");			// ren -> mv
 	if (system(command) == -1) {printf("command error at conv.\n");}
-	sprintf(command, "sed -i -e 's/copy/cp/g' conv.bat");			// copy -> cp
+	snprintf(command, sizeof(command), "sed -i -e 's/copy/cp/g' conv.bat");			// copy -> cp
 	if (system(command) == -1) {printf("command error at conv.\n");}
 
-	sprintf(command, "tail -n 1 output.log | cut -c28-35 > lastangle.dat");
+	snprintf(command, sizeof(command), "tail -n 1 output.log | cut -c28-35 > lastangle.dat");
 	if (system(command) == -1) {printf("command error at lastangle.\n");}
 	
 #endif
 
 	for(j=1;j<M+1;++j){
 		#ifdef WINDOWS
-		sprintf(command, "mkdir %03d", j); printf("%s\n",command);
+		snprintf(command, sizeof(command), "mkdir %03d", j); printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j); }
-		sprintf(command, "mkdir %03d\\raw", j);printf("%s\n",command);
+		snprintf(command, sizeof(command), "mkdir %03d\\raw", j);printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j); }
-		sprintf(command, "copy conv.bat %03d\\raw", j);printf("%s\n",command);
+		snprintf(command, sizeof(command), "copy conv.bat %03d\\raw", j);printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j); }
-		sprintf(command, "copy output.log %03d\\raw", j);printf("%s\n",command);
+		snprintf(command, sizeof(command), "copy output.log %03d\\raw", j);printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j); }
-//		sprintf(command, "copy lastangle.dat %03d\\raw", j);printf("%s\n"command);
+//		snprintf(command, sizeof(command), "copy lastangle.dat %03d\\raw", j);printf("%s\n"command);
 //		if (system(command) == -1) {printf("command error at %d\n",j); }
 		#else
-		sprintf(command, "mkdir %03d", j); printf("%s\n",command);
+		snprintf(command, sizeof(command), "mkdir %03d", j); printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j);}
-		sprintf(command, "mkdir %03d/raw", j); printf("%s\n",command);
+		snprintf(command, sizeof(command), "mkdir %03d/raw", j); printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j);}
-		sprintf(command, "cp conv.bat %03d/raw", j); printf("%s\n",command);
+		snprintf(command, sizeof(command), "cp conv.bat %03d/raw", j); printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j);}
-		sprintf(command, "cp output.log %03d/raw", j); printf("%s\n",command);
+		snprintf(command, sizeof(command), "cp output.log %03d/raw", j); printf("%s\n",command);
 		if (system(command) == -1) {printf("command error at %d\n",j);}
-//		sprintf(command, "cp lastangle.dat %03d/raw", j); printf("%s\n",command);
+//		snprintf(command, sizeof(command), "cp lastangle.dat %03d/raw", j); printf("%s\n",command);
 //		if (system(command) == -1) {printf("command error at %d\n",j);}
 		#endif
 	}
@@ -131,14 +131,14 @@ char	**argv;
 		for(l=1;l<L+1;++l){
 			k=k+1;
 			#ifdef WINDOWS
-			if (L>99)   {sprintf(command, "start /b tif_mgf a%06ld.tif %03d\\raw\\a%03d.tif %d %f", k,j,l,mk,gk);}
-			if (L>999)  {sprintf(command, "start /b tif_mgf a%06ld.tif %03d\\raw\\a%04d.tif %d %f", k,j,l,mk,gk);}
-			if (L>9999) {sprintf(command, "start /b tif_mgf a%06ld.tif %03d\\raw\\a%05d.tif %d %f", k,j,l,mk,gk);}
+			if (L>99)   {snprintf(command, sizeof(command), "start /b tif_mgf a%06ld.tif %03d\\raw\\a%03d.tif %d %f", k,j,l,mk,gk);}
+			if (L>999)  {snprintf(command, sizeof(command), "start /b tif_mgf a%06ld.tif %03d\\raw\\a%04d.tif %d %f", k,j,l,mk,gk);}
+			if (L>9999) {snprintf(command, sizeof(command), "start /b tif_mgf a%06ld.tif %03d\\raw\\a%05d.tif %d %f", k,j,l,mk,gk);}
 			if (system(command) == -1) {printf("command error at tif %d\n",k); }
 			#else
-			if (L>99)   {sprintf(command, "tif_mgf a%06ld.tif %03d/raw/a%03d.tif %d %f", k,j,l,mk,gk);}
-			if (L>999)  {sprintf(command, "tif_mgf a%06ld.tif %03d/raw/a%04d.tif %d %f", k,j,l,mk,gk);}
-			if (L>9999) {sprintf(command, "tif_mgf a%06ld.tif %03d/raw/a%05d.tif %d %f", k,j,l,mk,gk);}
+			if (L>99)   {snprintf(command, sizeof(command), "tif_mgf a%06ld.tif %03d/raw/a%03d.tif %d %f", k,j,l,mk,gk);}
+			if (L>999)  {snprintf(command, sizeof(command), "tif_mgf a%06ld.tif %03d/raw/a%04d.tif %d %f", k,j,l,mk,gk);}
+			if (L>9999) {snprintf(command, sizeof(command), "tif_mgf a%06ld.tif %03d/raw/a%05d.tif %d %f", k,j,l,mk,gk);}
 			if (system(command) == -1) {printf("command error at tif %d\n",k); }
 			#endif
 			printf("%s\r",command);

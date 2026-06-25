@@ -1,4 +1,4 @@
-/*
+﻿/*
  * tif_wvd_g.cu - 3D Wavelet Denoising for TIFF Image Stacks (CUDA)
  *
  * Algorithm: 3D Haar Discrete Wavelet Transform + BayesShrink soft thresholding

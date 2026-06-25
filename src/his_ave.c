@@ -1,4 +1,4 @@
-/* split HIS format file to img files  */
+ï»¿/* split HIS format file to img files  */
 /* usage is 'his2tif inputfile (head)' */
 
 #include<stdio.h>
@@ -130,7 +130,7 @@ HISHeader	*his;
 
 // read comment and image data from file1
 	if (fread(his, sizeof(char), HIS_Header_Size, fi) != HIS_Header_Size){
-		fprintf(stderr, "EOF in input file (header)\n"); return(-1); /* C³: ƒtƒ@ƒCƒ‹—R—ˆƒ|ƒCƒ“ƒ^‚ð free ‚µ‚È‚¢ */
+		fprintf(stderr, "EOF in input file (header)\n"); return(-1); /* ä¿®æ­£: ãƒ•ã‚¡ã‚¤ãƒ«ç”±æ¥ãƒã‚¤ãƒ³ã‚¿ã‚’ free ã—ãªã„ */
 	}
 	if (strncmp(his->head, "IM", 2)){
 		fclose(fi); free(his->comment);

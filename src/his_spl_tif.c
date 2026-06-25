@@ -1,4 +1,4 @@
-/* split HIS format file to img files  */
+ï»¿/* split HIS format file to img files  */
 /* usage is 'his_spl_E inputfile partnum loopnum' */
 
 #include<stdio.h>
@@ -120,7 +120,7 @@ HISHeader	*his;
 
 // read comment and image data from file1
 	if (fread(his, sizeof(char), HIS_Header_Size, fi) != HIS_Header_Size){
-		fprintf(stderr, "EOF in input file (header)\n"); return(-1); /* C³: ƒtƒ@ƒCƒ‹—R—ˆƒ|ƒCƒ“ƒ^‚ð free ‚µ‚È‚¢ */
+		fprintf(stderr, "EOF in input file (header)\n"); return(-1); /* ä¿®æ­£: ãƒ•ã‚¡ã‚¤ãƒ«ç”±æ¥ãƒã‚¤ãƒ³ã‚¿ã‚’ free ã—ãªã„ */
 	}
 //	if (strncmp(his->head, "IM", 2)){
 //		fclose(fi); free(his->comment);
@@ -225,7 +225,7 @@ char	*argv[];
 	}
 	if (his.width <= 0 || his.height <= 0){ fprintf(stderr,"error: bad image size %d x %d\n", his.width, his.height); free(his.comment); return(-1); }
 	i_end=his.n_image1+65536*his.n_image2;
-	if(his.type==6) printf("12 bits %ld images\n", i_end); /* ŠÔˆá‚¦‚Ä‚È‚¢‚©H*/
+	if(his.type==6) printf("12 bits %ld images\n", i_end); /* é–“é•ãˆã¦ãªã„ã‹ï¼Ÿ*/
 	if(his.type==2) printf("16 bits %ld images\n", i_end);
 	if(his.type==0) printf("8  bits %ld images\n", i_end);
 

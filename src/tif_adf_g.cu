@@ -1,4 +1,4 @@
-/*
+﻿/*
  * tif_adf_g.cu - 3D Anisotropic Diffusion Filter for TIFF Image Stacks (CUDA)
  *
  * Algorithm: Perona-Malik anisotropic diffusion (3D extension)
