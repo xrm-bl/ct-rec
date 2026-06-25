@@ -64,6 +64,11 @@ jar cf ..\%JARNAME% @_jarfiles.txt
 del _jarfiles.txt
 cd ..
 
+REM --- Copy install artifacts one level up (imagej-plugins\) ---
+echo Copying artifacts to parent directory...
+copy /Y %JARNAME% ..\%JARNAME% >nul
+copy /Y %BUILDDIR%\HandleExtraFileTypes.class ..\HandleExtraFileTypes.class >nul
+
 echo.
 echo ============================================================
 echo  Build complete: %JARNAME%

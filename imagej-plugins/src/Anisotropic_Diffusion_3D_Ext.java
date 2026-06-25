@@ -10,6 +10,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.io.FileSaver;
 import ij.plugin.FolderOpener;
 import ij.plugin.filter.PlugInFilter;
@@ -58,7 +59,7 @@ public class Anisotropic_Diffusion_3D_Ext implements PlugInFilter {
     }
 
     private boolean showDialog() {
-        GenericDialog gd = new GenericDialog("3D Anisotropic Diffusion (External GPU)");
+        GenericDialog gd = new NonBlockingGenericDialog("3D Anisotropic Diffusion (External GPU)");
         gd.addNumericField("Iterations:", iterations, 0);
         gd.addNumericField("K (edge threshold, -1=auto):", K, 2);
         gd.addNumericField("dt (time step, <1/6):", dt, 3);

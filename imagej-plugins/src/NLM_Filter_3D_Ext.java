@@ -10,6 +10,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.io.FileSaver;
 import ij.plugin.FolderOpener;
 import ij.plugin.filter.PlugInFilter;
@@ -62,7 +63,7 @@ public class NLM_Filter_3D_Ext implements PlugInFilter {
     }
 
     private boolean showDialog() {
-        GenericDialog gd = new GenericDialog("3D NLM Filter (External GPU)");
+        GenericDialog gd = new NonBlockingGenericDialog("3D NLM Filter (External GPU)");
         gd.addNumericField("Patch radius (1-5):", patchRadius, 0);
         gd.addNumericField("Search radius (1-15):", searchRadius, 0);
         gd.addNumericField("h (filtering strength, -1=auto):", h, 1);

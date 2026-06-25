@@ -10,6 +10,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.io.FileSaver;
 import ij.plugin.FolderOpener;
 import ij.plugin.filter.PlugInFilter;
@@ -57,7 +58,7 @@ public class BM4D_Filter_3D_Ext implements PlugInFilter {
     }
 
     private boolean showDialog() {
-        GenericDialog gd = new GenericDialog("3D BM4D Filter (External GPU)");
+        GenericDialog gd = new NonBlockingGenericDialog("3D BM4D Filter (External GPU)");
         gd.addNumericField("Block radius (1-4):", blockRadius, 0);
         gd.addNumericField("Search radius (1-10):", searchRadius, 0);
         gd.addNumericField("Sigma (noise std, -1=auto):", sigma, 2);

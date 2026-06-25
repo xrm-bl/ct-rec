@@ -10,6 +10,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.io.FileSaver;
 import ij.plugin.FolderOpener;
 import ij.plugin.filter.PlugInFilter;
@@ -56,7 +57,7 @@ public class TV_Denoise_3D_Ext implements PlugInFilter {
     }
 
     private boolean showDialog() {
-        GenericDialog gd = new GenericDialog("3D TV Denoising (External GPU)");
+        GenericDialog gd = new NonBlockingGenericDialog("3D TV Denoising (External GPU)");
         gd.addNumericField("Lambda (-1=auto, larger=less denoising):", lambda, 2);
         gd.addNumericField("Iterations:", iterations, 0);
         gd.addStringField("Custom executable path:", customExePath, 40);

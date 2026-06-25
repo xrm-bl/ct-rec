@@ -11,6 +11,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.filter.ExtendedPlugInFilter;
 import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.ImageProcessor;
@@ -38,7 +39,7 @@ public class Wavelet_Denoise_2D implements ExtendedPlugInFilter, DialogListener 
 
     @Override
     public int showDialog(ImagePlus imp, String command, PlugInFilterRunner pfr) {
-        GenericDialog gd = new GenericDialog("2D Wavelet Denoising (Haar + BayesShrink)");
+        GenericDialog gd = new NonBlockingGenericDialog("2D Wavelet Denoising (Haar + BayesShrink)");
         gd.addNumericField("Decomposition levels (1-5):", levels, 0);
         gd.addNumericField("Threshold scale:", thresholdScale, 2);
         gd.addMessage(">1.0 = stronger denoising, <1.0 = less denoising\n\n"

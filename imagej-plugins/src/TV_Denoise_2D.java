@@ -11,6 +11,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.filter.ExtendedPlugInFilter;
 import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.ImageProcessor;
@@ -37,7 +38,7 @@ public class TV_Denoise_2D implements ExtendedPlugInFilter, DialogListener {
 
     @Override
     public int showDialog(ImagePlus imp, String command, PlugInFilterRunner pfr) {
-        GenericDialog gd = new GenericDialog("2D Total Variation Denoising");
+        GenericDialog gd = new NonBlockingGenericDialog("2D Total Variation Denoising");
         gd.addNumericField("Lambda (larger=less denoising):", lambda, 2);
         gd.addNumericField("Iterations:", iterations, 0);
         gd.addMessage("Lambda: 1-5=strong, 5-20=standard, 20-100=weak\n\n"

@@ -12,6 +12,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.filter.ExtendedPlugInFilter;
 import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.ImageProcessor;
@@ -42,7 +43,7 @@ public class Gaussian_Filter_2D implements ExtendedPlugInFilter, DialogListener 
 
     @Override
     public int showDialog(ImagePlus imp, String command, PlugInFilterRunner pfr) {
-        GenericDialog gd = new GenericDialog("2D Gaussian Filter");
+        GenericDialog gd = new NonBlockingGenericDialog("2D Gaussian Filter");
         gd.addNumericField("Sigma:", sigma, 2);
         gd.addMessage("Kernel size: auto-calculated as 2*ceil(3*sigma)+1\n\n"
                 + "Tip: Use Image > Adjust > Brightness/Contrast (Ctrl+Shift+C)\n"

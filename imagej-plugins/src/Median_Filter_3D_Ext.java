@@ -13,6 +13,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.io.FileSaver;
 import ij.plugin.FolderOpener;
 import ij.plugin.filter.PlugInFilter;
@@ -83,7 +84,7 @@ public class Median_Filter_3D_Ext implements PlugInFilter {
     }
 
     private boolean showDialog() {
-        GenericDialog gd = new GenericDialog("3D Median Filter (External)");
+        GenericDialog gd = new NonBlockingGenericDialog("3D Median Filter (External)");
         gd.addCheckbox("Use GPU (CUDA) version", useGpu);
         gd.addNumericField("Kernel size (odd, 3-21):", kernelSize, 0);
         gd.addStringField("Custom executable path (optional):", customExePath, 40);

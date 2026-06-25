@@ -12,6 +12,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.filter.ExtendedPlugInFilter;
 import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.ImageProcessor;
@@ -41,7 +42,7 @@ public class Median_Filter_2D implements ExtendedPlugInFilter, DialogListener {
 
     @Override
     public int showDialog(ImagePlus imp, String command, PlugInFilterRunner pfr) {
-        GenericDialog gd = new GenericDialog("2D Median Filter");
+        GenericDialog gd = new NonBlockingGenericDialog("2D Median Filter");
         gd.addNumericField("Kernel size (odd, 3-21):", kernelSize, 0);
         gd.addMessage("Tip: Use Image > Adjust > Brightness/Contrast (Ctrl+Shift+C)\n"
                 + "during preview to check filter effect.\n"

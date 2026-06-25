@@ -9,6 +9,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.filter.ExtendedPlugInFilter;
 import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.ImageProcessor;
@@ -42,7 +43,7 @@ public class NLM_Filter_2D implements ExtendedPlugInFilter, DialogListener {
     public int showDialog(ImagePlus imp, String command, PlugInFilterRunner pfr) {
         if (h <= 0) h = estimateDefaultH(imp);
 
-        GenericDialog gd = new GenericDialog("2D Non-Local Means Filter");
+        GenericDialog gd = new NonBlockingGenericDialog("2D Non-Local Means Filter");
         gd.addNumericField("Patch radius (1-5):", patchRadius, 0);
         gd.addNumericField("Search radius (1-15):", searchRadius, 0);
         gd.addNumericField("h (filtering strength):", h, 1);

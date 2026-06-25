@@ -11,6 +11,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.filter.ExtendedPlugInFilter;
 import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.ImageProcessor;
@@ -42,7 +43,7 @@ public class BM3D_Filter_2D implements ExtendedPlugInFilter, DialogListener {
     public int showDialog(ImagePlus imp, String command, PlugInFilterRunner pfr) {
         if (sigma <= 0) sigma = estimateSigma(imp);
 
-        GenericDialog gd = new GenericDialog("2D BM3D Filter (Simplified)");
+        GenericDialog gd = new NonBlockingGenericDialog("2D BM3D Filter (Simplified)");
         gd.addNumericField("Block radius (1-4):", blockRadius, 0);
         gd.addNumericField("Search radius (1-10):", searchRadius, 0);
         gd.addNumericField("Sigma (noise std):", sigma, 2);

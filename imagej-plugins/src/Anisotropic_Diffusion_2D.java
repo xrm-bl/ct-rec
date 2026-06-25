@@ -10,6 +10,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.plugin.filter.ExtendedPlugInFilter;
 import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.ImageProcessor;
@@ -41,7 +42,7 @@ public class Anisotropic_Diffusion_2D implements ExtendedPlugInFilter, DialogLis
     public int showDialog(ImagePlus imp, String command, PlugInFilterRunner pfr) {
         if (K <= 0) K = estimateK(imp);
 
-        GenericDialog gd = new GenericDialog("2D Anisotropic Diffusion (Perona-Malik)");
+        GenericDialog gd = new NonBlockingGenericDialog("2D Anisotropic Diffusion (Perona-Malik)");
         gd.addNumericField("Iterations:", iterations, 0);
         gd.addNumericField("K (edge threshold):", K, 2);
         gd.addNumericField("dt (time step, <0.25):", dt, 3);

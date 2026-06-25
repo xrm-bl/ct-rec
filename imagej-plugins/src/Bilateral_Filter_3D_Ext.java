@@ -13,6 +13,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
 import ij.gui.GenericDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.io.FileSaver;
 import ij.plugin.FolderOpener;
 import ij.plugin.filter.PlugInFilter;
@@ -91,7 +92,7 @@ public class Bilateral_Filter_3D_Ext implements PlugInFilter {
         double defaultIntensitySigma = getDefaultIntensitySigma(imp);
         if (intensitySigma <= 0) intensitySigma = defaultIntensitySigma;
 
-        GenericDialog gd = new GenericDialog("3D Bilateral Filter (External)");
+        GenericDialog gd = new NonBlockingGenericDialog("3D Bilateral Filter (External)");
         gd.addCheckbox("Use GPU (CUDA) version", useGpu);
         gd.addNumericField("Kernel size (odd, 3-21):", kernelSize, 0);
         gd.addNumericField("Spatial sigma:", spatialSigma, 2);
