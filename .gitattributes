@@ -1,0 +1,17 @@
+# 既定はテキスト自動判定
+*           text=auto
+
+# Windows バッチは CRLF を保持
+*.bat       text eol=crlf
+
+# C/CUDA ソースは LF に寄せる(BOM は内容なので git は触らない)
+*.c   text eol=lf
+*.h   text eol=lf
+*.cu  text eol=lf
+
+# バイナリは正規化させない
+*.exe binary
+*.jar binary
+*.class binary
+*.lib binary
+*.pdf binary
