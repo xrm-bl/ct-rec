@@ -9,6 +9,7 @@
  */
 
 import ij.IJ;
+import ij.ImageListener;
 import ij.ImagePlus;
 import ij.gui.DialogListener;
 import ij.gui.GenericDialog;
@@ -18,9 +19,12 @@ import ij.plugin.filter.PlugInFilterRunner;
 import ij.process.ImageProcessor;
 
 import java.awt.AWTEvent;
+import java.awt.EventQueue;
+
+import javax.swing.Timer;
 import java.util.Arrays;
 
-public class Median_Filter_2D implements ExtendedPlugInFilter, DialogListener {
+public class Median_Filter_2D implements ExtendedPlugInFilter, DialogListener, ImageListener {
 
     private static final int FLAGS = DOES_8G | DOES_16 | DOES_32 | KEEP_PREVIEW
             | PARALLELIZE_STACKS | FINAL_PROCESSING;
@@ -28,6 +32,19 @@ public class Median_Filter_2D implements ExtendedPlugInFilter, DialogListener {
     private ImagePlus imp;
     private int nPasses = 1;
     private int kernelSize = 3;
+
+    /* Preserve the user-set display range (contrast) across preview on/off and
+     * Cancel. ImageProcessor.snapshot()/reset() also save & restore min/max, so
+     * the runner's reset() on preview toggle (or the Cancel cleanup) would
+     * otherwise revert the contrast.
+     *   keepMin/keepMax - the contrast to preserve (tracks the user's changes)
+     *   origMin/origMax - the snapshot range that reset() reverts to */
+    private double keepMin, keepMax;
+    private double origMin, origMax;
+    private boolean rangeValid = false;
+    private boolean enforcing = false;
+    private boolean pendingRender = false;
+    private boolean closing = false;
 
     @Override
     public int setup(String arg, ImagePlus imp) {
@@ -42,6 +59,15 @@ public class Median_Filter_2D implements ExtendedPlugInFilter, DialogListener {
 
     @Override
     public int showDialog(ImagePlus imp, String command, PlugInFilterRunner pfr) {
+        /* Remember the current display range and watch for redraws so the
+         * user-set contrast survives preview toggling and Cancel. */
+        keepMin = origMin = imp.getDisplayRangeMin();
+        keepMax = origMax = imp.getDisplayRangeMax();
+        rangeValid = true;
+        pendingRender = false;
+        closing = false;
+        ImagePlus.addImageListener(this);
+
         GenericDialog gd = new NonBlockingGenericDialog("2D Median Filter");
         gd.addNumericField("Kernel size (odd, 3-21):", kernelSize, 0);
         gd.addMessage("Tip: Use Image > Adjust > Brightness/Contrast (Ctrl+Shift+C)\n"
@@ -51,6 +77,15 @@ public class Median_Filter_2D implements ExtendedPlugInFilter, DialogListener {
         gd.addPreviewCheckbox(pfr);
         gd.addDialogListener(this);
         gd.showDialog();
+
+        /* Keep the listener attached briefly: the runner's post-dialog reset
+         * (Cancel with preview on) happens on another thread after this method
+         * returns. The listener re-applies the contrast when it sees that
+         * reset; this timer then detaches as a fallback. */
+        closing = true;
+        Timer detachTimer = new Timer(1000, e -> detach());
+        detachTimer.setRepeats(false);
+        detachTimer.start();
 
         if (gd.wasCanceled()) return DONE;
 
@@ -71,9 +106,53 @@ public class Median_Filter_2D implements ExtendedPlugInFilter, DialogListener {
         this.nPasses = nPasses;
     }
 
+    /* ImageListener: keep the user's display range (contrast) across preview
+     * renders, preview off, and Cancel (the runner's reset() reverts min/max). */
+    @Override
+    public void imageOpened(ImagePlus imp) {}
+
+    @Override
+    public void imageClosed(ImagePlus imp) {}
+
+    @Override
+    public void imageUpdated(ImagePlus updated) {
+        if (updated != this.imp || !rangeValid || enforcing) return;
+
+        double curMin = this.imp.getDisplayRangeMin();
+        double curMax = this.imp.getDisplayRangeMax();
+
+        if (pendingRender) {
+            pendingRender = false;
+            applyKeep(curMin, curMax);
+        } else if (curMin == origMin && curMax == origMax
+                && (keepMin != origMin || keepMax != origMax)) {
+            applyKeep(curMin, curMax);
+            if (closing) EventQueue.invokeLater(this::detach);
+        } else {
+            keepMin = curMin;
+            keepMax = curMax;
+        }
+    }
+
+    private void applyKeep(double curMin, double curMax) {
+        if (curMin != keepMin || curMax != keepMax) {
+            enforcing = true;
+            this.imp.setDisplayRange(keepMin, keepMax);
+            this.imp.updateAndDraw();
+            enforcing = false;
+        }
+    }
+
+    private void detach() {
+        if (!rangeValid) return;
+        rangeValid = false;
+        ImagePlus.removeImageListener(this);
+    }
+
     @Override
     public void run(ImageProcessor ip) {
         applyMedianFilter2D(ip);
+        pendingRender = true;
     }
 
     private void applyMedianFilter2D(ImageProcessor ip) {
