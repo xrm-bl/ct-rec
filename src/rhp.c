@@ -144,9 +144,9 @@ void	InitReadHiPic(char *dir,HiPic *hp)
 #define NAME	sd->d_name
 
 	while ((sd=readdir(Dir))!=NULL)
-	    if (*output_log=='\0' && !StrCmp(NAME,"output.log"))
+	    if (*output_log=='\0' && !StrCmp(NAME,"output.log")) {
 		if (snprintf(output_log,LEN,"%s/%s",dir,NAME) >= LEN) Error(dir,NAME,"path too long.");
-	    else if (*dark_img=='\0' && !StrCmp(NAME,"dark.img"))
+	    } else if (*dark_img=='\0' && !StrCmp(NAME,"dark.img"))
 		(void)snprintf(dark_img,LEN,"%s",NAME);
 	    else if ((NAME[0]|32)==q_img[0] &&
 		     (l=(int)strlen(NAME))>5 &&
