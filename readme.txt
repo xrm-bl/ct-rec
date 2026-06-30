@@ -13,6 +13,7 @@
       tf_rec_P_F → ct_rec_P_F
   ・オフセットCT 1枚再構成 otf_rec も同様に img/tif 自動判別化し改名（TIFF 専用版 otf_rec は廃止）:
       otf_rec_P_F → otct_rec_P_F
+  ・投影像生成 ct_prj_f も img/tif 自動判別化（ct_prj_f.c + tf_prj_f.c → ct_prj_f_c.c）。TIFF 専用版 tf_prj_f は廃止。
 
 【ver 2.0 の変更点】
   ・hp_tg と tf_tg を統合。hp_tg が入力ディレクトリの dark ファイル
@@ -232,6 +233,7 @@
       
    h. 180deg スキャンから投影像を作成
       ct_prj_f HiPic prj
+      入力は dark.img があれば img、無く dark.tif があれば tiff を自動判別。
 
    i. 32bit tiff からヒストグラム
       tif2hst rec (x1 y1 x2 y2)

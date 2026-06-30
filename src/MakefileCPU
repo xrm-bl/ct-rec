@@ -124,7 +124,7 @@ sf_rec_t_c:
 # ---------------------------------------------------------------
 misc: tif_f2i rec_crop sinog of_sinog pid stop_watch img_ave \
       spl his_spl_K his_spl_E his_spl_tif rec_stk chk-rc set-rc \
-      his2img ct_prj_f ct_sub_f ict_prj_fc ct_prj_fc tf_prj_f \
+      his2img ct_prj_f ct_sub_f ict_prj_fc ct_prj_fc \
       tif2hst rec_gf hp2DO tif_ave tif_mgf his_ave \
       q3_ave q4_ave act_spl act_spl2 gf_sd gf_fd his2tif6 ofsfa
 
@@ -159,15 +159,15 @@ set-rc:
 his2img:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/his2img his2img.c $(LIBS)
 ct_prj_f:
-	$(CC) $(CFLAGS) -o $(EXE_DIR)/ct_prj_f ct_prj_f.c $(TIFFLIB) $(LIBS)
+	$(CC) $(CFLAGS) -o $(EXE_DIR)/ct_prj_f ct_prj_f_c.c $(TIFFLIB) $(LIBS)
 ct_sub_f:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/ct_sub_f ct_sub_f.c $(TIFFLIB) $(LIBS)
 ict_prj_fc:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/ict_prj_fc ict_prj_fc.c $(TIFFLIB) $(LIBS)
 ct_prj_fc:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/ct_prj_fc ct_prj_fc.c $(TIFFLIB) $(LIBS)
-tf_prj_f:
-	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/tf_prj_f rif_fast.c tf_prj_f.c $(TIFFLIB) $(LIBS)
+# tf_prj_f:
+# 	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/tf_prj_f rif_fast.c tf_prj_f.c $(TIFFLIB) $(LIBS)
 tif2hst:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/tif2hst tif2hst.c $(TIFFLIB) $(LIBS)
 rec_gf:

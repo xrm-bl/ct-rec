@@ -97,7 +97,7 @@ rem his2img
 %CC2% /Fehis2img.exe his2img.c
 
 rem ct_prj_f
-%CC2% /Fect_prj_f.exe ct_prj_f.c libtiff.lib
+%CC2% /Fect_prj_f.exe ct_prj_f_c.c libtiff.lib
 
 rem ct_sub_f
 %CC2% /Fect_sub_f.exe ct_sub_f.c libtiff.lib
@@ -109,7 +109,7 @@ rem ct_prj_fc
 %CC2% /Fect_prj_fc.exe ct_prj_fc.c libtiff.lib
 
 rem tf_prj_fc
-%CC2% /openmp /arch:AVX2 /Fetf_prj_f.exe rif_fast.c tf_prj_f.c libtiff.lib
+rem %CC2% /openmp /arch:AVX2 /Fetf_prj_f.exe rif_fast.c tf_prj_f.c libtiff.lib
 
 rem tif2hst
 %CC2% /Fetif2hst.exe tif2hst.c libtiff.lib

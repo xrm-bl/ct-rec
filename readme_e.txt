@@ -15,6 +15,8 @@ Uesugi
   - The offset-CT single-slice otf_rec gained the same img/tif auto-detection
     and is renamed (the TIFF-only otf_rec is retired):
       otf_rec_P_F -> otct_rec_P_F
+  - ct_prj_f (projection-image generator) also gained img/tif auto-detection
+    (ct_prj_f.c + tf_prj_f.c -> ct_prj_f_c.c); the TIFF-only tf_prj_f is retired.
 
 [ver 2.0 changes]
   - Merged hp_tg and tf_tg. hp_tg now auto-detects the input format from
@@ -256,6 +258,7 @@ Uesugi
 
    h. Generate Projection Images from 180-degree Scan
       ct_prj_f HiPic prj
+      Input format auto-detected: dark.img -> img, otherwise dark.tif -> tif.
 
    i. Histogram from 32-bit TIFF
       tif2hst rec (x1 y1 x2 y2)
