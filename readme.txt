@@ -151,6 +151,7 @@
          100レイヤーだけの場合：100
          100-150 レイヤー: 100-150
          全部: -
+
    c. img/tif データから1枚だけ再構成（オフセットCT）
       otct_rec_P_F layer center {pixel size} {offsetangle}
       
