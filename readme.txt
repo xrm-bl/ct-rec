@@ -2,13 +2,32 @@
 
 上杉
 
+2026.06.30  ver. 2.1
+2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+【ver 2.1 の変更点】
+  ・ct_rec と tf_rec を統合。ct_rec が dark ファイル（dark.img / dark.tif）を見て
+    .img / .tif を自動判別するようになった。内部で ct_rec.c と tf_rec.c を統合した
+    ct_rec_c.c を使用。これに伴い TIFF 専用版 tf_rec を廃止:
+      tf_rec_P_F → ct_rec_P_F
+  ・オフセットCT 1枚再構成 otf_rec も同様に img/tif 自動判別化し改名（TIFF 専用版 otf_rec は廃止）:
+      otf_rec_P_F → otct_rec_P_F
+
+【ver 2.0 の変更点】
+  ・hp_tg と tf_tg を統合。hp_tg が入力ディレクトリの dark ファイル
+    （dark.img / dark.tif）を見て .img / .tif を自動判別するようになった。
+    内部リーダ rhp.c(.img) と rtf.c(.tif) を統合した rhp_c.c を使用。
+  ・これに伴い TIFF 専用版を廃止し、以下に一本化:
+      tf_tg_P_F     → hp_tg_P_F
+      oftf_srec_P_F → ofct_srec_P_F
+      oftf_xy       → ofct_xy
 
 0. バグやリクエストは作者に連絡してください。
 
 1. 共通の考え
    a. 入力
-      基本的にimg形式。
+      基本的にimg形式。1枚再構成(ct_rec)・連続再構成(hp_tg)・オフセットCT(ofct_srec/ofct_xy)は、dark.img があれば img、無く dark.tif があれば tiff を自動判別して読み込む。
 
    b. 出力
       CT像は 32bit tiff での出力となる。rec?????.tif (数値は5ケタ)
@@ -56,21 +75,10 @@
       pixel size: 画素サイズ(um)。省略した場合は1.0になる。
       offset angle: 回転軸の原点オフセット。省略した場合は0.0になる。
       
-      *) q????.img があるディレクトリで実行する。
+      *) q????.img もしくは q????.tif があるディレクトリで実行する。(dark.img / dark.tif で自動判別)
    
-   b. 1枚だけ再構成
-      tf_rec_P_F layer {center} {pixel size} {offsetangle}
-      
-      layer: 再構成するレイヤー(高さ)
-      center: 回転軸の位置(pixel)。省略した場合は自動推定する。
-      pixel size: 画素サイズ(um)。省略した場合は1.0になる。
-      offset angle: 回転軸の原点オフセット。省略した場合は0.0になる。
-      
-      *) q????.tif があるディレクトリで実行する。
-   
-   c. 連続再構成
+   b. 連続再構成
       hp_tg_P_F HiPic Dr RC RA0 rec
-      tf_tg_P_F HiPic Dr RC RA0 rec
      (回転軸が傾いてない場合。全レイヤー)
       
       HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名。(/ は不要)
@@ -80,7 +88,6 @@
       rec: 再構成画像を出力するディレクトリ(計算前に作成すること)
       
       hp_tg_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
-      tf_tg_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
       (回転軸が傾いている場合。もしくは一部の領域のみの計算時)
       
       HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名。(/ は不要)
@@ -94,7 +101,7 @@
    
       *) q????.img があるディレクトリの一つ上で実行する。
 
-   d. p画像からの連続再構成
+   c. p画像からの連続再構成
       p_rec_P_F p rec Dr RC RA0
       (回転軸が傾いてない場合。全レイヤー)
       
@@ -119,7 +126,6 @@
 3. 360deg scan (offset CT)。標準的な吸収の画像再構成
    a. 回転軸位置の推定
       ofct_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
-      oftf_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
      
       HiPic: q????.img もしくはq????.tif が格納されているディレクトリ名(/ は不要)
       Ox1: 横の捜索範囲開始点。(省略可)
@@ -142,7 +148,6 @@
 
    c. 再構成
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
-      oftf_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
       
       HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
       Rc: 回転軸の位置(左端からの画素数)
@@ -156,15 +161,15 @@
          100レイヤーだけの場合：100
          100-150 レイヤー: 100-150
          全部: -
-   d. tiff データから1枚だけ再構成
-      otf_rec_P_F layer center {pixel size} {offsetangle}
+   d. img/tif データから1枚だけ再構成（オフセットCT）
+      otct_rec_P_F layer center {pixel size} {offsetangle}
       
       layer: 再構成するレイヤー(高さ)
       center: 回転軸の位置(pixel)。
       pixel size: 画素サイズ(um)。省略した場合は1.0になる。
       offset angle: 回転軸の原点オフセット。省略した場合は0.0になる。
       
-      *) q????.tif があるディレクトリで実行する。
+      *) q????.img もしくは q????.tif があるディレクトリで実行する。(dark.img / dark.tif で自動判別)
    
 
 

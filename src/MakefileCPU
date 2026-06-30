@@ -14,10 +14,10 @@ SIF_F   = sif_f_fast.c
 
 EXE_DIR = ../bin
 
-.PHONY: all clean ct_rec tf_rec hp_tg ofct_srec otf_rec \
+.PHONY: all clean ct_rec hp_tg ofct_srec otct_rec \
         p_rec sf_rec misc si_tools filters
 
-all: ct_rec tf_rec hp_tg ofct_srec otf_rec \
+all: ct_rec hp_tg ofct_srec otct_rec \
      p_rec sf_rec misc si_tools filters
 
 # ---------------------------------------------------------------
@@ -25,19 +25,19 @@ all: ct_rec tf_rec hp_tg ofct_srec otf_rec \
 # ---------------------------------------------------------------
 ct_rec: ct_rec_t_r ct_rec_t_s ct_rec_t_c
 ct_rec_t_r:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ct_rec_t_r ct_rec.c error.c sort_filter_omp.c $(SIF_F) $(CBP) -DFilter=Ramachandran $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ct_rec_t_r ct_rec_c.c error.c sort_filter_omp.c $(SIF_F) $(TIFFLIB) $(CBP) -DFilter=Ramachandran $(LIBS)
 ct_rec_t_s:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ct_rec_t_s ct_rec.c error.c sort_filter_omp.c $(SIF_F) $(CBP) -DFilter=Shepp $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ct_rec_t_s ct_rec_c.c error.c sort_filter_omp.c $(SIF_F) $(TIFFLIB) $(CBP) -DFilter=Shepp $(LIBS)
 ct_rec_t_c:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ct_rec_t_c ct_rec.c error.c sort_filter_omp.c $(SIF_F) $(CBP) -DFilter=Chesler $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ct_rec_t_c ct_rec_c.c error.c sort_filter_omp.c $(SIF_F) $(TIFFLIB) $(CBP) -DFilter=Chesler $(LIBS)
 
-tf_rec: tf_rec_t_r tf_rec_t_s tf_rec_t_c
-tf_rec_t_r:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tf_rec_t_r tf_rec.c error.c sort_filter_omp.c $(TIFFLIB) $(CBP) -DFilter=Ramachandran $(LIBS)
-tf_rec_t_s:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tf_rec_t_s tf_rec.c error.c sort_filter_omp.c $(TIFFLIB) $(CBP) -DFilter=Shepp $(LIBS)
-tf_rec_t_c:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tf_rec_t_c tf_rec.c error.c sort_filter_omp.c $(TIFFLIB) $(CBP) -DFilter=Chesler $(LIBS)
+# tf_rec: tf_rec_t_r tf_rec_t_s tf_rec_t_c
+# tf_rec_t_r:
+# 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tf_rec_t_r tf_rec.c error.c sort_filter_omp.c $(TIFFLIB) $(CBP) -DFilter=Ramachandran $(LIBS)
+# tf_rec_t_s:
+# 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tf_rec_t_s tf_rec.c error.c sort_filter_omp.c $(TIFFLIB) $(CBP) -DFilter=Shepp $(LIBS)
+# tf_rec_t_c:
+# 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tf_rec_t_c tf_rec.c error.c sort_filter_omp.c $(TIFFLIB) $(CBP) -DFilter=Chesler $(LIBS)
 
 hp_tg: hp_tg_t_r hp_tg_t_s hp_tg_t_c
 hp_tg_t_r:
@@ -66,13 +66,20 @@ ofct_srec_t_s:
 ofct_srec_t_c:
 	$(CC) $(CFLAGS) $(OMPF) -DFloat=float -DONLY_CT_VIEWS -o $(EXE_DIR)/ofct_srec_t_c ofct_srec.c error.c rhp_c.c sort_filter_omp.c rl.c $(CBP) $(TIFFLIB) -DFilter=Chesler $(LIBS)
 
-otf_rec: otf_rec_t_r otf_rec_t_s otf_rec_t_c
-otf_rec_t_r:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otf_rec_t_r otf_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Ramachandran $(LIBS)
-otf_rec_t_s:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otf_rec_t_s otf_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Shepp $(LIBS)
-otf_rec_t_c:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otf_rec_t_c otf_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Chesler $(LIBS)
+# otf_rec: otf_rec_t_r otf_rec_t_s otf_rec_t_c
+# otf_rec_t_r:
+# 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otf_rec_t_r otf_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Ramachandran $(LIBS)
+# otf_rec_t_s:
+# 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otf_rec_t_s otf_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Shepp $(LIBS)
+# otf_rec_t_c:
+# 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otf_rec_t_c otf_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Chesler $(LIBS)
+otct_rec: otct_rec_t_r otct_rec_t_s otct_rec_t_c
+otct_rec_t_r:
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otct_rec_t_r otct_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Ramachandran $(LIBS)
+otct_rec_t_s:
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otct_rec_t_s otct_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Shepp $(LIBS)
+otct_rec_t_c:
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otct_rec_t_c otct_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Chesler $(LIBS)
 
 # oftf_srec: oftf_srec_t_r oftf_srec_t_s oftf_srec_t_c
 # oftf_srec_t_r:

@@ -34,11 +34,11 @@ NVCCFLAGS = -O3 -I$(CUDAINCL) $(CUDA_ARCH) -use_fast_math -Xcompiler "-Wno-unuse
 
 EXE_DIR = ../bin
 
-.PHONY: all clean ct_rec_g tf_rec_g hp_tg_g \
-        ofct_srec_g otf_rec_g p_rec_g filters_g
+.PHONY: all clean ct_rec_g hp_tg_g \
+        ofct_srec_g otct_rec_g p_rec_g filters_g
 
-all: ct_rec_g tf_rec_g hp_tg_g \
-     ofct_srec_g otf_rec_g p_rec_g filters_g
+all: ct_rec_g hp_tg_g \
+     ofct_srec_g otct_rec_g p_rec_g filters_g
 
 # ---------------------------------------------------------------
 # GPU ring removal object (pure CUDA C; no Thrust, no -lstdc++)
@@ -53,25 +53,25 @@ ct_rec_g: ct_rec_g_r ct_rec_g_s ct_rec_g_c
 
 ct_rec_g_r: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ct_rec_g_r ct_rec.c error.c sort_filter_g.o $(SIF_F) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ct_rec_g_r ct_rec_c.c error.c sort_filter_g.o $(SIF_F) $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 ct_rec_g_s: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ct_rec_g_s ct_rec.c error.c sort_filter_g.o $(SIF_F) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ct_rec_g_s ct_rec_c.c error.c sort_filter_g.o $(SIF_F) $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 ct_rec_g_c: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ct_rec_g_c ct_rec.c error.c sort_filter_g.o $(SIF_F) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ct_rec_g_c ct_rec_c.c error.c sort_filter_g.o $(SIF_F) $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 
-tf_rec_g: tf_rec_g_r tf_rec_g_s tf_rec_g_c
-
-tf_rec_g_r: sort_filter_g.o
-	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/tf_rec_g_r tf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
-tf_rec_g_s: sort_filter_g.o
-	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/tf_rec_g_s tf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
-tf_rec_g_c: sort_filter_g.o
-	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/tf_rec_g_c tf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+# tf_rec_g: tf_rec_g_r tf_rec_g_s tf_rec_g_c
+# 
+# tf_rec_g_r: sort_filter_g.o
+# 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
+# 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/tf_rec_g_r tf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+# tf_rec_g_s: sort_filter_g.o
+# 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
+# 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/tf_rec_g_s tf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+# tf_rec_g_c: sort_filter_g.o
+# 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+# 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/tf_rec_g_c tf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 
 hp_tg_g: hp_tg_g_r hp_tg_g_s hp_tg_g_c
 
@@ -112,17 +112,28 @@ ofct_srec_g_c: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofct_srec_g_c ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 
-otf_rec_g: otf_rec_g_r otf_rec_g_s otf_rec_g_c
+# otf_rec_g: otf_rec_g_r otf_rec_g_s otf_rec_g_c
+# 
+# otf_rec_g_r: sort_filter_g.o
+# 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
+# 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/otf_rec_g_r otf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+# otf_rec_g_s: sort_filter_g.o
+# 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
+# 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/otf_rec_g_s otf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+# otf_rec_g_c: sort_filter_g.o
+# 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+# 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/otf_rec_g_c otf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+otct_rec_g: otct_rec_g_r otct_rec_g_s otct_rec_g_c
 
-otf_rec_g_r: sort_filter_g.o
+otct_rec_g_r: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/otf_rec_g_r otf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
-otf_rec_g_s: sort_filter_g.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/otct_rec_g_r otct_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+otct_rec_g_s: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/otf_rec_g_s otf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
-otf_rec_g_c: sort_filter_g.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/otct_rec_g_s otct_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+otct_rec_g_c: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/otf_rec_g_c otf_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/otct_rec_g_c otct_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 
 # oftf_srec_g: oftf_srec_g_r oftf_srec_g_s oftf_srec_g_c
 # 

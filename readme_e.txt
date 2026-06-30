@@ -3,13 +3,33 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.06.30  ver. 2.1
+2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+[ver 2.1 changes]
+  - Merged ct_rec and tf_rec. ct_rec now auto-detects the input format
+    from the dark frame (dark.img -> .img, otherwise dark.tif -> .tif),
+    using ct_rec_c.c. The TIFF-only tf_rec is therefore retired:
+      tf_rec_P_F -> ct_rec_P_F
+  - The offset-CT single-slice otf_rec gained the same img/tif auto-detection
+    and is renamed (the TIFF-only otf_rec is retired):
+      otf_rec_P_F -> otct_rec_P_F
+
+[ver 2.0 changes]
+  - Merged hp_tg and tf_tg. hp_tg now auto-detects the input format from
+    the dark frame in the directory (dark.img -> .img, otherwise
+    dark.tif -> .tif), using rhp_c.c (a merge of rhp.c[.img] and rtf.c[.tif]).
+  - The TIFF-only programs are therefore retired and unified into:
+      tf_tg_P_F     -> hp_tg_P_F
+      oftf_srec_P_F -> ofct_srec_P_F
+      oftf_xy       -> ofct_xy
 
 0. Please contact the author for bug reports or feature requests.
 
 1. General Concepts
    a. Input
-      Basically img format.
+      Basically img format. For single-slice (ct_rec), continuous reconstruction (hp_tg) and offset CT (ofct_srec / ofct_xy), the input format is auto-detected: dark.img -> .img, otherwise dark.tif -> .tif.
 
    b. Output
       CT images are output as 32-bit TIFF files: rec?????.tif (5-digit numbering)
@@ -67,21 +87,10 @@ Uesugi
       pixel size: Pixel size (um). Defaults to 1.0 if omitted.
       offset angle: Rotation axis origin offset. Defaults to 0.0 if omitted.
 
-      *) Run in the directory containing q????.img files.
+      *) Run in the directory containing q????.img or q????.tif files (auto-detected from dark.img / dark.tif).
 
-   b. Single Slice Reconstruction
-      tf_rec_P_F layer {center} {pixel size} {offsetangle}
-
-      layer: Layer (height) to reconstruct
-      center: Rotation axis position (pixels). Auto-estimated if omitted.
-      pixel size: Pixel size (um). Defaults to 1.0 if omitted.
-      offset angle: Rotation axis origin offset. Defaults to 0.0 if omitted.
-
-      *) Run in the directory containing q????.tif files.
-
-   c. Continuous Reconstruction
+   b. Continuous Reconstruction
       hp_tg_P_F HiPic Dr RC RA0 rec
-      tf_tg_P_F HiPic Dr RC RA0 rec
       (When the rotation axis is not tilted. All layers.)
 
       HiPic: Directory containing q????.img or q????.tif files (no trailing /)
@@ -92,7 +101,6 @@ Uesugi
            before execution)
 
       hp_tg_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
-      tf_tg_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
       (When the rotation axis is tilted, or for partial region computation.)
 
       HiPic: Directory containing q????.img or q????.tif files (no trailing /)
@@ -107,7 +115,7 @@ Uesugi
 
       *) Run one directory above the directory containing q????.img files.
 
-   d. Continuous Reconstruction from p-images
+   c. Continuous Reconstruction from p-images
       p_rec_P_F p rec Dr RC RA0
       (When the rotation axis is not tilted. All layers.)
 
@@ -134,7 +142,6 @@ Uesugi
 3. 360-degree Scan (Offset CT): Standard Absorption CT Reconstruction
    a. Rotation Axis Position Estimation
       ofct_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
-      oftf_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
 
       HiPic: Directory containing q????.img or q????.tif files (no trailing /)
       Ox1: Horizontal search range start (optional)
@@ -158,7 +165,6 @@ Uesugi
 
    c. Reconstruction
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
-      oftf_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
 
       HiPic: Directory containing q????.img or q????.tif files (no trailing /)
       Rc: Rotation axis position (pixels from left edge)
@@ -174,15 +180,15 @@ Uesugi
          Layers 100-150: 100-150
          All layers: -
 
-   d. Single Slice Reconstruction from TIFF Data
-      otf_rec_P_F layer center {pixel size} {offsetangle}
+   d. Single Slice Reconstruction (offset CT, img/tif)
+      otct_rec_P_F layer center {pixel size} {offsetangle}
 
       layer: Layer (height) to reconstruct
       center: Rotation axis position (pixels)
       pixel size: Pixel size (um). Defaults to 1.0 if omitted.
       offset angle: Rotation axis origin offset. Defaults to 0.0 if omitted.
 
-      *) Run in the directory containing q????.tif files.
+      *) Run in the directory containing q????.img or q????.tif files (auto-detected from dark.img / dark.tif).
 
 
 4. Normalization of 32-bit TIFF Images
