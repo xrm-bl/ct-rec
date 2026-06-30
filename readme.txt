@@ -15,6 +15,7 @@
       otf_rec_P_F → otct_rec_P_F
   ・投影像生成 ct_prj_f も img/tif 自動判別化（ct_prj_f.c + tf_prj_f.c → ct_prj_f_c.c）。TIFF 専用版 tf_prj_f は廃止。
   ・オフセットCT 回転軸推定を ofct_xy → ofct_DO に置き換え（img/tif 自動判別、ofct_srec 用コマンドを提案表示）。
+  ・オフセットCT 再構成は使用可能メモリを自動判定して自動 chunk するため、手動のメモリ確認手順（旧 3b）を削除。
 
 【ver 2.0 の変更点】
   ・hp_tg と tf_tg を統合。hp_tg が入力ディレクトリの dark ファイル
@@ -135,17 +136,7 @@
        オフセットCTデータから回転軸位置を推定し、そのまま実行できる
        ofct_srec コマンド（中心と Oy）を提案表示する。
 
-   b. 必要メモリ量の確認
-      ofct_srec_P_F HiPic Rc Oy
-
-      HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
-      Rc: 回転軸の位置(左端からの画素数)
-      Oy: 縦ずれ量（常に 0 を指定）。
-
-      これで全部を一度に計算するために必要なメインメモリの量が出力される。
-      rangeListを決める際の目安になる。
-
-   c. 再構成
+   b. 再構成
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
       
       HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
@@ -160,7 +151,7 @@
          100レイヤーだけの場合：100
          100-150 レイヤー: 100-150
          全部: -
-   d. img/tif データから1枚だけ再構成（オフセットCT）
+   c. img/tif データから1枚だけ再構成（オフセットCT）
       otct_rec_P_F layer center {pixel size} {offsetangle}
       
       layer: 再構成するレイヤー(高さ)

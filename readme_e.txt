@@ -19,6 +19,8 @@ Uesugi
     (ct_prj_f.c + tf_prj_f.c -> ct_prj_f_c.c); the TIFF-only tf_prj_f is retired.
   - ofct_xy (offset-CT rotation-axis finder) replaced by ofct_DO (img/tif
     auto-detection; prints a ready-to-run ofct_srec command).
+  - Offset-CT reconstruction auto-detects available memory and chunks
+    automatically; the manual memory-check step (old 3b) was removed.
 
 [ver 2.0 changes]
   - Merged hp_tg and tf_tg. hp_tg now auto-detects the input format from
@@ -153,17 +155,7 @@ Uesugi
       Estimates the rotation-axis position from the offset-CT data and prints
       a ready-to-run ofct_srec command (suggested center and Oy).
 
-   b. Required Memory Check
-      ofct_srec_P_F HiPic Rc Oy
-
-      HiPic: Directory containing q????.img or q????.tif files (no trailing /)
-      Rc: Rotation axis position (pixels from left edge)
-      Oy: Vertical shift (always specify 0)
-
-      This outputs the amount of main memory required to compute
-      everything at once. Use as a guide when determining rangeList.
-
-   c. Reconstruction
+   b. Reconstruction
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
 
       HiPic: Directory containing q????.img or q????.tif files (no trailing /)
@@ -180,7 +172,7 @@ Uesugi
          Layers 100-150: 100-150
          All layers: -
 
-   d. Single Slice Reconstruction (offset CT, img/tif)
+   c. Single Slice Reconstruction (offset CT, img/tif)
       otct_rec_P_F layer center {pixel size} {offsetangle}
 
       layer: Layer (height) to reconstruct
