@@ -22,52 +22,52 @@ rem GPU
 %CC2% /openmp /DUSE_GPU /Fect_rec_g_r.exe ct_rec.c error.c sort_filter_g.obj %SIF_F% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_r.exe hp_tg_ku.c error.c rhp.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_r.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
 %CC2% /openmp /DUSE_GPU /Fetf_rec_g_r.exe tf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
-%NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_r.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
+rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_r.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
 %CC2% /openmp /DUSE_GPU /Fect_rec_g_s.exe ct_rec.c error.c sort_filter_g.obj %SIF_F% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_s.exe hp_tg_ku.c error.c rhp.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_s.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
 %CC2% /openmp /DUSE_GPU /Fetf_rec_g_s.exe  tf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
-%NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_s.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
+rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_s.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
 %CC2% /openmp /DUSE_GPU /Fect_rec_g_c.exe  ct_rec.c error.c sort_filter_g.obj %SIF_F% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_c.exe hp_tg_ku.c error.c rhp.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_c.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
 %CC2% /openmp /DUSE_GPU /Fetf_rec_g_c.exe  tf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
-%NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_c.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
+rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_c.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
 rem reconstruction for offset CT
 rem GPU
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /Feofct_srec_g_r.exe ofct_srec.c error.c rhp.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_srec_g_r.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-%CC2% /openmp /DUSE_GPU /Feofct_srec_g_s.exe ofct_srec.c error.c rhp.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_srec_g_s.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /Feofct_srec_g_c.exe ofct_srec.c error.c rhp.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_srec_g_c.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
@@ -80,14 +80,14 @@ rem GPU
 %CC2% /openmp /DUSE_GPU /Feotf_rec_g_c.exe  otf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
-%NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /Feoftf_srec_g_r.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
+rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_r.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
-%NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-%CC2% /openmp /DUSE_GPU /Feoftf_srec_g_s.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
+rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_s.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
-%NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /Feoftf_srec_g_c.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
+rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_c.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
 rem p image CT reconstruction
