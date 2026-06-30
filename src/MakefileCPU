@@ -92,8 +92,10 @@ otct_rec_t_c:
 # ---------------------------------------------------------------
 # Guess rotation center for offset CT
 # ---------------------------------------------------------------
-ofct_xy:
-	$(CC) $(CFLAGS) -DONLY_CT_VIEWS -o $(EXE_DIR)/ofct_xy error.c rhp_c.c msd.c $(SIF_F) oct_xy.c $(LIBS)
+# ofct_xy:
+# 	$(CC) $(CFLAGS) -DONLY_CT_VIEWS -o $(EXE_DIR)/ofct_xy error.c rhp_c.c msd.c $(SIF_F) $(TIFFLIB) oct_xy.c $(LIBS)
+ofct_DO:
+	$(CC) $(CFLAGS) -DONLY_CT_VIEWS -o $(EXE_DIR)/ofct_DO error.c rhp_c.c msd.c $(SIF_F) $(TIFFLIB) ofct_DO.c $(LIBS)
 # otf_xy:
 # 	$(CC) $(CFLAGS) -DONLY_CT_VIEWS -o $(EXE_DIR)/otf_xy error.c rtf.c msd.c $(SIF_F) $(TIFFLIB) otf_xy.c $(LIBS)
 
@@ -238,7 +240,7 @@ clean:
 	$(EXE_DIR)/ofct_srec_t_r $(EXE_DIR)/ofct_srec_t_s $(EXE_DIR)/ofct_srec_t_c \
 	$(EXE_DIR)/otf_rec_t_r $(EXE_DIR)/otf_rec_t_s $(EXE_DIR)/otf_rec_t_c \
 	$(EXE_DIR)/oftf_srec_t_r $(EXE_DIR)/oftf_srec_t_s $(EXE_DIR)/oftf_srec_t_c \
-	$(EXE_DIR)/ofct_xy $(EXE_DIR)/otf_xy \
+	$(EXE_DIR)/ofct_DO $(EXE_DIR)/otf_xy \
 	$(EXE_DIR)/p_rec_t_r $(EXE_DIR)/p_rec_t_s $(EXE_DIR)/p_rec_t_c \
 	$(EXE_DIR)/sf_rec_t_r $(EXE_DIR)/sf_rec_t_s $(EXE_DIR)/sf_rec_t_c \
 	$(EXE_DIR)/tif_f2i $(EXE_DIR)/rec_crop $(EXE_DIR)/sinog $(EXE_DIR)/of_sinog \

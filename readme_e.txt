@@ -17,6 +17,8 @@ Uesugi
       otf_rec_P_F -> otct_rec_P_F
   - ct_prj_f (projection-image generator) also gained img/tif auto-detection
     (ct_prj_f.c + tf_prj_f.c -> ct_prj_f_c.c); the TIFF-only tf_prj_f is retired.
+  - ofct_xy (offset-CT rotation-axis finder) replaced by ofct_DO (img/tif
+    auto-detection; prints a ready-to-run ofct_srec command).
 
 [ver 2.0 changes]
   - Merged hp_tg and tf_tg. hp_tg now auto-detects the input format from
@@ -31,7 +33,7 @@ Uesugi
 
 1. General Concepts
    a. Input
-      Basically img format. For single-slice (ct_rec), continuous reconstruction (hp_tg) and offset CT (ofct_srec / ofct_xy), the input format is auto-detected: dark.img -> .img, otherwise dark.tif -> .tif.
+      Basically img format. For single-slice (ct_rec), continuous reconstruction (hp_tg) and offset CT (ofct_srec / ofct_DO), the input format is auto-detected: dark.img -> .img, otherwise dark.tif -> .tif.
 
    b. Output
       CT images are output as 32-bit TIFF files: rec?????.tif (5-digit numbering)
@@ -143,17 +145,13 @@ Uesugi
 
 3. 360-degree Scan (Offset CT): Standard Absorption CT Reconstruction
    a. Rotation Axis Position Estimation
-      ofct_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
+      ofct_DO raw
 
-      HiPic: Directory containing q????.img or q????.tif files (no trailing /)
-      Ox1: Horizontal search range start (optional)
-      Ox2: Horizontal search range end (optional)
-      Oy1: Vertical search range start (optional)
-      Oy2: Vertical search range end (optional)
-      MSD.tif: Output filename for MSD image (optional)
+      raw: Directory containing q????.img or q????.tif files (no trailing /;
+           input format auto-detected from dark.img / dark.tif)
 
-      *) When outputting an image, the image offset is displayed in
-         parentheses.
+      Estimates the rotation-axis position from the offset-CT data and prints
+      a ready-to-run ofct_srec command (suggested center and Oy).
 
    b. Required Memory Check
       ofct_srec_P_F HiPic Rc Oy

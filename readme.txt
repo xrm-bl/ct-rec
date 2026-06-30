@@ -14,6 +14,7 @@
   ・オフセットCT 1枚再構成 otf_rec も同様に img/tif 自動判別化し改名（TIFF 専用版 otf_rec は廃止）:
       otf_rec_P_F → otct_rec_P_F
   ・投影像生成 ct_prj_f も img/tif 自動判別化（ct_prj_f.c + tf_prj_f.c → ct_prj_f_c.c）。TIFF 専用版 tf_prj_f は廃止。
+  ・オフセットCT 回転軸推定を ofct_xy → ofct_DO に置き換え（img/tif 自動判別、ofct_srec 用コマンドを提案表示）。
 
 【ver 2.0 の変更点】
   ・hp_tg と tf_tg を統合。hp_tg が入力ディレクトリの dark ファイル
@@ -28,7 +29,7 @@
 
 1. 共通の考え
    a. 入力
-      基本的にimg形式。1枚再構成(ct_rec)・連続再構成(hp_tg)・オフセットCT(ofct_srec/ofct_xy)は、dark.img があれば img、無く dark.tif があれば tiff を自動判別して読み込む。
+      基本的にimg形式。1枚再構成(ct_rec)・連続再構成(hp_tg)・オフセットCT(ofct_srec/ofct_DO)は、dark.img があれば img、無く dark.tif があれば tiff を自動判別して読み込む。
 
    b. 出力
       CT像は 32bit tiff での出力となる。rec?????.tif (数値は5ケタ)
@@ -126,16 +127,13 @@
 
 3. 360deg scan (offset CT)。標準的な吸収の画像再構成
    a. 回転軸位置の推定
-      ofct_xy HiPic {Ox1 Ox2 Oy1 Oy2} {MSD.tif}
-     
-      HiPic: q????.img もしくはq????.tif が格納されているディレクトリ名(/ は不要)
-      Ox1: 横の捜索範囲開始点。(省略可)
-      Ox2: 横の捜索範囲終了点。(省略可)
-      Oy1: 縦の捜索範囲開始点。(省略可)
-      Oy2: 縦の捜索範囲終了点。(省略可)
-      MSD.tif: MSDを画像出力ファイル名。(省略可)
+       ofct_DO raw
 
-      *) 画像出力時にはカッコ内に画像のオフセットが表示される。
+       raw: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
+            dark.img / dark.tif の有無で img/tif を自動判別。
+
+       オフセットCTデータから回転軸位置を推定し、そのまま実行できる
+       ofct_srec コマンド（中心と Oy）を提案表示する。
 
    b. 必要メモリ量の確認
       ofct_srec_P_F HiPic Rc Oy

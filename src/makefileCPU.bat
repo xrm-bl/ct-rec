@@ -46,7 +46,8 @@ rem %CC2% /openmp /Feoftf_srec_t_s.exe /DFloat=float /DONLY_CT_VIEWS error.c rtf
 rem %CC2% /openmp /Feoftf_srec_t_c.exe /DFloat=float /DONLY_CT_VIEWS error.c rtf.c sort_filter_omp.c rl.c %CBP% libtiff.lib ofct_srec.c /DFilter=Chesler
 
 rem guess rotation center for offset CT
-%CC2% /Feofct_xy.exe /DONLY_CT_VIEWS error.c rhp_c.c msd.c %SIF_F% oct_xy.c
+rem %CC2% /Feofct_xy.exe /DONLY_CT_VIEWS error.c rhp_c.c msd.c %SIF_F% libtiff.lib oct_xy.c
+%CC2% /Feofct_DO.exe /DONLY_CT_VIEWS error.c rhp_c.c msd.c %SIF_F% libtiff.lib ofct_DO.c
 rem %CC2% /Feotf_xy.exe /DONLY_CT_VIEWS error.c rtf.c msd.c %SIF_F% libtiff.lib otf_xy.c
 
 rem p image CT reconstruction
