@@ -72,6 +72,29 @@ static double	Log(double d)
 	return (d>0.0)?log(d):0.0;
 }
 
+/*----------------------------------------------------------------------*/
+/* (A) separable Gaussian smoothing of a view (noise robustness).        */
+static void Smooth(FOM **F,int Nx,int Ny,double *ker,int r,FOM *tmp)
+{
+    int    x,y,k,xx,yy;
+    double s,w;
+
+    for (y=0; y<Ny; y++)
+    for (x=0; x<Nx; x++) {
+        s=w=0.0;
+        for (k=-r; k<=r; k++){ xx=x+k; if(xx>=0 && xx<Nx){ s+=F[y][xx]*ker[k+r]; w+=ker[k+r]; } }
+        tmp[y*Nx+x]=(FOM)(s/w);
+    }
+    for (y=0; y<Ny; y++) for (x=0; x<Nx; x++) F[y][x]=tmp[y*Nx+x];
+
+    for (x=0; x<Nx; x++)
+    for (y=0; y<Ny; y++) {
+        s=w=0.0;
+        for (k=-r; k<=r; k++){ yy=y+k; if(yy>=0 && yy<Ny){ s+=F[yy][x]*ker[k+r]; w+=ker[k+r]; } }
+        tmp[y*Nx+x]=(FOM)(s/w);
+    }
+    for (y=0; y<Ny; y++) for (x=0; x<Nx; x++) F[y][x]=tmp[y*Nx+x];
+}
 int	main(int argc,char **argv)
 {
 	char		*env,
@@ -80,6 +103,11 @@ int	main(int argc,char **argv)
 	int		Ox1,Ox2,Oy1,Oy2,Ox,Oy,T,t,y,x,M,m,t0,m0,Y,X;
 	THREAD_T	*Thread;
 	FOM		**S,**F;
+	double		sig;
+	double		*ker=NULL;
+	FOM		*tmp=NULL;
+	int		r=0,kk;
+	int		Rc=0,Oyv=0;
 	size_t		i;
 	double		s;
 
@@ -139,6 +167,14 @@ int	main(int argc,char **argv)
 
 	    for (x=0; x<Ox; x++) S[y][x]=0.0;
 	}
+	    /* (A) Gaussian kernel for pre-MSD smoothing (env OFCT_DO_SMOOTH=sigma, 0=off) */
+    sig = ((env=getenv("OFCT_DO_SMOOTH"))!=NULL) ? atof(env) : 1.0;
+    if (sig>0.0) {
+        r=(int)ceil(3.0*sig);
+        if ((ker=(double *)malloc(sizeof(double)*(2*r+1)))==NULL ||
+            (tmp=(FOM *)malloc(sizeof(FOM)*(size_t)hp.Nx*hp.Ny))==NULL) Error(mae);
+        { double sm=0.0; for(kk=-r;kk<=r;kk++){ ker[kk+r]=exp(-0.5*(double)kk*kk/(sig*sig)); sm+=ker[kk+r]; } for(kk=0;kk<2*r+1;kk++) ker[kk]/=sm; }
+    }
 	M=hp.Nt/2;
 
 	for (m=0; m<M; m+=Threads) {
@@ -151,10 +187,14 @@ int	main(int argc,char **argv)
 		for (y=0; y<hp.Ny; y++)
 		for (x=0; x<hp.Nx; x++) F[y][x]=(-Log(hp.T[y][x]));
 
+			if (sig>0.0) Smooth(G[t+t0],hp.Nx,hp.Ny,ker,r,tmp);
+
 		ReadHiPic(&hp,m+t+M);
 		F=H[t+t0];
 		for (y=0; y<hp.Ny; y++)
 		for (x=0; x<hp.Nx; x++) F[y][hp.Nx-1-x]=(-Log(hp.T[y][x]));
+
+			if (sig>0.0) Smooth(H[t+t0],hp.Nx,hp.Ny,ker,r,tmp);
 	    }
 	    if ((m0=m-Threads)>=0)
 		for (t=0; t<Threads; t++) {
@@ -184,17 +224,37 @@ int	main(int argc,char **argv)
 	}
 //	(void)fprintf(stderr,"%d\t%d\t%le\n",+X+Ox1,Y+Oy1,s/(double)M);
 //	(void)fprintf(stderr,"%d\t%d\t%le\n",(hp.Nx+X+Ox1)/2,Y+Oy1,s/(double)M);
-	(void)fprintf(stderr,"try: ofct_srec_g_c raw %d %d - 1.0 0.0 rec\n",(hp.Nx+X+Ox1)/2,Y+Oy1);
-	(void)fprintf(stderr,"%d\n",(hp.Nx+X+Ox1)/2);
+	{
+        double dx=0.0,dy=0.0,a,b,c,den,centerf,oyf;
+        if (X>=1 && X<=Ox-2){ a=S[Y][X-1]; b=S[Y][X]; c=S[Y][X+1]; den=a-2.0*b+c; if(den>0.0){ dx=0.5*(a-c)/den; if(dx<-1.0)dx=-1.0; if(dx>1.0)dx=1.0; } }
+        if (Y>=1 && Y<=Oy-2){ a=S[Y-1][X]; b=S[Y][X]; c=S[Y+1][X]; den=a-2.0*b+c; if(den>0.0){ dy=0.5*(a-c)/den; if(dy<-1.0)dy=-1.0; if(dy>1.0)dy=1.0; } }
+        centerf=((double)(hp.Nx+Ox1+X)+dx)/2.0;
+        oyf=(double)(Oy1+Y)+dy;
+        Rc=(int)floor(centerf+0.5); Oyv=(int)floor(oyf+0.5);
+        (void)fprintf(stderr,"try: ofct_srec_g_c raw %d %d - 1.0 0.0 rec\n",Rc,Oyv);
+//        (void)fprintf(stderr,"center=%.3f\tOy=%.3f\t(dx=%.3f dy=%.3f, smooth=%.2f)\n",centerf,oyf,dx,dy,sig);
+        (void)fprintf(stderr,"%d\n",Rc);
+    }
 
 
 	free(*S); free(S);
 	free(**H); free(*H); free(H);
 	free(**G); free(*G); free(G);
+	if(ker)free(ker); if(tmp)free(tmp);
 	free(msd);
 	free(Thread);
 
 	TermReadHiPic(&hp);
 
+	    /* append the executed command to cmd-hst.log in the working directory */
+    {
+        FILE *logf;
+        int  ai;
+        if ((logf=fopen("cmd-hst.log","a"))!=NULL){
+            for (ai=0; ai<argc; ++ai) fprintf(logf,"%s ",argv[ai]);
+            fprintf(logf,"   %% center %d Oy %d smooth %.2f\n",Rc,Oyv,sig);
+            fclose(logf);
+        }
+    }
 	return 0;
 }
