@@ -1,4 +1,4 @@
-﻿/* split HIS format file to img files  */
+/* split HIS format file to img files  */
 /* usage is 'his2img inputfile' */
 
 #include<stdio.h>
@@ -386,5 +386,12 @@ char	*argv[];
 //	free(his.comment);
 //	free(img.comment);
 	fclose(fi);
+    {   /* record command to cmd-hst.log */
+        FILE *f_log; int i_log;
+        if((f_log=fopen("cmd-hst.log","a"))!=NULL){
+            for(i_log=0;i_log<argc;++i_log) fprintf(f_log,"%s ",argv[i_log]);
+            fprintf(f_log,"\n"); fclose(f_log);
+        }
+    }
 	return(0);
 }

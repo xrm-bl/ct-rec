@@ -158,5 +158,12 @@ char	**argv;
 	Store16TiffFile(argv[argc-1], Nx, Ny, BPS, outimg, desc);
 	printf("\nwrite %s \n",argv[argc-1]);
 
+    {   /* record command to cmd-hst.log */
+        FILE *f_log; int i_log;
+        if((f_log=fopen("../cmd-hst.log","a"))!=NULL){
+            for(i_log=0;i_log<argc;++i_log) fprintf(f_log,"%s ",argv[i_log]);
+            fprintf(f_log,"\n"); fclose(f_log);
+        }
+    }
 	return 0;
 }

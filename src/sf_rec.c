@@ -329,14 +329,14 @@ int	main(int argc, char *argv[])
 	free(comm);
 
 	
-//	// append to log file
-//	FILE		*ff;
-//	if ((ff = fopen("../cmd-hst.log", "a")) == NULL) {
-//		return(-1);
-//	}
-//	for (i = 0; i<argc; ++i) fprintf(ff, "%s ", argv[i]);
-//	fprintf(ff, "\n");
-//	fclose(ff);
+	// append to log file
+	FILE		*ff;
+	if ((ff = fopen("../cmd-hst.log", "a")) == NULL) {
+		return(-1);
+	}
+	for (i = 0; i<argc; ++i) fprintf(ff, "%s ", argv[i]);
+	fprintf(ff, "\n");
+	fclose(ff);
 
 	
 	return 0;
