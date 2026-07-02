@@ -239,7 +239,7 @@ int	main(int argc,char **argv)
 	if (nsel==0) Error("no slice.");
 
 	Dr=atof(argv[5])/10000.;
-	DO=(double)(1-N)/2.0;
+	DO=-(double)(N+1)/2.0;	/* rotation center = -(N+1)/2, matching ofct_rec's r0=-(dcnt+0.5); was -(N-1)/2 (1 px off) */
 	RA=atof(argv[6]);
 
 	P=InitCBP(N,M);
