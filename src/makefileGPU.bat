@@ -70,17 +70,21 @@ rem GPU
 %CC2% /openmp /DUSE_GPU /Feofct_srec_g_c.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
+rem offset-CT rotation-axis finder (GPU); img/tif auto-detect via rhp_c.c (FOM=double)
+%NVCC% -o ofct_DO_g.exe ofct_DO.cu rhp_c.c error.c libtiff.lib
+
+
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
 rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_r.exe otf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
-%CC2% /openmp /DUSE_GPU /Feotct_rec_g_r.exe otct_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_rec_g_r.exe ofct_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
 rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_s.exe  otf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
-%CC2% /openmp /DUSE_GPU /Feotct_rec_g_s.exe  otct_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_rec_g_s.exe ofct_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
 rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_c.exe  otf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
-%CC2% /openmp /DUSE_GPU /Feotct_rec_g_c.exe  otct_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_rec_g_c.exe ofct_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
 
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran

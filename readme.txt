@@ -2,9 +2,15 @@
 
 上杉
 
+2026.07.02  ver. 2.2
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+【ver 2.2 の変更点】
+  ・オフセットCT 回転軸推定 ofct_DO の GPU 版 ofct_DO_g（ofct_DO.cu）を追加。
+    ホスト側処理は ofct_DO と同一で、推定される中心/Oy は CPU 版と一致する。
+    ビュー対ごとの MSD 計算を GPU で実行。CPU 版 ofct_DO は残す。
 
 【ver 2.1 の変更点】
   ・ct_rec と tf_rec を統合。ct_rec が dark ファイル（dark.img / dark.tif）を見て
@@ -128,13 +134,16 @@
 
 3. 360deg scan (offset CT)。標準的な吸収の画像再構成
    a. 回転軸位置の推定
-       ofct_DO raw
+       ofct_DO   raw     (CPU)
+       ofct_DO_g raw     (GPU; 結果は ofct_DO と同一)
 
        raw: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
             dark.img / dark.tif の有無で img/tif を自動判別。
 
        オフセットCTデータから回転軸位置を推定し、そのまま実行できる
        ofct_srec コマンド（中心と Oy）を提案表示する。
+
+       ofct_DO_g はビュー対ごとの MSD を GPU で計算する（ホスト側処理は同一で結果も一致）。
 
    b. 再構成
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
@@ -153,7 +162,7 @@
          全部: -
 
    c. img/tif データから1枚だけ再構成（オフセットCT）
-      otct_rec_P_F layer center {pixel size} {offsetangle}
+      ofct_rec_P_F layer center {pixel size} {offsetangle}
       
       layer: 再構成するレイヤー(高さ)
       center: 回転軸の位置(pixel)。

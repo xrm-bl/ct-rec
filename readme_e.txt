@@ -3,9 +3,16 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.07.02  ver. 2.2
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+[ver 2.2 changes]
+  - Added a GPU version of the offset-CT rotation-axis finder, ofct_DO_g
+    (ofct_DO.cu). Host-side processing is identical to ofct_DO, so the
+    estimated center/Oy match the CPU version; the per-view-pair MSD is
+    computed on the GPU. The CPU ofct_DO is retained.
 
 [ver 2.1 changes]
   - Merged ct_rec and tf_rec. ct_rec now auto-detects the input format
@@ -14,7 +21,7 @@ Uesugi
       tf_rec_P_F -> ct_rec_P_F
   - The offset-CT single-slice otf_rec gained the same img/tif auto-detection
     and is renamed (the TIFF-only otf_rec is retired):
-      otf_rec_P_F -> otct_rec_P_F
+      otf_rec_P_F -> ofct_rec_P_F
   - ct_prj_f (projection-image generator) also gained img/tif auto-detection
     (ct_prj_f.c + tf_prj_f.c -> ct_prj_f_c.c); the TIFF-only tf_prj_f is retired.
   - ofct_xy (offset-CT rotation-axis finder) replaced by ofct_DO (img/tif
@@ -147,13 +154,16 @@ Uesugi
 
 3. 360-degree Scan (Offset CT): Standard Absorption CT Reconstruction
    a. Rotation Axis Position Estimation
-      ofct_DO raw
+      ofct_DO   raw     (CPU)
+      ofct_DO_g raw     (GPU; same result as ofct_DO)
 
       raw: Directory containing q????.img or q????.tif files (no trailing /;
            input format auto-detected from dark.img / dark.tif)
 
       Estimates the rotation-axis position from the offset-CT data and prints
       a ready-to-run ofct_srec command (suggested center and Oy).
+      ofct_DO_g computes the per-view-pair MSD on the GPU (host-side
+      processing is identical, so the estimate matches the CPU version).
 
    b. Reconstruction
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
@@ -173,7 +183,7 @@ Uesugi
          All layers: -
 
    c. Single Slice Reconstruction (offset CT, img/tif)
-      otct_rec_P_F layer center {pixel size} {offsetangle}
+      ofct_rec_P_F layer center {pixel size} {offsetangle}
 
       layer: Layer (height) to reconstruct
       center: Rotation axis position (pixels)

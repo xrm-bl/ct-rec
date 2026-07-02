@@ -14,10 +14,10 @@ SIF_F   = sif_f_fast.c
 
 EXE_DIR = ../bin
 
-.PHONY: all clean ct_rec hp_tg ofct_srec otct_rec \
+.PHONY: all clean ct_rec hp_tg ofct_srec ofct_rec \
         p_rec sf_rec misc si_tools filters
 
-all: ct_rec hp_tg ofct_srec otct_rec \
+all: ct_rec hp_tg ofct_srec ofct_rec \
      p_rec sf_rec misc si_tools filters
 
 # ---------------------------------------------------------------
@@ -73,13 +73,13 @@ ofct_srec_t_c:
 # 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otf_rec_t_s otf_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Shepp $(LIBS)
 # otf_rec_t_c:
 # 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otf_rec_t_c otf_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Chesler $(LIBS)
-otct_rec: otct_rec_t_r otct_rec_t_s otct_rec_t_c
-otct_rec_t_r:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otct_rec_t_r otct_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Ramachandran $(LIBS)
-otct_rec_t_s:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otct_rec_t_s otct_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Shepp $(LIBS)
-otct_rec_t_c:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/otct_rec_t_c otct_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Chesler $(LIBS)
+ofct_rec: ofct_rec_t_r ofct_rec_t_s ofct_rec_t_c
+ofct_rec_t_r:
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ofct_rec_t_r ofct_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Ramachandran $(LIBS)
+ofct_rec_t_s:
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ofct_rec_t_s ofct_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Shepp $(LIBS)
+ofct_rec_t_c:
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ofct_rec_t_c ofct_rec.c error.c $(TIFFLIB) sort_filter_omp.c $(CBP) -DFilter=Chesler $(LIBS)
 
 # oftf_srec: oftf_srec_t_r oftf_srec_t_s oftf_srec_t_c
 # oftf_srec_t_r:

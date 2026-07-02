@@ -119,7 +119,7 @@ int	main(int argc,char **argv)
 
 	InitReadHiPic(argv[1],&hp);
 
-	if (hp.Nt%2) (void)fputs("bad number of views (warning).\n",stderr);
+//	if (hp.Nt%2) (void)fputs("bad number of views (warning).\n",stderr);
 
 		if (argc==6 || argc==7){
 			

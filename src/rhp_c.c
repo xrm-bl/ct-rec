@@ -374,7 +374,7 @@ void	InitReadHiPic(char *dir,HiPic *hp)
 	for (i=0; i<hp->Ni; i++) {
 	    if (i>0) {
 	    	if (OL[i-1].c+EPS>=OL[i].c){
-	    		fprintf(stderr, "%d\t%lf\t%lf\n",i,OL[i-1].c+EPS,OL[i].c );
+	//	    	fprintf(stderr, "%d\t%lf\t%lf\n",i,OL[i-1].c+EPS,OL[i].c );
 	//	    	Error("",output_log,"bad time interval.");
 
 	    	}
