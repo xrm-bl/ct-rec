@@ -225,7 +225,7 @@ char	*argv[];
 	}
 	if (his.width <= 0 || his.height <= 0){ fprintf(stderr,"error: bad image size %d x %d\n", his.width, his.height); free(his.comment); return(-1); }
 	i_end=his.n_image1+65536*his.n_image2;
-	if(his.type==6) printf("12 bits %ld images\n", i_end); /* 間違えてないか？*/
+	if(his.type==6) printf("12 bits %ld images\n", i_end); /* is this correct? */
 	if(his.type==2) printf("16 bits %ld images\n", i_end);
 	if(his.type==0) printf("8  bits %ld images\n", i_end);
 
