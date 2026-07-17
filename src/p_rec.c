@@ -227,7 +227,7 @@ int	main(int argc, char *argv[])
 	unsigned long long mem_total = get_total_memory_bytes();
 	unsigned long long mem_ref   = mem_avail ? mem_avail : mem_total;
 
-	double frac=0.8;
+	double frac=0.9;
 	{ const char *e=getenv("HPTG_MEM_FRACTION"); if (e){ double v=atof(e); if (v>0.05 && v<=0.95) frac=v; } }
 
 	unsigned long long bytes_per_row = (unsigned long long)Nt*(unsigned long long)Nx*sizeof(float);

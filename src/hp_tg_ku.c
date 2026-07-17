@@ -10,7 +10,7 @@
  *   収まる場合は従来どおり 1 パス(投影は 1 回だけ読む)。
  *   分割時は各パスで投影を読み直す(I/O は分割数に比例)。
  *   調整用環境変数:
- *       HPTG_MEM_FRACTION : 空きメモリに対する使用率 (既定 0.8)
+ *       HPTG_MEM_FRACTION : 空きメモリに対する使用率 (既定 0.9)
  *       HPTG_MEM_LIMIT_MB : W に割り当てる上限を MB で直接指定(優先)
  *       HPTG_CHUNK_ROWS   : 1 チャンクあたりの行数を直接指定(最優先)
  *
@@ -251,7 +251,7 @@ int	main(int argc,char **argv)
 	unsigned long long mem_total = get_total_memory_bytes();
 	unsigned long long mem_ref   = mem_avail ? mem_avail : mem_total;
 
-	double frac=0.8;
+	double frac=0.9;
 	{ const char *e=getenv("HPTG_MEM_FRACTION"); if (e){ double v=atof(e); if (v>0.05 && v<=0.95) frac=v; } }
 
 	unsigned long long bytes_per_row = (unsigned long long)Nt*(unsigned long long)Nx*sizeof(Float);
