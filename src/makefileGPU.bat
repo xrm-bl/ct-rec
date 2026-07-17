@@ -114,6 +114,7 @@ rem filters made by ClaudAI
 %NVCC% -o tif_blf_g.exe tif_blf_g.cu %TIFFLIB%
 %NVCC% -o tif_gsf_g.exe tif_gsf_g.cu %TIFFLIB%
 %NVCC% -o tif_mdf_g.exe tif_mdf_g.cu %TIFFLIB%
+%NVCC% -o tif_mgf_g.exe tif_mgf_g.cu %TIFFLIB%
 %NVCC% -o tif_nlm_g.exe tif_nlm_g.cu %TIFFLIB%
 %NVCC% -o tif_tvd_g.exe tif_tvd_g.cu %TIFFLIB%
 %NVCC% -o tif_wvd_g.exe tif_wvd_g.cu %TIFFLIB%
