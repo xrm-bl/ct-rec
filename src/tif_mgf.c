@@ -486,7 +486,7 @@ static int process_tiff_file(const char* input_file, const char* output_file,
     TIFFSetField(out_tiff, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
     TIFFSetField(out_tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
     TIFFSetField(out_tiff, TIFFTAG_SAMPLESPERPIXEL, 1);
-	TIFFSetField(out_tiff, TIFFTAG_ROWSPERSTRIP, 1);
+	TIFFSetField(out_tiff, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(out_tiff, 0));
 	TIFFSetField(out_tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(out_tiff, TIFFTAG_IMAGEDESCRIPTION, desc);
 	TIFFSetField(out_tiff, TIFFTAG_ARTIST, "tif_mgf2_libtiff");

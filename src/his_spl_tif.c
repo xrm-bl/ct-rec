@@ -6,6 +6,7 @@
 #include<string.h>
 #include<math.h>
 #include "tiffio.h"
+#include "tifwrite.h"
 
 #define INTEL
 #define HIS_Header_Size 64
@@ -181,14 +182,11 @@ void Store16TiffFile(char *wname, int wX, int wY, int wBPS, unsigned short *data
 	TIFFSetField(image, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
 	TIFFSetField(image, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
-	TIFFSetField(image, TIFFTAG_ROWSPERSTRIP, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
 	TIFFSetField(image, TIFFTAG_ARTIST, "his2tif");
 
-	for (i = 0; i<wY; i++) {
-		TIFFWriteRawStrip(image, i, data16 + i*wX, wX * sizeof(unsigned short));
-	}
+		ct_write_raw_strips(image, data16, (uint32_t)wX, (uint32_t)wY, sizeof(unsigned short));
 
 	TIFFClose(image);
 }

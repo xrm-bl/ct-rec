@@ -162,7 +162,7 @@ static void StoreTiffFile(const char *path, int width, int height,
     TIFFSetField(tif, TIFFTAG_IMAGELENGTH, (uint32_t)height);
     TIFFSetField(tif, TIFFTAG_BITSPERSAMPLE, 16);
     TIFFSetField(tif, TIFFTAG_SAMPLESPERPIXEL, 1);
-    TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, 1);
+    TIFFSetField(tif, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(tif, 0));
     TIFFSetField(tif, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
     TIFFSetField(tif, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
     TIFFSetField(tif, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);

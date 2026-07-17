@@ -12,6 +12,7 @@
 #include "cbp.h"
 #include <math.h>
 #include "tiffio.h"
+#include "tifwrite.h"
 #ifdef USE_GPU
   #include "sort_filter_g.h"
   #define SORT_FILTER_RESTORE sort_filter_restore_gpu
@@ -150,16 +151,13 @@ void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char 
 	TIFFSetField(image, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
 	TIFFSetField(image, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP );
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
-	TIFFSetField(image, TIFFTAG_ROWSPERSTRIP, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
 	TIFFSetField(image, TIFFTAG_ARTIST, "ct_rec_tif");
 //	TIFFSetField(image, TIFFTAG_MINSAMPLEVALUE, mmmin );
 //	TIFFSetField(image, TIFFTAG_MAXSAMPLEVALUE, mmmax );
 
-	for (i = 0; i<wY; i++) {
-		TIFFWriteRawStrip(image, i, data32 + i*wX, wX * sizeof(float));
-	}
+		ct_write_raw_strips(image, data32, (uint32_t)wX, (uint32_t)wY, sizeof(float));
 
 	TIFFClose(image);
 }

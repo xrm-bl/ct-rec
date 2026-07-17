@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "tiffio.h"
+#include "tifwrite.h"
 #include "rif_f.h"
 
 #define MA(cnt,ptr)	malloc((cnt)*sizeof(*(ptr)))
@@ -42,15 +43,12 @@ void Store8TiffFile(char *wname, int wX, int wY, int wBPS, unsigned char *data8,
 	TIFFSetField(image, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
 	TIFFSetField(image, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
-	TIFFSetField(image, TIFFTAG_ROWSPERSTRIP, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
 	TIFFSetField(image, TIFFTAG_ARTIST, "tif_f2i");
 
 
-	for (i = 0; i<wY; i++) {
-		TIFFWriteRawStrip(image, i, data8 + i*wX, wX * sizeof(unsigned char));
-	}
+		ct_write_raw_strips(image, data8, (uint32_t)wX, (uint32_t)wY, sizeof(unsigned char));
 
 	TIFFClose(image);
 }
@@ -68,14 +66,11 @@ void Store16TiffFile(char *wname, int wX, int wY, int wBPS, unsigned short *data
 	TIFFSetField(image, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
 	TIFFSetField(image, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
-	TIFFSetField(image, TIFFTAG_ROWSPERSTRIP, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
 	TIFFSetField(image, TIFFTAG_ARTIST, "tif_f2i");
 
-	for (i = 0; i<wY; i++) {
-		TIFFWriteRawStrip(image, i, data16 + i*wX, wX * sizeof(unsigned short));
-	}
+		ct_write_raw_strips(image, data16, (uint32_t)wX, (uint32_t)wY, sizeof(unsigned short));
 
 	TIFFClose(image);
 }
