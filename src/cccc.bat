@@ -5,6 +5,7 @@ set   CC2=cl /DWINDOWS /O2 /D_USE_MATH_DEFINES
 set   CCX=cl /DWINDOWS /Ox /D_USE_MATH_DEFINES
 set   CBP=cbp_thread_int.c
 set SIF_F=sif_f_fast.c
+set   TIFFLIB=libtiff.lib jpeg.lib lzma.lib zs.lib
 set   CUDAVER=v13.2
 set   CUDART="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\lib\x64\cudart.lib"
 set    CUFFT="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\lib\x64\cufft.lib"
@@ -18,5 +19,5 @@ rem GPU ring removal object (pure CUDA C); built once, linked with /DUSE_GPU.
 %NVCC% sort_filter_g.cu -c
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /Fetf_rec_g_c.exe  tf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Fetf_rec_g_c.exe  tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 

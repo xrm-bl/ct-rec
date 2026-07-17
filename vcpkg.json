@@ -1,0 +1,19 @@
+{
+  "name": "ct-rec",
+  "version-string": "local",
+  "description": "CT reconstruction suite - libtiff dependency pinned to 4.6.0",
+  "builtin-baseline": "908da3a305a0a8028d9602ab241b433652b3df69",
+  "dependencies": [
+    {
+      "name": "tiff",
+      "default-features": true
+    }
+  ],
+  "overrides": [
+    {
+      "name": "tiff",
+      "version": "4.6.0",
+      "port-version": 5
+    }
+  ]
+}

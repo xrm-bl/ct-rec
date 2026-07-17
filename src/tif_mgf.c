@@ -4,6 +4,7 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -374,11 +375,11 @@ static int process_tiff_file(const char* input_file, const char* output_file,
 {
     TIFF* in_tiff;
     TIFF* out_tiff;
-    uint32 width, height;
-    uint16 bits_per_sample, samples_per_pixel;
+    uint32_t width, height;
+    uint16_t bits_per_sample, samples_per_pixel;
     void* data;
     size_t scanline_size;
-    uint32 row;
+    uint32_t row;
     int is_16bit;
     clock_t filter_start;
     FilterConfig config;

@@ -1,0 +1,13 @@
+# vcpkg (package manager checkout / build tree - do not commit)
+/vcpkg/
+vcpkg_installed/
+
+# Build artifacts
+*.obj
+*.o
+*.exe
+
+# Runtime command-history log emitted by the CLI tools
+cmd-hst.log
+
+# libtiff install staging (headers/lib are copied into src/ explicitly)

@@ -3,6 +3,7 @@ set   CC2=cl /DWINDOWS /O2 /D_USE_MATH_DEFINES
 set   CCX=cl /DWINDOWS /Ox /D_USE_MATH_DEFINES
 set   CBP=cbp_thread_int.c
 set   SIF_F=sif_f_fast.c
+set   TIFFLIB=libtiff.lib jpeg.lib lzma.lib zs.lib
 set   CUDAVER=v13.2
 set   CUDART="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\lib\x64\cudart.lib"
 set    CUFFT="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\lib\x64\cufft.lib"
@@ -19,105 +20,105 @@ rem Built once; linked into the reconstruction programs compiled with /DUSE_GPU.
 rem normal CT reconstruction
 rem GPU
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /Fect_rec_g_r.exe ct_rec_c.c error.c sort_filter_g.obj %SIF_F% libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Fect_rec_g_r.exe ct_rec_c.c error.c sort_filter_g.obj %SIF_F% %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_r.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_r.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_r.exe tf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_r.exe tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_r.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_r.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-%CC2% /openmp /DUSE_GPU /Fect_rec_g_s.exe ct_rec_c.c error.c sort_filter_g.obj %SIF_F% libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Fect_rec_g_s.exe ct_rec_c.c error.c sort_filter_g.obj %SIF_F% %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_s.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_s.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_s.exe  tf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_s.exe  tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_s.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_s.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /Fect_rec_g_c.exe  ct_rec_c.c error.c sort_filter_g.obj %SIF_F% libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Fect_rec_g_c.exe  ct_rec_c.c error.c sort_filter_g.obj %SIF_F% %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_c.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_c.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_c.exe  tf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_c.exe  tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_c.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g_c.exe hp_tg_ku.c error.c rtf.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 
 rem reconstruction for offset CT
 rem GPU
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /Feofct_srec_g_r.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_srec_g_r.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-%CC2% /openmp /DUSE_GPU /Feofct_srec_g_s.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_srec_g_s.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /Feofct_srec_g_c.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_srec_g_c.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 
 rem offset-CT rotation-axis finder (GPU); img/tif auto-detect via rhp_c.c (FOM=double)
-%NVCC% -o ofct_DO_g.exe ofct_DO.cu rhp_c.c error.c libtiff.lib
+%NVCC% -o ofct_DO_g.exe ofct_DO.cu rhp_c.c error.c %TIFFLIB%
 
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_r.exe otf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
-%CC2% /openmp /DUSE_GPU /Feofct_rec_g_r.exe ofct_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_r.exe otf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_rec_g_r.exe ofct_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_s.exe  otf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
-%CC2% /openmp /DUSE_GPU /Feofct_rec_g_s.exe ofct_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_s.exe  otf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_rec_g_s.exe ofct_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_c.exe  otf_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
-%CC2% /openmp /DUSE_GPU /Feofct_rec_g_c.exe ofct_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_c.exe  otf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofct_rec_g_c.exe ofct_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_r.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_r.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_s.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_s.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_c.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_c.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 
 rem p image CT reconstruction
 rem GPU
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /Fep_rec_g_r.exe /DFOM=float /DFloat=float p_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Fep_rec_g_r.exe /DFOM=float /DFloat=float p_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-%CC2% /openmp /DUSE_GPU /Fep_rec_g_s.exe /DFOM=float /DFloat=float p_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Fep_rec_g_s.exe /DFOM=float /DFloat=float p_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /Fep_rec_g_c.exe /DFOM=float /DFloat=float p_rec.c error.c sort_filter_g.obj libtiff.lib %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Fep_rec_g_c.exe /DFOM=float /DFloat=float p_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem filters made by ClaudAI
-%NVCC% -o tif_blf_g.exe tif_blf_g.cu libtiff.lib
-%NVCC% -o tif_gsf_g.exe tif_gsf_g.cu libtiff.lib
-%NVCC% -o tif_mdf_g.exe tif_mdf_g.cu libtiff.lib
-%NVCC% -o tif_nlm_g.exe tif_nlm_g.cu libtiff.lib
-%NVCC% -o tif_tvd_g.exe tif_tvd_g.cu libtiff.lib
-%NVCC% -o tif_wvd_g.exe tif_wvd_g.cu libtiff.lib
-%NVCC% -o tif_adf_g.exe tif_adf_g.cu libtiff.lib
-%NVCC% -o tif_bm4d_g.exe tif_bm4d_g.cu libtiff.lib
+%NVCC% -o tif_blf_g.exe tif_blf_g.cu %TIFFLIB%
+%NVCC% -o tif_gsf_g.exe tif_gsf_g.cu %TIFFLIB%
+%NVCC% -o tif_mdf_g.exe tif_mdf_g.cu %TIFFLIB%
+%NVCC% -o tif_nlm_g.exe tif_nlm_g.cu %TIFFLIB%
+%NVCC% -o tif_tvd_g.exe tif_tvd_g.cu %TIFFLIB%
+%NVCC% -o tif_wvd_g.exe tif_wvd_g.cu %TIFFLIB%
+%NVCC% -o tif_adf_g.exe tif_adf_g.cu %TIFFLIB%
+%NVCC% -o tif_bm4d_g.exe tif_bm4d_g.cu %TIFFLIB%
 
 move *.exe ..\exe
 del *.obj tif_*_g.exp  tif_*_g.lib

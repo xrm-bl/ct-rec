@@ -6,69 +6,70 @@ set   CCX=cl /DWINDOWS /Ox /D_USE_MATH_DEFINES
 set   CBP=cbp_thread_int.c
 set   CBPd=cbp_thread_nai.c
 set   SIF_F=sif_f_fast.c
+set   TIFFLIB=libtiff.lib jpeg.lib lzma.lib zs.lib
 
 
 rem normal CT reconstruction
 rem CPU
 
-rem %CC2% /openmp /Fetf_rec_t_r.exe tf_rec.c error.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Ramachandran
-rem %CC2% /openmp /Fetf_rec_t_s.exe tf_rec.c error.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Shepp
-rem %CC2% /openmp /Fetf_rec_t_c.exe tf_rec.c error.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Chesler
+rem %CC2% /openmp /Fetf_rec_t_r.exe tf_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Ramachandran
+rem %CC2% /openmp /Fetf_rec_t_s.exe tf_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Shepp
+rem %CC2% /openmp /Fetf_rec_t_c.exe tf_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Chesler
 
-%CC2% /openmp /Fect_rec_t_r.exe ct_rec_c.c error.c sort_filter_omp.c %SIF_F% libtiff.lib %CBP% /DFilter=Ramachandran
-%CC2% /openmp /Fect_rec_t_s.exe ct_rec_c.c error.c sort_filter_omp.c %SIF_F% libtiff.lib %CBP% /DFilter=Shepp
-%CC2% /openmp /Fect_rec_t_c.exe ct_rec_c.c error.c sort_filter_omp.c %SIF_F% libtiff.lib %CBP% /DFilter=Chesler
+%CC2% /openmp /Fect_rec_t_r.exe ct_rec_c.c error.c sort_filter_omp.c %SIF_F% %TIFFLIB% %CBP% /DFilter=Ramachandran
+%CC2% /openmp /Fect_rec_t_s.exe ct_rec_c.c error.c sort_filter_omp.c %SIF_F% %TIFFLIB% %CBP% /DFilter=Shepp
+%CC2% /openmp /Fect_rec_t_c.exe ct_rec_c.c error.c sort_filter_omp.c %SIF_F% %TIFFLIB% %CBP% /DFilter=Chesler
 
-%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_r.exe hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Ramachandran
-%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_s.exe hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Shepp
-%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_c.exe hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Chesler
+%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_r.exe hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Ramachandran
+%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_s.exe hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Shepp
+%CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_c.exe hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Chesler
 
-rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_r.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Ramachandran
-rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_s.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Shepp
-rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_c.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c libtiff.lib %CBP% /DFilter=Chesler
+rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_r.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Ramachandran
+rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_s.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Shepp
+rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_c.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Chesler
 
 rem reconstruction for offset CT
 rem CPU
 
-%CC2% /openmp /Feofct_srec_t_r.exe /DFloat=float /DONLY_CT_VIEWS error.c rhp_c.c sort_filter_omp.c rl.c %CBP% libtiff.lib ofct_srec.c /DFilter=Ramachandran
-%CC2% /openmp /Feofct_srec_t_s.exe /DFloat=float /DONLY_CT_VIEWS error.c rhp_c.c sort_filter_omp.c rl.c %CBP% libtiff.lib ofct_srec.c /DFilter=Shepp
-%CC2% /openmp /Feofct_srec_t_c.exe /DFloat=float /DONLY_CT_VIEWS error.c rhp_c.c sort_filter_omp.c rl.c %CBP% libtiff.lib ofct_srec.c /DFilter=Chesler
+%CC2% /openmp /Feofct_srec_t_r.exe /DFloat=float /DONLY_CT_VIEWS error.c rhp_c.c sort_filter_omp.c rl.c %CBP% %TIFFLIB% ofct_srec.c /DFilter=Ramachandran
+%CC2% /openmp /Feofct_srec_t_s.exe /DFloat=float /DONLY_CT_VIEWS error.c rhp_c.c sort_filter_omp.c rl.c %CBP% %TIFFLIB% ofct_srec.c /DFilter=Shepp
+%CC2% /openmp /Feofct_srec_t_c.exe /DFloat=float /DONLY_CT_VIEWS error.c rhp_c.c sort_filter_omp.c rl.c %CBP% %TIFFLIB% ofct_srec.c /DFilter=Chesler
 
-rem %CC2% /openmp /Feotf_rec_t_r.exe otf_rec.c error.c libtiff.lib sort_filter_omp.c %CBP% /DFilter=Ramachandran
-%CC2% /openmp /Feofct_rec_t_r.exe ofct_rec.c error.c libtiff.lib sort_filter_omp.c %CBP% /DFilter=Ramachandran
-rem %CC2% /openmp /Feotf_rec_t_s.exe otf_rec.c error.c libtiff.lib sort_filter_omp.c %CBP% /DFilter=Shepp
-%CC2% /openmp /Feofct_rec_t_s.exe ofct_rec.c error.c libtiff.lib sort_filter_omp.c %CBP% /DFilter=Shepp
-rem %CC2% /openmp /Feotf_rec_t_c.exe otf_rec.c error.c libtiff.lib sort_filter_omp.c %CBP% /DFilter=Chesler
-%CC2% /openmp /Feofct_rec_t_c.exe ofct_rec.c error.c libtiff.lib sort_filter_omp.c %CBP% /DFilter=Chesler
+rem %CC2% /openmp /Feotf_rec_t_r.exe otf_rec.c error.c %TIFFLIB% sort_filter_omp.c %CBP% /DFilter=Ramachandran
+%CC2% /openmp /Feofct_rec_t_r.exe ofct_rec.c error.c %TIFFLIB% sort_filter_omp.c %CBP% /DFilter=Ramachandran
+rem %CC2% /openmp /Feotf_rec_t_s.exe otf_rec.c error.c %TIFFLIB% sort_filter_omp.c %CBP% /DFilter=Shepp
+%CC2% /openmp /Feofct_rec_t_s.exe ofct_rec.c error.c %TIFFLIB% sort_filter_omp.c %CBP% /DFilter=Shepp
+rem %CC2% /openmp /Feotf_rec_t_c.exe otf_rec.c error.c %TIFFLIB% sort_filter_omp.c %CBP% /DFilter=Chesler
+%CC2% /openmp /Feofct_rec_t_c.exe ofct_rec.c error.c %TIFFLIB% sort_filter_omp.c %CBP% /DFilter=Chesler
 
-rem %CC2% /openmp /Feoftf_srec_t_r.exe /DFloat=float /DONLY_CT_VIEWS error.c rtf.c sort_filter_omp.c rl.c %CBP% libtiff.lib ofct_srec.c /DFilter=Ramachandran
-rem %CC2% /openmp /Feoftf_srec_t_s.exe /DFloat=float /DONLY_CT_VIEWS error.c rtf.c sort_filter_omp.c rl.c %CBP% libtiff.lib ofct_srec.c /DFilter=Shepp
-rem %CC2% /openmp /Feoftf_srec_t_c.exe /DFloat=float /DONLY_CT_VIEWS error.c rtf.c sort_filter_omp.c rl.c %CBP% libtiff.lib ofct_srec.c /DFilter=Chesler
+rem %CC2% /openmp /Feoftf_srec_t_r.exe /DFloat=float /DONLY_CT_VIEWS error.c rtf.c sort_filter_omp.c rl.c %CBP% %TIFFLIB% ofct_srec.c /DFilter=Ramachandran
+rem %CC2% /openmp /Feoftf_srec_t_s.exe /DFloat=float /DONLY_CT_VIEWS error.c rtf.c sort_filter_omp.c rl.c %CBP% %TIFFLIB% ofct_srec.c /DFilter=Shepp
+rem %CC2% /openmp /Feoftf_srec_t_c.exe /DFloat=float /DONLY_CT_VIEWS error.c rtf.c sort_filter_omp.c rl.c %CBP% %TIFFLIB% ofct_srec.c /DFilter=Chesler
 
 rem guess rotation center for offset CT
-rem %CC2% /Feofct_xy.exe /DONLY_CT_VIEWS error.c rhp_c.c msd.c %SIF_F% libtiff.lib oct_xy.c
-%CC2% /Feofct_DO.exe /DONLY_CT_VIEWS error.c rhp_c.c msd.c %SIF_F% libtiff.lib ofct_DO.c
-rem %CC2% /Feotf_xy.exe /DONLY_CT_VIEWS error.c rtf.c msd.c %SIF_F% libtiff.lib otf_xy.c
+rem %CC2% /Feofct_xy.exe /DONLY_CT_VIEWS error.c rhp_c.c msd.c %SIF_F% %TIFFLIB% oct_xy.c
+%CC2% /Feofct_DO.exe /DONLY_CT_VIEWS error.c rhp_c.c msd.c %SIF_F% %TIFFLIB% ofct_DO.c
+rem %CC2% /Feotf_xy.exe /DONLY_CT_VIEWS error.c rtf.c msd.c %SIF_F% %TIFFLIB% otf_xy.c
 
 rem p image CT reconstruction
 rem CPU
 
-%CC2% /openmp /Fep_rec_t_r.exe p_rec.c error.c sort_filter_omp.c libtiff.lib %CBP% /DFloat=float /DFilter=Ramachandran
-%CC2% /openmp /Fep_rec_t_s.exe p_rec.c error.c sort_filter_omp.c libtiff.lib %CBP% /DFloat=float /DFilter=Shepp
-%CC2% /openmp /Fep_rec_t_c.exe p_rec.c error.c sort_filter_omp.c libtiff.lib %CBP% /DFloat=float /DFilter=Chesler
+%CC2% /openmp /Fep_rec_t_r.exe p_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBP% /DFloat=float /DFilter=Ramachandran
+%CC2% /openmp /Fep_rec_t_s.exe p_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBP% /DFloat=float /DFilter=Shepp
+%CC2% /openmp /Fep_rec_t_c.exe p_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBP% /DFloat=float /DFilter=Chesler
 
 rem CT reconstruction from tiff 32bit sinogram
 rem CPU
 
-%CC2% /openmp /Fesf_rec_t_r.exe sf_rec.c error.c sort_filter_omp.c libtiff.lib %CBPd% /DFloat=double /DFilter=Ramachandran
-%CC2% /openmp /Fesf_rec_t_s.exe sf_rec.c error.c sort_filter_omp.c libtiff.lib %CBPd% /DFloat=double /DFilter=Shepp
-%CC2% /openmp /Fesf_rec_t_c.exe sf_rec.c error.c sort_filter_omp.c libtiff.lib %CBPd% /DFloat=double /DFilter=Chesler
+%CC2% /openmp /Fesf_rec_t_r.exe sf_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBPd% /DFloat=double /DFilter=Ramachandran
+%CC2% /openmp /Fesf_rec_t_s.exe sf_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBPd% /DFloat=double /DFilter=Shepp
+%CC2% /openmp /Fesf_rec_t_c.exe sf_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBPd% /DFloat=double /DFilter=Chesler
 
 rem normalize
-%CC2% /Fetif_f2i.exe tif_f2i.c rif_f.c libtiff.lib
+%CC2% /Fetif_f2i.exe tif_f2i.c rif_f.c %TIFFLIB%
 
 rem rec crop
-%CC2% /Ferec_crop.exe rec_crop.c rif_f.c libtiff.lib
+%CC2% /Ferec_crop.exe rec_crop.c rif_f.c %TIFFLIB%
 
 rem sinogram
 %CC2% /Fesinog.exe sinog.c %SIF_F%
@@ -87,7 +88,7 @@ rem spl
 %CC2% /Fespl.exe spl.c
 %CC2% /Fehis_spl_K.exe his_spl_K.c
 %CC2% /Fehis_spl_E.exe his_spl_E.c
-%CC2% /Fehis_spl_tif.exe his_spl_tif.c libtiff.lib
+%CC2% /Fehis_spl_tif.exe his_spl_tif.c %TIFFLIB%
 
 rem rec_stk
 %CC2% /Ferec_stk.exe rec_stk.c
@@ -98,25 +99,25 @@ rem his2img
 %CC2% /Fehis2img.exe his2img.c
 
 rem ct_prj_f
-%CC2% /Fect_prj_f.exe ct_prj_f_c.c libtiff.lib
+%CC2% /Fect_prj_f.exe ct_prj_f_c.c %TIFFLIB%
 
 rem ct_sub_f
-%CC2% /Fect_sub_f.exe ct_sub_f.c libtiff.lib
+%CC2% /Fect_sub_f.exe ct_sub_f.c %TIFFLIB%
 
 rem ict_prj_fc
-%CC2% /Feict_prj_fc.exe ict_prj_fc.c libtiff.lib
+%CC2% /Feict_prj_fc.exe ict_prj_fc.c %TIFFLIB%
 
 rem ct_prj_fc
-%CC2% /Fect_prj_fc.exe ct_prj_fc.c libtiff.lib
+%CC2% /Fect_prj_fc.exe ct_prj_fc.c %TIFFLIB%
 
 rem tf_prj_fc
-rem %CC2% /openmp /arch:AVX2 /Fetf_prj_f.exe rif_fast.c tf_prj_f.c libtiff.lib
+rem %CC2% /openmp /arch:AVX2 /Fetf_prj_f.exe rif_fast.c tf_prj_f.c %TIFFLIB%
 
 rem tif2hst
-%CC2% /Fetif2hst.exe tif2hst.c libtiff.lib
+%CC2% /Fetif2hst.exe tif2hst.c %TIFFLIB%
 
 rem 3D gaussian filter
-%CCX% /Ferec_gf.exe fft.c rec_gf.c rif_f.c libtiff.lib
+%CCX% /Ferec_gf.exe fft.c rec_gf.c rif_f.c %TIFFLIB%
 
 rem 3D Rectangle rotation
 rem si_rar.exe ro - +y +z +x ro_yz
@@ -127,8 +128,8 @@ rem %CC2% error.c rif.c csi.c rsi.c sif.c si_rar.c /Fesi_rar.exe
 rem 3D binning
 rem si_sir ro - 2 ro_2x2x2
 rem %CC2% error.c rif.c csi.c rsi.c sif.c si_sir.c /Fesi_sir.exe
-%CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c si_sir_a.c libtiff.lib /Fesi_sir_a.exe
-%CC2%/openmp /arch:AVX2  error.c rif_fast.c csi.c rsi.c si_sir_s.c libtiff.lib /Fesi_sir_s.exe
+%CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c si_sir_a.c %TIFFLIB% /Fesi_sir_a.exe
+%CC2%/openmp /arch:AVX2  error.c rif_fast.c csi.c rsi.c si_sir_s.c %TIFFLIB% /Fesi_sir_s.exe
 rem %CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c sif_fast.c si_sir_fast.c /Fe:si_sir_fast.exe
 %CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c sif_fast.c si_sir_pipe.c /Fe:si_sir.exe
 
@@ -137,13 +138,13 @@ rem   si_gf  orgDir  nameFile  radius  {bias}  newDir
 %CC2% /openmp /arch:AVX2  error.c fft.c csi.c rif_fast.c sif_fast.c si_gf.c /Fesi_gf.exe
 
 rem hp2DO (unified: auto-detects img/tif from first argument)
-%CC2% /openmp /Fehp2DO.exe hp2DO.c libtiff.lib
+%CC2% /openmp /Fehp2DO.exe hp2DO.c %TIFFLIB%
 
 rem tif_ave
-%CC2% /openmp /arch:AVX2 /Fetif_ave.exe tif_ave.c rif_fast.c libtiff.lib
+%CC2% /openmp /arch:AVX2 /Fetif_ave.exe tif_ave.c rif_fast.c %TIFFLIB%
 
 rem tif_mgf
-%CC2% /openmp /Fetif_mgf.exe tif_mgf.c libtiff.lib
+%CC2% /openmp /Fetif_mgf.exe tif_mgf.c %TIFFLIB%
 
 rem his_ave
 %CC2% /Fehis_ave.exe his_ave.c sif.c
@@ -161,15 +162,15 @@ rem gf_sd fd
 %CC2% /openmp /arch:AVX2 /Fegf_fd.exe error.c fft.c rif_fast.c sif_fast.c gf_fd.c
 
 rem his2tif6
-%CC2% /Fehis2tif6.exe his2tif6.c libtiff.lib
+%CC2% /Fehis2tif6.exe his2tif6.c %TIFFLIB%
 
 rem ofsfa
 %CC2% /Feofsfa.exe ofsfa.c
 
 rem filters made by ClaudAI
-%CC2% /openmp /Fetif_blf.exe tif_blf.c libtiff.lib
-%CC2% /openmp /Fetif_gsf.exe tif_gsf.c libtiff.lib
-%CC2% /openmp /Fetif_mdf.exe tif_mdf.c libtiff.lib
+%CC2% /openmp /Fetif_blf.exe tif_blf.c %TIFFLIB%
+%CC2% /openmp /Fetif_gsf.exe tif_gsf.c %TIFFLIB%
+%CC2% /openmp /Fetif_mdf.exe tif_mdf.c %TIFFLIB%
 
 move *.exe ..\exe
 del *.obj

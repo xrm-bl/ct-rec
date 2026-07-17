@@ -10,6 +10,7 @@
  */
 
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -51,12 +52,12 @@ typedef struct {
 } FilterParams;
 
 typedef struct {
-    uint32 width;
-    uint32 height;
-    uint32 depth;
-    uint16 bits_per_sample;
-    uint16 samples_per_pixel;
-    uint16 sample_format;
+    uint32_t width;
+    uint32_t height;
+    uint32_t depth;
+    uint16_t bits_per_sample;
+    uint16_t samples_per_pixel;
+    uint16_t sample_format;
     size_t bytes_per_pixel;
     size_t bytes_per_slice;
 } ImageInfo;
@@ -131,8 +132,8 @@ static int get_tiff_files(const char *dir_path, char files[][MAX_PATH_LENGTH], i
 static int get_image_info(const char *dir_path, const char *filename, ImageInfo *info) {
     TIFF *tif;
     char full_path[MAX_PATH_LENGTH];
-    uint32 width, height;
-    uint16 bits_per_sample, samples_per_pixel, sample_format;
+    uint32_t width, height;
+    uint16_t bits_per_sample, samples_per_pixel, sample_format;
     snprintf(full_path, MAX_PATH_LENGTH, "%s%s%s", dir_path, PATH_SEPARATOR, filename);
     tif = TIFFOpen(full_path, "r");
     if (tif == NULL) return -1;
@@ -243,12 +244,12 @@ static int load_chunk(const char *dir_path, char files[][MAX_PATH_LENGTH],
  * the caller sets those explicitly to match the data actually being written.
  * Call this BEFORE closing the input TIFF (string pointers belong to the input). */
 static void copy_tiff_metadata(TIFF *in, TIFF *out) {
-    uint32 u32;
-    uint16 u16, u16a, u16b, *u16ptr;
+    uint32_t u32;
+    uint16_t u16, u16a, u16b, *u16ptr;
     float f;
     double dbl;
     char *str;
-    uint32 count;
+    uint32_t count;
     void *data;
 
     /* ASCII / string tags */
@@ -264,10 +265,10 @@ static void copy_tiff_metadata(TIFF *in, TIFF *out) {
     if (TIFFGetField(in, TIFFTAG_PAGENAME,         &str)) TIFFSetField(out, TIFFTAG_PAGENAME,         str);
     if (TIFFGetField(in, TIFFTAG_TARGETPRINTER,    &str)) TIFFSetField(out, TIFFTAG_TARGETPRINTER,    str);
 
-    /* uint32 tags */
+    /* uint32_t tags */
     if (TIFFGetField(in, TIFFTAG_SUBFILETYPE, &u32)) TIFFSetField(out, TIFFTAG_SUBFILETYPE, u32);
 
-    /* uint16 tags */
+    /* uint16_t tags */
     if (TIFFGetField(in, TIFFTAG_ORIENTATION,      &u16)) TIFFSetField(out, TIFFTAG_ORIENTATION,      u16);
     if (TIFFGetField(in, TIFFTAG_RESOLUTIONUNIT,   &u16)) TIFFSetField(out, TIFFTAG_RESOLUTIONUNIT,   u16);
     if (TIFFGetField(in, TIFFTAG_MINSAMPLEVALUE,   &u16)) TIFFSetField(out, TIFFTAG_MINSAMPLEVALUE,   u16);
@@ -284,17 +285,17 @@ static void copy_tiff_metadata(TIFF *in, TIFF *out) {
     if (TIFFGetField(in, TIFFTAG_SMAXSAMPLEVALUE, &dbl)) TIFFSetField(out, TIFFTAG_SMAXSAMPLEVALUE, dbl);
     if (TIFFGetField(in, TIFFTAG_STONITS,         &dbl)) TIFFSetField(out, TIFFTAG_STONITS,         dbl);
 
-    /* PageNumber: two uint16 values */
+    /* PageNumber: two uint16_t values */
     if (TIFFGetField(in, TIFFTAG_PAGENUMBER, &u16a, &u16b)) {
         TIFFSetField(out, TIFFTAG_PAGENUMBER, u16a, u16b);
     }
 
-    /* ICC profile: uint32 count + data pointer */
+    /* ICC profile: uint32_t count + data pointer */
     if (TIFFGetField(in, TIFFTAG_ICCPROFILE, &count, &data)) {
         TIFFSetField(out, TIFFTAG_ICCPROFILE, count, data);
     }
 
-    /* ExtraSamples: uint16 count + uint16 array */
+    /* ExtraSamples: uint16_t count + uint16_t array */
     if (TIFFGetField(in, TIFFTAG_EXTRASAMPLES, &u16, &u16ptr)) {
         TIFFSetField(out, TIFFTAG_EXTRASAMPLES, u16, u16ptr);
     }
