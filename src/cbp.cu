@@ -157,12 +157,12 @@ __global__ void	BP_GMF(int N,int M,int L1,
 /* NOTE: Legacy texture reference BP kernel removed for CUDA 13.x compatibility.
  *       BP_GMF (global memory fetch) kernel is used for all cases. */
 
-static int		N,M,L,L1,L2,batch;
+static int		N,M,L,L1,L2,batch,tail;
 static Float		**p,**f;
 static size_t		sof_L2,sof2_L1,sof_N,MOmax;
 static float		*gpf,*F;
-static float2		*G,*PQ,*B,*SC,*scf;	/* SC:角度表(device) scf:host転送用 */
-static cufftHandle	R2C,C2R;
+static float2		*G,*PQ,*SC,*scf;	/* SC:角度表(device) scf:host転送用 */
+static cufftHandle	R2C,C2R,R2Ct,C2Rt;	/* 本体チャンク用と端数用のFFTプラン */
 
 EXTERN Float	**InitCBP(int n,int m)
 {
@@ -172,10 +172,15 @@ EXTERN Float	**InitCBP(int n,int m)
 
 #define ALLOC(type,noe)	(type *)malloc(sizeof(type)*noe)
 
-	if ((p =ALLOC(Float *,(size_t)M		 ))==NULL ||
-	    (*p=ALLOC(Float  ,(size_t)M*(size_t)N))==NULL ||
-	    (f =ALLOC(Float *,(size_t)N		 ))==NULL ||
-	    (*f=ALLOC(Float  ,(size_t)N*(size_t)N))==NULL) return NULL;
+	if ((p =ALLOC(Float *,(size_t)M))==NULL ||
+	    (f =ALLOC(Float *,(size_t)N))==NULL) return NULL;
+
+	/* 投影・再構成像のホスト側バッファは pinned にして、
+	   PrepareCBP/EndCBP の一括転送をフル帯域で行う */
+	CUDA_SAFE_CALL(cudaMallocHost((void **)p,
+				      sizeof(Float)*(size_t)M*(size_t)N));
+	CUDA_SAFE_CALL(cudaMallocHost((void **)f,
+				      sizeof(Float)*(size_t)N*(size_t)N));
 
 	for (m=1; m<M; m++) p[m]=p[m-1]+N;
 	for (n=1; n<N; n++) f[n]=f[n-1]+N;
@@ -213,14 +218,21 @@ EXTERN Float	**InitCBP(int n,int m)
 	CUFFT_SAFE_CALL(cufftPlan1d(&R2C,L2,CUFFT_R2C,1));
 	CUFFT_SAFE_CALL(cufftExecR2C(R2C,(cufftReal *)G,(cufftComplex *)G));
 
-	if (batch=(size_t)L2*(size_t)M<=CUFFT_LIMIT) {
-	    CUFFT_SAFE_CALL(cufftDestroy(R2C));
-	    CUFFT_SAFE_CALL(cufftPlan1d(&R2C,L2,CUFFT_R2C,M));
-	    CUFFT_SAFE_CALL(cufftPlan1d(&C2R,L2,CUFFT_C2R,M));
-	}
-	else {
-	    CUFFT_SAFE_CALL(cufftPlan1d(&C2R,L2,CUFFT_C2R,1));
-	    CUDA_SAFE_CALL(cudaMalloc((void **)&B,sof2_L1));
+	/* チャンク分割バッチFFT:
+	   旧実装は L2*M>CUFFT_LIMIT のとき投影1本ごとに
+	   「D2Dコピー→単発FFT→D2Dコピー」へ退化していた(M本×2方向)。
+	   ここでは常にバッチ実行とし、CUFFT_LIMIT は1チャンクの
+	   最大要素数(=cuFFTワークスペースの上限)として使う。 */
+	CUFFT_SAFE_CALL(cufftDestroy(R2C));
+	batch=(int)(CUFFT_LIMIT/(size_t)L2);
+	if (batch<1) batch=1;
+	if (batch>M) batch=M;
+	tail=M%batch;
+	CUFFT_SAFE_CALL(cufftPlan1d(&R2C,L2,CUFFT_R2C,batch));
+	CUFFT_SAFE_CALL(cufftPlan1d(&C2R,L2,CUFFT_C2R,batch));
+	if (tail) {
+	    CUFFT_SAFE_CALL(cufftPlan1d(&R2Ct,L2,CUFFT_R2C,tail));
+	    CUFFT_SAFE_CALL(cufftPlan1d(&C2Rt,L2,CUFFT_C2R,tail));
 	}
 	return p;
 }
@@ -229,14 +241,26 @@ EXTERN void	PrepareCBP()
 {
 	int	n,m;
 
-	for (n=0; n<L; n++) gpf[n]=0.0;
-	for (n=L+N; n<L2; n++) gpf[n]=0.0;
+	if (sizeof(Float)==sizeof(float)) {
+	    /* 全行のゼロ詰めを1回のmemsetで行い、投影本体(N点×M行)は
+	       ピッチ付き2Dコピー1回で各行の中央へ転送する
+	       (旧実装はホスト詰め替え+cudaMemcpy を M回) */
+	    CUDA_SAFE_CALL(cudaMemset(PQ,0,sof2_L1*(size_t)M));
+	    CUDA_SAFE_CALL(cudaMemcpy2D((float *)PQ+L,sof2_L1,
+					p[0],sizeof(Float)*(size_t)N,
+					sof_N,(size_t)M,
+					cudaMemcpyHostToDevice));
+	}
+	else {
+	    for (n=0; n<L; n++) gpf[n]=0.0;
+	    for (n=L+N; n<L2; n++) gpf[n]=0.0;
 
-	for (m=0; m<M; m++) {
-	    for (n=0; n<N; n++) gpf[L+n]=p[m][n];
+	    for (m=0; m<M; m++) {
+		for (n=0; n<N; n++) gpf[L+n]=p[m][n];
 
-	    CUDA_SAFE_CALL(cudaMemcpy(PQ+(size_t)m*(size_t)L1,gpf,sof_L2,
-				      cudaMemcpyHostToDevice));
+		CUDA_SAFE_CALL(cudaMemcpy(PQ+(size_t)m*(size_t)L1,gpf,sof_L2,
+					  cudaMemcpyHostToDevice));
+	    }
 	}
 }
 
@@ -256,38 +280,24 @@ EXTERN void	ExecuteCBP(double dr,double r0,double t0)
 #else
 #define MO	M
 #endif
-	if (batch) {
-	    CUFFT_SAFE_CALL(cufftExecR2C(R2C,(cufftReal *)PQ,
-					     (cufftComplex *)PQ));
-	}
-	else
-	    for (pq=PQ, m=0; m<M; m++, pq+=L1) {
-		CUDA_SAFE_CALL(cudaMemcpy(B,pq,sof2_L1,
-					  cudaMemcpyDeviceToDevice));
-		CUFFT_SAFE_CALL(cufftExecR2C(R2C,(cufftReal *)B,
-						 (cufftComplex *)B));
-		CUDA_SAFE_CALL(cudaMemcpy(pq,B,sof2_L1,
-					  cudaMemcpyDeviceToDevice));
-	    }
+	for (pq=PQ, m=0; m+batch<=M; m+=batch, pq+=(size_t)batch*(size_t)L1)
+	    CUFFT_SAFE_CALL(cufftExecR2C(R2C,(cufftReal *)pq,
+					     (cufftComplex *)pq));
+	if (tail)
+	    CUFFT_SAFE_CALL(cufftExecR2C(R2Ct,(cufftReal *)pq,
+					      (cufftComplex *)pq));
 {
 	dim3	blocks_1d((L1+THREADS_1D-1)/THREADS_1D,M);
 
 	GxPQ<<<blocks_1d,THREADS_1D>>>
 	    (L1,G,(float)(M_PI/((double)MO*dr*(double)L2)),PQ); KEF();
 }
-	if (batch) {
-	    CUFFT_SAFE_CALL(cufftExecC2R(C2R,(cufftComplex *)PQ,
-					     (cufftReal *)PQ));
-	}
-	else
-	    for (pq=PQ, m=0; m<M; m++, pq+=L1) {
-		CUDA_SAFE_CALL(cudaMemcpy(B,pq,sof2_L1,
-					  cudaMemcpyDeviceToDevice));
-		CUFFT_SAFE_CALL(cufftExecC2R(C2R,(cufftComplex *)B,
-						 (cufftReal *)B));
-		CUDA_SAFE_CALL(cudaMemcpy(pq,B,sof2_L1,
-					  cudaMemcpyDeviceToDevice));
-	    }
+	for (pq=PQ, m=0; m+batch<=M; m+=batch, pq+=(size_t)batch*(size_t)L1)
+	    CUFFT_SAFE_CALL(cufftExecC2R(C2R,(cufftComplex *)pq,
+					     (cufftReal *)pq));
+	if (tail)
+	    CUFFT_SAFE_CALL(cufftExecC2R(C2Rt,(cufftComplex *)pq,
+					      (cufftReal *)pq));
 
 #ifdef	WAI
 	if (O>1) {
@@ -330,12 +340,19 @@ EXTERN Float	**EndCBP()
 
 	KEF();
 
-	for (y=0; y<N; y++) {
-	    CUDA_SAFE_CALL(cudaMemcpy(gpf,F+(size_t)y*(size_t)N,sof_N,
+	if (sizeof(Float)==sizeof(float)) {
+	    /* f[0] は N*N 連続かつ Float==float なので一括D2Hで直接受ける
+	       (旧実装は行ごとに cudaMemcpy を N回+ホスト変換ループ) */
+	    CUDA_SAFE_CALL(cudaMemcpy(*f,F,sof_N*(size_t)N,
 				      cudaMemcpyDeviceToHost));
-
-	    for (x=0; x<N; x++) f[y][x]=gpf[x];
 	}
+	else
+	    for (y=0; y<N; y++) {
+		CUDA_SAFE_CALL(cudaMemcpy(gpf,F+(size_t)y*(size_t)N,sof_N,
+					  cudaMemcpyDeviceToHost));
+
+		for (x=0; x<N; x++) f[y][x]=gpf[x];
+	    }
 	return f;
 }
 
@@ -346,8 +363,9 @@ EXTERN Float	**CBP(double dr,double r0,double t0)
 
 EXTERN void	TermCBP()
 {
-	if (!batch) {
-	    CUDA_SAFE_CALL(cudaFree(B));
+	if (tail) {
+	    CUFFT_SAFE_CALL(cufftDestroy(C2Rt));
+	    CUFFT_SAFE_CALL(cufftDestroy(R2Ct));
 	}
 	CUFFT_SAFE_CALL(cufftDestroy(C2R));
 	CUFFT_SAFE_CALL(cufftDestroy(R2C));
@@ -360,5 +378,6 @@ EXTERN void	TermCBP()
 	CUDA_SAFE_CALL(cudaFreeHost(scf));
 	CUDA_SAFE_CALL(cudaFreeHost(gpf));
 
-	free(*f); free(f); free(*p); free(p);
+	CUDA_SAFE_CALL(cudaFreeHost(*f)); free(f);
+	CUDA_SAFE_CALL(cudaFreeHost(*p)); free(p);
 }
