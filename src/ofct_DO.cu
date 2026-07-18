@@ -151,16 +151,21 @@ int	main(int argc,char **argv)
 	double		*ker=NULL;
 	int		r=0,kk;
 	int		Rc=0,Oyv=0;
+	int		K,k,j;			/* views averaged per group, actual group count, index */
 	size_t		p,NxNy;
 
-	if (argc!=2)
-	    	Error("usage : ofct_DO_g raw/");
+	if (argc!=2 && argc!=3)
+	    	Error("usage : ofct_DO_g raw/ [group]");
 
 	InitReadHiPic(argv[1],&hp);
 
 //	if (hp.Nt%2) (void)fputs("bad number of views (warning).\n",stderr);
 
 	Nx=hp.Nx; Ny=hp.Ny; M=hp.Nt/2; NxNy=(size_t)Nx*Ny;
+
+	/* group size (2nd arg): views averaged per pair-group to raise S/N; default 10 */
+	K = (argc==3) ? atoi(argv[2]) : 10;
+	if (K<1) K=1; if (K>M) K=M;
 
 	Ox1=(int)ceil(0.7*Nx); Ox2=Nx-2;
 	Oy1=-10; Oy2=10;
@@ -173,7 +178,8 @@ int	main(int argc,char **argv)
 	{ int gy=Ny,hy=Ny,e1=Oy1,e2=Oy2,ogy,ohy; Ly=Range(&gy,&hy,&e1,&e2,&ogy,&ohy); }
 	l=(double)Lx*(double)Ly;
 
-	/* host buffers (one G and one flipped H per pair) */
+	/* host buffers: group-averaged view G and flipped opposing view H
+	   (accumulate transmittance over K pairs, divide, then -log) */
 	if ((Gflat=(FOM *)malloc(sizeof(FOM)*(size_t)Nx*Ny))==NULL ||
 	    (Hflat=(FOM *)malloc(sizeof(FOM)*(size_t)Nx*Ny))==NULL ||
 	    (G=(FOM **)malloc(sizeof(FOM *)*Ny))==NULL ||
@@ -203,15 +209,22 @@ int	main(int argc,char **argv)
 	CUDA_CHECK(cudaMalloc((void **)&dPair,sizeof(double)*(size_t)Ox*Oy));
 	CUDA_CHECK(cudaMemset(dS,0,sizeof(double)*(size_t)Ox*Oy));
 
-	/* accumulate SSD over all view pairs */
-	for (m=0; m<M; m++) {
-	    ReadHiPic(&hp,m);
-	    for (y=0; y<Ny; y++) for (x=0; x<Nx; x++) G[y][x]=(-Log(hp.T[y][x]));
-	    if (sig>0.0) Smooth(G,Nx,Ny,ker,r,tmp);
+	/* accumulate SSD over pair-groups: K view-pairs are averaged in the
+	   transmittance domain (before -log) to raise S/N and suppress the
+	   noise*noise fluctuations that dominate the cost surface at low S/N. */
+	for (m=0; m<M; m+=K) {
+	    k=(m+K<=M)?K:(M-m);
 
-	    ReadHiPic(&hp,m+M);
-	    for (y=0; y<Ny; y++) for (x=0; x<Nx; x++) H[y][Nx-1-x]=(-Log(hp.T[y][x]));
-	    if (sig>0.0) Smooth(H,Nx,Ny,ker,r,tmp);
+	    for (p=0; p<NxNy; p++) { Gflat[p]=0.0; Hflat[p]=0.0; }
+	    for (j=0; j<k; j++) {
+		ReadHiPic(&hp,m+j);
+		for (y=0; y<Ny; y++) for (x=0; x<Nx; x++) G[y][x]      += hp.T[y][x];
+		ReadHiPic(&hp,m+j+M);
+		for (y=0; y<Ny; y++) for (x=0; x<Nx; x++) H[y][Nx-1-x] += hp.T[y][x];
+	    }
+	    for (y=0; y<Ny; y++) for (x=0; x<Nx; x++) G[y][x]=(-Log(G[y][x]/(double)k));
+	    for (y=0; y<Ny; y++) for (x=0; x<Nx; x++) H[y][x]=(-Log(H[y][x]/(double)k));
+	    if (sig>0.0) { Smooth(G,Nx,Ny,ker,r,tmp); Smooth(H,Nx,Ny,ker,r,tmp); }
 
 	    for (p=0; p<NxNy; p++) { fG[p]=(float)Gflat[p]; fH[p]=(float)Hflat[p]; }
 
@@ -221,7 +234,7 @@ int	main(int argc,char **argv)
 	    ssd_kernel<<<Ox*Oy,BDIM>>>(dG,dH,Nx,Ny,Ox1,Oy1,Ox,Oy,dS,dPair);
 	    CUDA_CHECK(cudaGetLastError());
 
-	    /* per-pair progress (same as ofct_DO.c Scan(): m, best Ox, best Oy, min) */
+	    /* per-group progress (m = first pair index of the group; best Ox, Oy, min) */
 	    CUDA_CHECK(cudaMemcpy(pairbuf,dPair,sizeof(double)*(size_t)Ox*Oy,cudaMemcpyDeviceToHost));
 	    {
 		int	ix,iy,bX=Ox1,bY=Oy1,adx0=(Ox1<0)?-Ox1:Ox1,ady0=(Oy1<0)?-Oy1:Oy1;
