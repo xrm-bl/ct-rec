@@ -1,5 +1,6 @@
 
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include "cbp.h"
 
@@ -18,6 +19,7 @@
 	(void)WaitForSingleObject(var,INFINITE); (void)CloseHandle(var)
 #else
 #include <pthread.h>
+#include <unistd.h>
 
 #define THREAD_VAR	pthread_t
 #define THREAD_FUNC	void *
@@ -31,8 +33,24 @@
 	if (pthread_join(var,NULL)) Error("can not join CBP_thread.")
 #endif
 
+/* 既定スレッド数: 実行PCの論理コア数-1 (0 になる場合は 1)。
+   環境変数 CBP_THREADS または -DCBP_THREADS=n で上書き可能。 */
+static int	DefaultThreads()
+{
+	int	n;
+#ifdef	WINDOWS
+	SYSTEM_INFO	si;
+
+	GetSystemInfo(&si);
+	n=(int)si.dwNumberOfProcessors-1;
+#else
+	n=(int)sysconf(_SC_NPROCESSORS_ONLN)-1;
+#endif
+	return (n<1)?1:n;
+}
+
 #ifndef	CBP_THREADS
-#define CBP_THREADS	8
+#define CBP_THREADS	DefaultThreads()
 #endif
 
 #ifndef	Int
@@ -118,11 +136,23 @@ Vector		*E,*Z;
 	    }
 }
 
+#ifdef	__64BIT_DATABUS
+typedef struct {
+		Int	x,y;
+	} IPair;
+#endif
+
 static int		K,N,M,*H0,*dH;
 static THREAD_VAR	*T;
-static Float		**P,**Q,***F;
+static Float		**P,**Q,**F;
 static Vector		*E,**Z;
-static double		*G;
+static double		*G,*Qmax;
+#ifdef	__64BIT_DATABUS
+static IPair		**QI;
+#else
+static Int		**QI;
+#endif
+static Int		*SI,*CI;
 
 #define POW2(N)		(1<<(int)ceil(log((double)(N))/log(2.0)))
 #define ALLOC(type,noe)	(type *)malloc(sizeof(type)*(size_t)(noe))
@@ -152,20 +182,29 @@ int	Ni,Mi;
 	    (G	    =ALLOC(double    ,L2   ))==NULL ||
 	    (Q	    =ALLOC(Float *   ,Mi   ))==NULL ||
 	    (Q[0]   =ALLOC(Float     ,Mi*Ni))==NULL ||
+	    (Qmax   =ALLOC(double    ,K    ))==NULL ||
+#ifdef	__64BIT_DATABUS
+	    (QI	    =ALLOC(IPair *   ,Mi   ))==NULL ||
+	    (QI[0]  =ALLOC(IPair     ,(size_t)Mi*(Ni+2)))==NULL ||
+#else
+	    (QI	    =ALLOC(Int *     ,Mi   ))==NULL ||
+	    (QI[0]  =ALLOC(Int	     ,(size_t)Mi*(Ni+2)))==NULL ||
+#endif
+	    (SI	    =ALLOC(Int	     ,Mi   ))==NULL ||
+	    (CI	    =ALLOC(Int	     ,Mi   ))==NULL ||
 	    (H0	    =ALLOC(int	     ,Ni   ))==NULL ||
 	    (dH	    =ALLOC(int	     ,Ni   ))==NULL ||
-	    (F	    =ALLOC(Float **  ,K    ))==NULL ||
-	    (F[0]   =ALLOC(Float *   ,K*Ni ))==NULL ||
-	    (F[0][0]=ALLOC(Float     ,K*N2 ))==NULL) return NULL;
+	    (F	    =ALLOC(Float *   ,Ni   ))==NULL ||
+	    (F[0]   =ALLOC(Float     ,N2   ))==NULL) return NULL;
 
+	/* QI[m] は前後に番兵 (-1 と N) を持つ量子化投影 */
+	QI[0]+=1;
 	for (m=1; m<Mi; m++) {
-	    P[m]=P[m-1]+Ni; Q[m]=Q[m-1]+Ni;
+	    P[m]=P[m-1]+Ni; Q[m]=Q[m-1]+Ni; QI[m]=QI[m-1]+(Ni+2);
 	}
-	for (n=1; n<Ni; n++) F[0][n]=F[0][n-1]+Ni;
-	for (k=1; k<K ; k++) {
-	    Z[k]=Z[k-1]+L2;
-	    F[k]=F[k-1]+Ni; for (n=0; n<Ni; n++) F[k][n]=F[k-1][n]+N2;
-	}
+	for (n=1; n<Ni; n++) F[n]=F[n-1]+Ni;
+	for (k=1; k<K ; k++) Z[k]=Z[k-1]+L2;
+
 	E[0].x=E[L].y=1.0; z[0].x=Filter(L); z[L].x=Filter(0);
 	E[0].y=E[L].x=	   z[0].y=	     z[L].y=0.0;
 	for (l=L2-1, n=1; n<L; n++, l--) {
@@ -180,29 +219,20 @@ int	Ni,Mi;
 	N=Ni; M=Mi; return P;
 }
 
-static double	dr,r0,t0,dt;
+static double	dr,r0,t0,dt,qf;
 static int	L,L2,N1,v1,v2;
+static Int	R0g;
 
-static THREAD_FUNC	CBP_thread(ki)
+/* フェーズA: 投影を K 本で分担してフィルタ畳み込み (FFT)。
+   Q[m] を作り、スレッドごとの最大絶対値を Qmax[k] へ。 */
+static THREAD_FUNC	ConvThread(ki)
 THREAD_ARG		ki;
 {
 	size_t	k=(size_t)ki;
-	int	v,h,m,l,n;
-	Float	*p,*q,**f=F[k];
-	Int	s,c,rv,**fv,rh,*fh,
-		**fi=(Int **)f,R0=(Int)floor(ldexp(r0-1.0,R_BITS+S_BITS)+0.5);
+	int	m,l,n;
+	Float	*p,*q;
 	Vector	*z=Z[k];
-	double	q0,t,Q0=0.0;
-#ifndef	__64BIT_DATABUS
-	Int	*qi=(Int *)z+1;
-	int	n1;
-#else
-	struct Vector {
-		Int	x,y;
-	} *qi=(struct Vector *)z+1;
-#endif
-	for (v=0; v<N; v++)
-	for (h=0; h<N; h++) fi[v][h]=0;
+	double	q0,Q0=0.0;
 
 	for (m=k; m<M; m+=K) {
 	    for (	 l=0; l<L;	l++)   z[l].x=	    z[l].y=0.0;
@@ -219,28 +249,38 @@ THREAD_ARG		ki;
 	    for (q=Q[m], n=0; n<N; n++)
 		if ((q0=fabs(q[n]=z[n].x))>Q0) Q0=q0;
 	}
-	q0=ldexp(1.0/Q0,Q_BITS);
+	Qmax[k]=Q0;
 
+	return THREAD_NULL;
+}
+
+/* フェーズB: 画像の行帯 [blo,bhi] を K 本で分担して逆投影。
+   全投影を舐め、自分の帯にのみ書くので共有画像1枚で足りる
+   (旧実装のスレッド毎の画像複製と直列合算を廃止)。
+   量子化スケールはグローバル Q0 なのでスレッド数に依らず結果は同一。 */
+static THREAD_FUNC	BPThread(ki)
+THREAD_ARG		ki;
+{
+	size_t	k=(size_t)ki;
+	int	span=v2-v1+1,
+		blo=v1+(int)(((long long)span*(long long)k)/(long long)K),
+		bhi=v1+(int)(((long long)span*(long long)(k+1))/(long long)K)-1,
+		v,h,m,n;
+	Int	s,c,rv,**fv,rh,*fh,
+		**fi=(Int **)F;
 #ifndef	__64BIT_DATABUS
-	qi[-1]=qi[N]=0;
+	Int	*qi;
+	int	n1;
 #else
-	qi[-1].x=qi[N].x=qi[N].y=0;
+	IPair	*qi;
 #endif
-	for (m=k; m<M; m+=K) {
-	    q=Q[m];
-#ifndef	__64BIT_DATABUS
-	    for (n=0; n<N; n++) qi[n]=(Int)floor(q[n]*q0+0.5);
-#else
-	    for (n=N1; n>=0; n--)
-		qi[n].y=qi[n+1].x-(qi[n].x=(Int)floor(q[n]*q0+0.5));
+	if (blo>bhi) return THREAD_NULL;
 
-	    qi[-1].y=qi[0].x;
-#endif
-	    t=t0+dt*(double)m; s=(Int)floor(ldexp(sin(t),R_BITS+S_BITS)+0.5);
-			       c=(Int)floor(ldexp(cos(t),R_BITS+S_BITS)+0.5);
+	for (m=0; m<M; m++) {
+	    qi=QI[m]; s=SI[m]; c=CI[m];
 
-	    rv=(N1*(s-c)+1)/2-v1*s-R0; fv=fi+v1;
-	    for (v=v1; v<=v2; v++, rv-=s, fv++) {
+	    rv=(N1*(s-c)+1)/2-blo*s-R0g; fv=fi+blo;
+	    for (v=blo; v<=bhi; v++, rv-=s, fv++) {
 		h=H0[v]; rh=h*c+rv; fh=(*fv)+h;
 		for (h=dH[v]; h>=0; h--, rh+=c, fh++) {
 #ifndef	__64BIT_DATABUS
@@ -253,9 +293,9 @@ THREAD_ARG		ki;
 		}
 	    }
 	}
-	q0=ldexp(dt*Q0/(dr*(double)L2),-(Q_BITS+R_BITS));
-	for (v=N1; v>=0; v--)
-	for (h=N1; h>=0; h--) f[v][h]=q0*(double)fi[v][h];
+	/* 自分の帯を int 累積値から Float へ変換 (降順で in-place 安全) */
+	for (v=bhi; v>=blo; v--)
+	for (h=N1; h>=0; h--) F[v][h]=qf*(double)fi[v][h];
 
 	return THREAD_NULL;
 }
@@ -263,9 +303,8 @@ THREAD_ARG		ki;
 Float	**CBP(dri,r0i,t0i)
 double	dri,r0i,t0i;
 {
-	double	N12,R,R2,y,x;
-	int	v,k,h;
-	Float	**Fk,**F0=F[0];
+	double	N12,R,R2,y,x,q0,Q0,t;
+	int	v,k,h,m,n;
 
 	dr=dri; r0=r0i; t0=t0i;
 	L2=(L=POW2(N))<<1;
@@ -286,24 +325,62 @@ double	dri,r0i,t0i;
 		if (v<v1) v1=v; v2=v;
 	    }
 #endif
+	/* フェーズA: フィルタ畳み込み (投影分割) */
 	for (k=1; k<K; k++)
-	    if (THREAD_CREATE(T[k],CBP_thread,k))
+	    if (THREAD_CREATE(T[k],ConvThread,k))
 		Error("can not create CBP_thread.");
 
-	(void)CBP_thread((THREAD_ARG)0);
+	(void)ConvThread((THREAD_ARG)0);
+
+	for (Q0=Qmax[0], k=1; k<K; k++) {
+	    THREAD_JOIN(T[k]);
+
+	    if (Qmax[k]>Q0) Q0=Qmax[k];
+	}
+	/* グローバル Q0 で量子化 (スレッド数に依らず同一の丸め) */
+	q0=ldexp(1.0/Q0,Q_BITS);
+	for (m=0; m<M; m++) {
+	    Float	*q=Q[m];
+#ifndef	__64BIT_DATABUS
+	    Int		*qi=QI[m];
+
+	    qi[-1]=qi[N]=0;
+	    for (n=0; n<N; n++) qi[n]=(Int)floor(q[n]*q0+0.5);
+#else
+	    IPair	*qi=QI[m];
+
+	    qi[-1].x=qi[N].x=qi[N].y=0;
+	    for (n=N1; n>=0; n--)
+		qi[n].y=qi[n+1].x-(qi[n].x=(Int)floor(q[n]*q0+0.5));
+
+	    qi[-1].y=qi[0].x;
+#endif
+	    t=t0+dt*(double)m;
+	    SI[m]=(Int)floor(ldexp(sin(t),R_BITS+S_BITS)+0.5);
+	    CI[m]=(Int)floor(ldexp(cos(t),R_BITS+S_BITS)+0.5);
+	}
+	R0g=(Int)floor(ldexp(r0-1.0,R_BITS+S_BITS)+0.5);
+	qf=ldexp(dt*Q0/(dr*(double)L2),-(Q_BITS+R_BITS));
+
+	(void)memset(F[0],0,sizeof(Float)*(size_t)N*(size_t)N);
+
+	/* フェーズB: 逆投影 (行帯分割) */
+	for (k=1; k<K; k++)
+	    if (THREAD_CREATE(T[k],BPThread,k))
+		Error("can not create CBP_thread.");
+
+	(void)BPThread((THREAD_ARG)0);
 
 	for (k=1; k<K; k++) {
 	    THREAD_JOIN(T[k]);
-
-	    Fk=F[k]; for (v=0; v<N; v++)
-		     for (h=0; h<N; h++) F0[v][h]+=Fk[v][h];
 	}
-	return F0;
+	return F;
 }
 
 void	TermCBP()
 {
-	free(F[0][0]); free(F[0]); free(F); free(dH); free(H0);
+	free(F[0]); free(F); free(dH); free(H0);
+	free(CI); free(SI); free(QI[0]-1); free(QI); free(Qmax);
 	free(Q[0]); free(Q); free(G); free(Z[0]); free(Z); free(E);
 	free(P[0]); free(P);
 	free(T);

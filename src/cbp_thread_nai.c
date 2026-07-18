@@ -18,6 +18,7 @@
 	WaitForSingleObject(var,INFINITE)==WAIT_FAILED || CloseHandle(var)==0
 #else
 #include <pthread.h>
+#include <unistd.h>
 
 #define THREAD_VAR	pthread_t
 #define THREAD_FUNC	void *
@@ -30,8 +31,24 @@
 #define THREAD_JOIN(var)	pthread_join(var,NULL)
 #endif
 
+/* 既定スレッド数: 実行PCの論理コア数-1 (0 になる場合は 1)。
+   環境変数 CBP_THREADS または -DCBP_THREADS=n で上書き可能。 */
+static int	DefaultThreads()
+{
+	int	n;
+#ifdef	WINDOWS
+	SYSTEM_INFO	si;
+
+	GetSystemInfo(&si);
+	n=(int)si.dwNumberOfProcessors-1;
+#else
+	n=(int)sysconf(_SC_NPROCESSORS_ONLN)-1;
+#endif
+	return (n<1)?1:n;
+}
+
 #ifndef	CBP_THREADS
-#define CBP_THREADS	8
+#define CBP_THREADS	DefaultThreads()
 #endif
 
 #if	defined(__x86_64__) || defined(__ia64__)
