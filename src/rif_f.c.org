@@ -81,19 +81,6 @@ static Byte	bitN[256]={
 
 #define BYTE()	byte[GetChar()]
 
-/* in-place byte swap of n elements of es bytes each (fast path only) */
-static void	SwapBytes(Byte *p,size_t n,int es)
-{
-	size_t	i;
-	int	a,b;
-	Byte	t;
-
-	for (i=0; i<n; i++,p+=es)
-	    for (a=0,b=es-1; a<b; a++,b--) {
-		t=p[a]; p[a]=p[b]; p[b]=t;
-	    }
-}
-
 static void	InitNICDecode(Word4 ofs,Word4 cnt)
 {
 	(void)fseek(file,(long)ofs,0); bytes=cnt;
@@ -482,67 +469,6 @@ int	ReadImageFile_Float(char *path,int *Nx,int *Ny,FOM ***cell,char **desc)
 	    spi=(il+rps-1)/rps;
 	    ofs=GetStrip(ifd,0x111,spi,"offset");
 	    cnt=GetStrip(ifd,0x117,spi,"bytes count");
-
-	    /* ---- fast path -------------------------------------------
-	       Uncompressed data with normal fill order and byte-aligned
-	       samples are read strip by strip with fread() instead of the
-	       per-pixel function-pointer decoders below (which cost more
-	       than ten calls per 32-bit sample).  Strips whose byte counts
-	       do not match the plain layout, and everything else (LZW,
-	       PackBits, predictor, packed bit depths, reversed fill order)
-	       fall through to the original generic path. */
-	    if (Decode==NICDecode && byte==bitN &&
-		((i3e==1 && (bps==32 || bps==64)) ||
-		 (i3e==0 && dp==0 && (bps==8 || bps==16 || bps==32)))) {
-		int	es=bps/8,swap;
-		Word4	s,rows,r;
-		size_t	rb=(size_t)iw*(size_t)es,sb;
-		Byte	*buf;
-		Word2	one=1;
-
-		for (s=0; s<spi; s++) {
-		    rows=(s+1<spi)?rps:il-(spi-1)*rps;
-		    if ((size_t)cnt[s]!=(size_t)rows*rb) break;
-		}
-		swap=((code=='I')!=(int)(*(Byte *)&one));
-		if (s==spi && (buf=ALLOC(Byte,(size_t)rps*rb))!=NULL) {
-		    for (s=0,y=0; s<spi; s++) {
-			rows=(s+1<spi)?rps:il-(spi-1)*rps;
-			(void)fseek(file,(long)ofs[s],0);
-			sb=(size_t)rows*rb;
-			if (fread(buf,(size_t)1,sb,file)!=sb)
-			    Error("unexpected end of file.");
-			if (swap) SwapBytes(buf,sb/(size_t)es,es);
-			for (r=0; r<rows; r++,y++) {
-			    fom=(*cell)[y];
-			    if (i3e==1 && bps==32) {
-				float	*sp=(float *)(buf+(size_t)r*rb);
-				for (x=0; x<iw; x++) fom[x]=(FOM)sp[x];
-			    }
-			    else if (i3e==1) {
-				double	*sp=(double *)(buf+(size_t)r*rb);
-				for (x=0; x<iw; x++) fom[x]=(FOM)sp[x];
-			    }
-			    else if (bps==8) {
-				Byte	*sp=buf+(size_t)r*rb;
-				for (x=0; x<iw; x++) fom[x]=(FOM)sp[x];
-			    }
-			    else if (bps==16) {
-				Word2	*sp=(Word2 *)(buf+(size_t)r*rb);
-				for (x=0; x<iw; x++) fom[x]=(FOM)sp[x];
-			    }
-			    else {
-				Word4	*sp=(Word4 *)(buf+(size_t)r*rb);
-				for (x=0; x<iw; x++) fom[x]=(FOM)sp[x];
-			    }
-			}
-		    }
-		    free(buf); free(cnt); free(ofs);
-		    (void)fclose(file);
-
-		    return (1-i3e)*bps;
-		}
-	    }
 
 	    Get1=Decode;
 
