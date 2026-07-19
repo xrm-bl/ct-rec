@@ -14,7 +14,7 @@ libtiff 4.4.0 で旧整数 typedef（`uint8`/`uint16`/`uint32`）が削除され
   - `#include <stdint.h>` を追加
   - `uint32`→`uint32_t`, `uint16`→`uint16_t`（コメント含む）
 
-他のファイルは既に `*_t` + `<stdint.h>` へ移行済みだった。CUDA 版は `MIGRATION.md` 参照。
+他のファイルは既に `*_t` + `<stdint.h>` へ移行済みだった。CUDA 版は `20260508_MIGRATION.md` 参照。
 
 ### 2. ヘッダ / ライブラリ（Windows）
 `src/` 直下の以下を 4.6.0 のものへ差し替え:
