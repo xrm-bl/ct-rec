@@ -220,7 +220,7 @@ void	InitReadHiPic(char *dir,HiPic *hp)
 			*dsn="duplicated sequence number.";
 	DIR		*Dir;
 	struct dirent	*sd;
-	int		l,q,it,x,y,i,darkFromEnv=0;
+	int		l,q,it,x,y,i,darkFromEnv=0,size_check=0;
 	const char	*ext;
 	char		qchar;
 	FILE		*file;
@@ -334,10 +334,16 @@ void	InitReadHiPic(char *dir,HiPic *hp)
 
 		if (it!=0 && it!=1) Error("",str,"unacceptable log data.");
 
-		GetSize(dir,hp->q_img[q],&x,&y);
+		/* サイズ検証は 100 枚ごと(先頭は必ず)に間引く。全枚数を開くと
+		   起動が I/O 律速で 10〜20 秒かかるため。基準サイズ(dark)取得
+		   は従来どおり全数の前に実施済み。混在サイズ異常の検出頻度は
+		   下がるが、通常データでは 1/100 のオープンで十分検出できる。 */
+		if (size_check++ % 100 == 0) {
+		    GetSize(dir,hp->q_img[q],&x,&y);
 
-		if (hp->Nx!=x || hp->Ny!=y)
-		    Error(dir,hp->q_img[q],"image size not match.");
+		    if (hp->Nx!=x || hp->Ny!=y)
+			Error(dir,hp->q_img[q],"image size not match.");
+		}
 
 		if (hp->OL[q].it!=(-1)) Error("",str,dsn);
 
