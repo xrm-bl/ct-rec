@@ -10,7 +10,7 @@
  * which forced RowsPerStrip = 1 (slow: one strip + one write per row).
  *
  * The bytes written are identical (contiguous rows); only the strip grouping
- * changes, so readers get bit-identical pixels. See LIBTIFF-MIGRATION.md.
+ * changes, so readers get bit-identical pixels. See 20260717_LIBTIFF-MIGRATION.md.
  *
  * Requires <tiffio.h> to be included first.  Sets TIFFTAG_ROWSPERSTRIP itself,
  * so callers need not (and should not) set it separately.

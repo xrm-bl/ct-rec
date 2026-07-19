@@ -334,7 +334,7 @@ Uesugi
       Example: tif_blf_g rh rh_blf1
       Example: tif_blf rh rh_blf1 5 20 200
 
-      See filter_readme.pdf for details on additional filters.
+      See 20260504_filter_readme.pdf for details on additional filters.
 
    p. Apply Median Filter Followed by Gaussian Filter to TIFF Images
       tif_mgf <input_file> <output_file> [median_kernel_size] [gaussian_sigma]

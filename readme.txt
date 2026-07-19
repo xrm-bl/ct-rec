@@ -306,7 +306,7 @@
       例: tif_blf_g rh rh_blf1
       例: tif_blf rh rh_blf1 5 20 200
       
-      その他のフィルタ等の詳細はfilter_readme.pdfを参照のこと。
+      その他のフィルタ等の詳細は20260504_filter_readme.pdfを参照のこと。
       
 
    p. tif画像にmedian filterかけてからgaussian filterをかける。
