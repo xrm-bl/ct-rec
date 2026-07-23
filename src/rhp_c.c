@@ -447,6 +447,71 @@ void	ReadHiPic(HiPic *hp,int t)
 	}
 }
 
+/* ---------------------------------------------------------------------- */
+/* ReadHiPicBand: ReadHiPic の再入(スレッド安全)版。                       */
+/*   投影 t を呼び出し側の生バッファ raw (Ny*Nx 要素) に読み込み、暗電流/  */
+/*   入射補正した透過率を行 y1..y2 について dst[y-y1][x] へ書く。          */
+/*   hp の D / I / OL は InitReadHiPic 後は読み取り専用、Read() はファイル */
+/*   毎に独立なので、異なる t に対して複数スレッドから同時に呼べる         */
+/*   (共有バッファ hp->T は使わない)。黒フレーム判定は全画素の (T-dark)    */
+/*   平均で ReadHiPic と同一。補正式も同一なので、書かれる行の値は         */
+/*   ReadHiPic と bit 一致する。                                           */
+void	ReadHiPicBand(HiPic *hp,int t,int y1,int y2,FOM **dst,
+		      unsigned short *raw)
+{
+	char		str[LEN];
+	OutputLog	*ol,*OL;
+	int		i,y,x;
+	WORD		*D,*I1,*I2,*T;
+	double		r1,r2,I_D,T_D;
+	double		td_sum,black_thresh;
+	char		*env_bt;
+	size_t		o;
+
+	if (t<0 || t>=hp->Nt) {
+	    (void)sprintf(str,"%d",t); Error("",str,"bad sequence number.");
+	}
+	if (y1<0) y1=0;
+	if (y2>hp->Ny-1) y2=hp->Ny-1;
+
+	env_bt = getenv("CT_REC_BLACK_THRESH");
+	black_thresh = (env_bt != NULL) ? atof(env_bt) : 1.0;
+
+	ol=hp->OL+t;
+	Read(hp->dir,hp->q_img[ol->q],hp->Nx,hp->Ny,(WORD *)raw);
+
+	OL=hp->OL+hp->Nt;
+	for (i=hp->Ni-2; i>0; i--) if (ol->c>=OL[i].c) break;
+
+	r1=1.0-(r2=(ol->c-OL[i].c)/(OL[i+1].c-OL[i].c));
+
+	/* black check: average of (T-dark) over all pixels (ReadHiPic と同一) */
+	td_sum=0.0;
+	D=hp->D; T=(WORD *)raw;
+	for (y=0; y<hp->Ny; y++)
+	for (x=0; x<hp->Nx; x++) td_sum+=(double)*T++ -(double)*D++;
+
+	if (td_sum / (double)(hp->Nx * hp->Ny) < black_thresh){
+	    (void)fprintf(stderr,
+	        "Warning\t black\t t=%d avg=%.2f (thresh=%.2f)\n",
+	        t, td_sum/(double)(hp->Nx*hp->Ny), black_thresh);
+	    for (y=y1; y<=y2; y++)
+	    for (x=0; x<hp->Nx; x++)
+	        dst[y-y1][x]=ERROR_VALUE;
+
+	    return;
+	}
+	for (y=y1; y<=y2; y++) {
+	    o=(size_t)y*(size_t)hp->Nx;
+	    D=hp->D+o; I1=hp->I[i]+o; I2=hp->I[i+1]+o; T=(WORD *)raw+o;
+	    for (x=0; x<hp->Nx; x++) {
+		T_D=(double)T[x]-(double)D[x];
+		I_D=r1*(double)I1[x]+r2*(double)I2[x]-(double)D[x];
+		dst[y-y1][x]=(I_D>0.0 && T_D>0.0)?T_D/I_D:ERROR_VALUE;
+	    }
+	}
+}
+
 void	TermReadHiPic(HiPic *hp)
 {
 	int	q;

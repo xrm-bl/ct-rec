@@ -249,7 +249,7 @@ int	main(int argc,char **argv)
 	unsigned long long mem_total = get_total_memory_bytes();
 	unsigned long long mem_ref   = mem_avail ? mem_avail : mem_total;
 
-	double frac=0.9;
+	double frac=0.95;
 	{ const char *e=getenv("HPTG_MEM_FRACTION"); if (e){ double v=atof(e); if (v>0.05 && v<=0.95) frac=v; } }
 
 	unsigned long long bytes_per_row = (unsigned long long)Nt*(unsigned long long)Nx*sizeof(Float);
@@ -323,15 +323,51 @@ int	main(int argc,char **argv)
 	    if (cy1<0)     cy1=0;
 	    if (cy2>Ny-1)  cy2=Ny-1;
 
-	    /* ---- 投影読み込み: 行 [cy1,cy2] を W へ ---- */
-	    for (t=0; t<Nt; t++) {
-		ReadHiPic(&hp,t);
-		for (y=cy1; y<=cy2; y++) {
-		    w=W[y-cy1][t]; hp_T=hp.T[y];
-		    for (x=0; x<Nx; x++)
-			*(w++)=((fom=(*(hp_T++)))>0.0)?-log(fom):0.0;
+	    /* ---- 投影読み込み: 行 [cy1,cy2] を W へ ----
+	       Read() はファイル毎に独立、hp の D/I/OL は読み取り専用なので、
+	       投影 t を複数スレッドで並列に読む (ReadHiPicBand)。InfiniBand
+	       等のディスクアレイは並列アクセスで帯域が出るため、逐次読みで
+	       生じていた読み込みフェーズの遊休を短縮する。
+	       既定 16 スレッド、環境変数 HPTG_READ_THREADS で変更可。 */
+	    {
+		int	rthreads=16,rdone=0;
+		{ char *e=getenv("HPTG_READ_THREADS");
+		  if (e && atoi(e)>0) rthreads=atoi(e); }
+		if (rthreads>Nt) rthreads=Nt;
+
+		#pragma omp parallel num_threads(rthreads)
+		{
+		    unsigned short	*raw;
+		    FOM			**dst;
+		    Float		*wp,fv;
+		    int			tt,yy,xx,rows=cy2-cy1+1;
+
+		    if ((raw=(unsigned short *)malloc(sizeof(unsigned short)
+					*(size_t)Ny*(size_t)Nx))==NULL ||
+			(dst=(FOM **)malloc(sizeof(FOM *)*(size_t)rows))==NULL)
+			Error("memory allocation error for parallel read.");
+
+		    #pragma omp for schedule(dynamic)
+		    for (tt=0; tt<Nt; tt++) {
+			/* 透過率を W[.][tt] の行へ直接書かせ、同スレッドで
+			   -log 変換する (W の tt 列はスレッド毎に別領域) */
+			for (yy=0; yy<rows; yy++) dst[yy]=(FOM *)W[yy][tt];
+
+			ReadHiPicBand(&hp,tt,cy1,cy2,dst,raw);
+
+			for (yy=0; yy<rows; yy++) {
+			    wp=W[yy][tt];
+			    for (xx=0; xx<Nx; xx++) {
+				fv=wp[xx];
+				wp[xx]=(fv>0.0)?-log(fv):0.0;
+			    }
+			}
+			#pragma omp critical
+			fprintf(stderr,"chunk[%d-%d] read %d / %d\r",
+				cs,ce,++rdone,Nt);
+		    }
+		    free(dst); free(raw);
 		}
-		fprintf(stderr,"chunk[%d-%d] read %d / %d\r",cs,ce,t+1,Nt);
 	    }
 	    fprintf(stderr,"\n");
 
