@@ -316,32 +316,67 @@ int	main(int argc,char **argv)
 	    int ce = cs+rows_per_chunk; if (ce>nsel) ce=nsel;
 	    int k;
 
-	    /* ---- 投影読み込み: バンド内スライスの SG を構築 ---- */
-	    for (m=0; m<M; m++) {
-		ReadHiPic(&hp,m);
-		for (k=cs; k<ce; k++) {
-		    z=sel[k]; sg=SG[k-cs][m]+r0; T=hp.T[z+z0];
-		    for (r=0; r<hp.Nx; r++) sg[r]=(-Log(T[r]));
-		}
+	    /* ---- 投影読み込み: バンド内スライスの SG を構築 ----
+	       hp_tg と同様に投影ペア m / m+M を複数スレッドで並列に読む
+	       (ReadHiPicBand)。各スレッドの出力は SG[.][m] 列で m 毎に
+	       独立なので競合しない。dark/入射補正・-log・オフセット合成の
+	       式は従来と同一で、結果はビット一致する。
+	       既定 16 スレッド、環境変数 HPTG_READ_THREADS で変更可。 */
+	    {
+		int	rthreads=16,rdone=0,
+			rows=sel[ce-1]-sel[cs]+1;	/* バンドの被覆行数 */
+		{ char *e=getenv("HPTG_READ_THREADS");
+		  if (e && atoi(e)>0) rthreads=atoi(e); }
+		if (rthreads>M) rthreads=M;
 
-		ReadHiPic(&hp,m+M);
-		for (k=cs; k<ce; k++) {
-		    z=sel[k]; sg=SG[k-cs][m]; T=hp.T[z+z1]+r1;
-		    for (r=r2; r<r3; r++) sg[r]=(-Log(T[-r]));
+		#pragma omp parallel num_threads(rthreads)
+		{
+		    unsigned short	*raw;
+		    FOM			**dst,*T2;
+		    Float		*sg2;
+		    int			mm,kk,rr,yy,y1a,y1b;
+
+		    if ((raw=(unsigned short *)malloc(sizeof(unsigned short)
+					*(size_t)hp.Ny*(size_t)hp.Nx))==NULL ||
+			(dst=(FOM **)malloc(sizeof(FOM *)*(size_t)rows))==NULL ||
+			(dst[0]=(FOM *)malloc(sizeof(FOM)
+					*(size_t)rows*(size_t)hp.Nx))==NULL)
+			Error("memory allocation error for parallel read.");
+		    for (yy=1; yy<rows; yy++) dst[yy]=dst[yy-1]+hp.Nx;
+
+		    #pragma omp for schedule(dynamic)
+		    for (mm=0; mm<M; mm++) {
+			y1a=sel[cs]+z0;
+			ReadHiPicBand(&hp,mm,y1a,y1a+rows-1,dst,raw);
+			for (kk=cs; kk<ce; kk++) {
+			    T2=dst[sel[kk]+z0-y1a]; sg2=SG[kk-cs][mm]+r0;
+			    for (rr=0; rr<hp.Nx; rr++) sg2[rr]=(-Log(T2[rr]));
+			}
+
+			y1b=sel[cs]+z1;
+			ReadHiPicBand(&hp,mm+M,y1b,y1b+rows-1,dst,raw);
+			for (kk=cs; kk<ce; kk++) {
+			    T2=dst[sel[kk]+z1-y1b]+r1; sg2=SG[kk-cs][mm];
+			    for (rr=r2; rr<r3; rr++) sg2[rr]=(-Log(T2[-rr]));
 #ifdef	OCT_SBS	/* side by side */
-	r=r4+(r5-r4-1)/2; if ((r5-r4)%2) sg[r]=(sg[r]-Log(T[-r]))/2.0;
+	rr=r4+(r5-r4-1)/2; if ((r5-r4)%2) sg2[rr]=(sg2[rr]-Log(T2[-rr]))/2.0;
 
-	while (++r<r5) sg[r]=(-Log(T[-r]));
+	while (++rr<r5) sg2[rr]=(-Log(T2[-rr]));
 #else
-	for (r=r4; r<r5; r++) sg[r]=
+	for (rr=r4; rr<r5; rr++) sg2[rr]=
 #ifdef	OCT_SA	/* simple average */
-	(sg[r]-Log(T[-r]))/2.0;
+	(sg2[rr]-Log(T2[-rr]))/2.0;
 #else		/* linear mixing */
-	((double)(r5-r)*sg[r]+(double)(r-r4+1)*(-Log(T[-r])))/(double)(r5-r4+1);
+	((double)(r5-rr)*sg2[rr]+(double)(rr-r4+1)*(-Log(T2[-rr])))/(double)(r5-r4+1);
 #endif
 #endif
+			}
+			#pragma omp critical
+			fprintf(stderr,"band[%d-%d] read %d / %d\r",
+				cs,ce-1,++rdone,M);
+		    }
+		    free(dst[0]); free(dst); free(raw);
 		}
-		fprintf(stderr,"band[%d-%d] read %d / %d\r",cs,ce-1,m+1,M);
 	    }
 	    fprintf(stderr,"\n");
 
