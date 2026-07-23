@@ -11,7 +11,8 @@ rem
 rem   ct_rec_loop.bat  indir  Dr  RC  RA0  outdir  [Njobs]
 rem   ct_rec_loop.bat  indir  Dr  L1 C1 L2 C2  RA0  outdir  [Njobs]
 rem
-rem   indir  : directory holding dark.img, q*.img, output.log
+rem   indir  : directory holding dark.img or dark.tif, q*.img / q*.tif,
+rem            and output.log (ct_rec auto-detects img/tif from the dark file)
 rem   Dr     : pixel size [um]
 rem   RC     : rotation center (fixed for every layer)
 rem   L1 C1  : center C1 at layer L1   (linear-center form)
@@ -70,18 +71,33 @@ for %%I in ("%INDIR%")  do set "INDIR_ABS=%%~fI"
 for %%O in ("%OUTDIR%") do set "OUTDIR_ABS=%%~fO"
 set "LOGDIR_ABS=%OUTDIR_ABS%\log"
 
-if not exist "%INDIR_ABS%\dark.img" ( echo no dark.img in "%INDIR_ABS%" & exit /b 1 )
+rem ct_rec supports both HiPic (.img) and 16-bit TIFF (.tif) input;
+rem accept whichever dark file is present (img preferred, as in ct_rec)
+set "DARKFILE="
+if exist "%INDIR_ABS%\dark.img" set "DARKFILE=dark.img"
+if not defined DARKFILE if exist "%INDIR_ABS%\dark.tif" set "DARKFILE=dark.tif"
+if not defined DARKFILE ( echo no dark.img / dark.tif in "%INDIR_ABS%" & exit /b 1 )
 if not exist "%OUTDIR_ABS%" mkdir "%OUTDIR_ABS%"
 if not exist "%LOGDIR_ABS%" mkdir "%LOGDIR_ABS%"
 
-rem fixed-center form reconstructs every layer (0..height-1);
-rem height = 16-bit value at byte offset 6 of the HiPic .img header
+rem fixed-center form reconstructs every layer (0..height-1)
 rem (kept out of an if(...) block: the PowerShell parens would break it)
 if /i not "%MODE%"=="FIXED" goto :afterheight
 set "HEIGHT="
+if /i "%DARKFILE%"=="dark.tif" goto :height_tif
+
+rem height = 16-bit value at byte offset 6 of the HiPic .img header
 for /f "usebackq" %%H in (`powershell -NoProfile -Command "$f=[IO.File]::OpenRead('%INDIR_ABS%\dark.img');$b=New-Object byte[] 8;[void]$f.Read($b,0,8);$f.Close();[BitConverter]::ToUInt16($b,6)"`) do set "HEIGHT=%%H"
+goto :height_check
+
+:height_tif
+rem height = ImageLength (tag 257) from the first IFD of the TIFF
+rem (handles both little-endian II and big-endian MM files)
+for /f "usebackq" %%H in (`powershell -NoProfile -Command "$b=[IO.File]::ReadAllBytes('%INDIR_ABS%\dark.tif');$le=$b[0] -eq 0x49;$u16={param($o) if($le){[BitConverter]::ToUInt16($b,$o)}else{[uint16]($b[$o]*256+$b[$o+1])}};$u32={param($o) if($le){[BitConverter]::ToUInt32($b,$o)}else{[uint32]((($b[$o]*256+$b[$o+1])*256+$b[$o+2])*256+$b[$o+3])}};$ifd=& $u32 4;$n=& $u16 $ifd;for($i=0;$i -lt $n;$i++){$e=$ifd+2+12*$i;if((& $u16 $e) -eq 257){$t=& $u16 ($e+2);if($t -eq 3){& $u16 ($e+8)}else{& $u32 ($e+8)};break}}"`) do set "HEIGHT=%%H"
+
+:height_check
 if not defined HEIGHT (
-    echo cannot read height from dark.img
+    echo cannot read height from %DARKFILE%
     exit /b 1
 )
 set /a Z1=0
