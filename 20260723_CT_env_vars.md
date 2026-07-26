@@ -1,6 +1,6 @@
 # CT再構成ソフトウェア 環境変数一覧
 
-xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-07-23 版**
+xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-07-27 版**（初版 2026-07-23、随時更新）
 （`20260620_CT_env_vars_EN/J.pdf` を置き換える更新版。差分は末尾参照）
 
 ---
@@ -29,6 +29,7 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-07-23 版**
 |---|---|---|---|---|
 | `CT_REC_BLACK_THRESH` | 黒(ダーク)投影判定しきい値。平均信号 (T−dark) がこれ未満の投影を黒とみなし補正 | 1.0 | ct_rec.c ct_rec_c.c ofct_rec.c otf_rec.c tf_rec.c rhp.c rhp_c.c rtf.c | rhp_c.c は ReadHiPic / ReadHiPicBand の両方で参照(共通リーダ経由で hp_tg / ofct_srec / ofct_DO にも効く) |
 | `OFCT_DO_SMOOTH` | ofct_DO(_g) の SSD 計算前ガウシアン平滑化 σ | 1.0（**既定で有効**） | ofct_DO.c ofct_DO.cu | **0 で無効化**。分離型2次元等方ガウシアン(水平→垂直2パス) |
+| `PAD_THRESH` | **全再構成ソフト共通**(CBP層)の打ち切り(カッピング)補正しきい値(**比率**) | **0 = OFF(既定)** | cbp_thread.c cbp_thread_int.c cbp_thread_nai.c cbp_thread_avx.c cbp.cu | >0 のとき、シノグラム端列の平均振幅が全体平均の この比率を超えたら(=試料が視野をはみ出していたら)フィルタ入力を端値ホールド+コサイン減衰で幅0.5N外挿(逆投影コスト不変、FFT長のみ2倍)。ct_rec/hp_tg/ofct_rec/ofct_srec/p_rec/sf_rec/tf_rec/rec2rec すべてに有効。実測データの目安 0.3、rec2rec入力(再構成円で端が減衰)は 0.1〜0.2。**強制ONは極小値(例 `PAD_THRESH=1e-9`)で代用可**(端列が完全に0ならパッド内容も0=ゼロ詰めと同一のため、極小しきい値は強制ONと機能的に等価) |
 
 ## メモリ対応チャンク分割 (3プログラム共通)
 
@@ -62,6 +63,7 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-07-23 版**
 | `HPTG_READ_THREADS` | **新設**(既定16)。hp_tg / ofct_srec の投影並列読み込み |
 | `ACT_SPL_JOBS` | **新設**(既定8)。act_spl / act_spl2 の Linux 背景ジョブ上限 |
 | `OFCT_DO_SMOOTH` | **新設**(既定1.0、0で無効)。ofct_DO(_g) の前処理平滑化 |
+| `PAD_THRESH` | **新設**(既定0=OFF)。CBP層共通の打ち切り(カッピング)補正。全再構成ソフトに有効 |
 | `HPTG_MEM_FRACTION` | 既定 0.8 → **0.9**(ofct_srec, p_rec)。hp_tg のみ **0.95** |
 | `THREADS` | ofct_DO の既定が 8 → **40**(3本とも40に統一) |
 | `OMP_NUM_THREADS` | 未設定時の実挙動は「OpenMP既定」ではなく **40** と判明(記載修正) |
