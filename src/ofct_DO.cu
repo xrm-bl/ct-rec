@@ -151,11 +151,11 @@ int	main(int argc,char **argv)
 	double		*ker=NULL;
 	int		r=0,kk;
 	int		Rc=0,Oyv=0;
-	int		K,k,j;			/* views averaged per group, actual group count, index */
+	int		K,k,j,D,npair=0;		/* K=pairs averaged per sample; D=stride; npair=pairs used */
 	size_t		p,NxNy;
 
-	if (argc!=2 && argc!=3)
-	    	Error("usage : ofct_DO_g raw/ [group]");
+	if (argc<2 || argc>4)
+	    	Error("usage : ofct_DO_g raw/ [navg [stride]]");
 
 	InitReadHiPic(argv[1],&hp);
 
@@ -163,11 +163,23 @@ int	main(int argc,char **argv)
 
 	Nx=hp.Nx; Ny=hp.Ny; M=hp.Nt/2; NxNy=(size_t)Nx*Ny;
 
-	/* group size (2nd arg): views averaged per pair-group to raise S/N; default 10 */
-	K = (argc==3) ? atoi(argv[2]) : 10;
+	/* navg (2nd arg): view-pairs averaged per sample point to raise S/N; default 10 */
+	K = (argc>=3) ? atoi(argv[2]) : 10;
 	if (K<1) K=1; if (K>M) K=M;
 
-	Ox1=(int)ceil(0.7*Nx); Ox2=Nx-2;
+	/* stride (3rd arg): use only every D-th sample point (decimation); default 1.
+	   The loop steps by K*D -- averaging K pairs then skipping (D-1)*K -- so the
+	   number of projections read, and hence this I/O-bound tool's run time, drops
+	   ~1/D.  The 0..180 deg angular range stays covered, so the estimated centre
+	   is essentially unchanged (cost-surface noise rises ~sqrt(D)).  D=1 reproduces
+	   the former behaviour exactly (npair==M, same normalisation). */
+	D = (argc>=4) ? atoi(argv[3]) : 1;
+	if (D<1) D=1;
+
+	/* 水平探索範囲: ずらし量 Dx = 2*center - Nx。
+	   下限 0.5*Nx (中心 0.75*Nx 相当) 〜 上限 Nx-2 (中心 Nx-1 相当。
+	   Dx=Nx だと対向像の重なりが無くなり SSD が定義できないため -2)。 */
+	Ox1=(int)ceil(0.5*Nx); Ox2=Nx-2;
 	Oy1=-10; Oy2=10;
 
 	Ox=Ox2-Ox1+1;
@@ -194,7 +206,7 @@ int	main(int argc,char **argv)
 	for (y=0; y<Oy; y++)   S[y]=Sflat+(size_t)y*Ox;
 
 	    /* (A) Gaussian kernel for pre-MSD smoothing (env OFCT_DO_SMOOTH=sigma, 0=off) */
-	sig = ((env=getenv("OFCT_DO_SMOOTH"))!=NULL) ? atof(env) : 1.0;
+	sig = ((env=getenv("OFCT_DO_SMOOTH"))!=NULL) ? atof(env) : 2.0;
 	if (sig>0.0) {
 	    r=(int)ceil(3.0*sig);
 	    if ((ker=(double *)malloc(sizeof(double)*(2*r+1)))==NULL ||
@@ -212,8 +224,9 @@ int	main(int argc,char **argv)
 	/* accumulate SSD over pair-groups: K view-pairs are averaged in the
 	   transmittance domain (before -log) to raise S/N and suppress the
 	   noise*noise fluctuations that dominate the cost surface at low S/N. */
-	for (m=0; m<M; m+=K) {
+	for (m=0; m<M; m+=K*D) {
 	    k=(m+K<=M)?K:(M-m);
+	    npair+=k;
 
 	    for (p=0; p<NxNy; p++) { Gflat[p]=0.0; Hflat[p]=0.0; }
 	    for (j=0; j<k; j++) {
@@ -253,6 +266,7 @@ int	main(int argc,char **argv)
 	}
 	CUDA_CHECK(cudaDeviceSynchronize());
 	(void)printf("\n");
+	if (D>1) (void)fprintf(stderr,"decimation: navg=%d stride=%d -> %d of %d pairs read\n",K,D,npair,M);
 
 	/* receive device result into Sflat, then normalise in place via S[][] */
 	CUDA_CHECK(cudaMemcpy(Sflat,dS,sizeof(double)*(size_t)Ox*Oy,cudaMemcpyDeviceToHost));
@@ -263,7 +277,7 @@ int	main(int argc,char **argv)
 	    int	Dx=Ox1+x, Dy=Oy1+y;
 	    int	adx=(Dx<0)?-Dx:Dx, ady=(Dy<0)?-Dy:Dy;
 	    double count=(double)(Nx-adx)*(double)(Ny-ady);
-	    S[y][x] = (count>0.0) ? Sflat[(size_t)y*Ox+x]/(count*l*(double)M) : 1.0e300;
+	    S[y][x] = (count>0.0) ? Sflat[(size_t)y*Ox+x]/(count*l*(double)npair) : 1.0e300;
 	}
 
 	/* minimum + parabolic sub-pixel refinement (identical to ofct_DO.c) */

@@ -100,7 +100,7 @@ int	main(int argc,char **argv)
 	char		*env,
 			*mae="memory allocation error.";
 	HiPic		hp;
-	int		Ox1,Ox2,Oy1,Oy2,Ox,Oy,T,t,y,x,M,m,t0,m0,Y,X;
+	int		Ox1,Ox2,Oy1,Oy2,Ox,Oy,T,t,y,x,M,m,t0,m0,Y,X,D,Msel;
 	THREAD_T	*Thread;
 	FOM		**S,**F;
 	double		sig;
@@ -111,11 +111,19 @@ int	main(int argc,char **argv)
 	size_t		i;
 	double		s;
 
-	if ((argc!=2))
-	    	Error("usage : ofct_DO raw/");
+	if (argc!=2 && argc!=3)
+	    	Error("usage : ofct_DO raw/ [stride]");
 
 	if ((env=getenv("THREADS"))!=NULL &&
 	    (Threads=atoi(env))<=0) Error("bad number of THREADS.");
+
+	/* stride (2nd arg): use only every D-th view-pair (decimation); default 1.
+	   ofct_DO has no per-sample averaging (unlike ofct_DO_g's navg), so the one
+	   optional argument is the stride itself.  Reading ~M/D pairs cuts this
+	   I/O-bound tool's run time ~1/D; the axis estimate is essentially unchanged
+	   (see ofct_DO.cu).  D=1 reproduces the former behaviour exactly. */
+	D = (argc==3) ? atoi(argv[2]) : 1;
+	if (D<1) D=1;
 
 	InitReadHiPic(argv[1],&hp);
 
@@ -129,7 +137,8 @@ int	main(int argc,char **argv)
 			    (Oy2=atoi(argv[5]))>=  hp.Ny  || Oy1>Oy2)
 			    Error("bad range of offsets.");
 		} else{
-			Ox1=ceil(0.7*hp.Nx); Ox2=hp.Nx-2;
+			/* 0.5*Nx 〜 Nx-2 (GPU 版 ofct_DO.cu と同一の既定範囲) */
+			Ox1=ceil(0.5*hp.Nx); Ox2=hp.Nx-2;
 			Oy1=-10; Oy2=10;
 		}
 
@@ -176,20 +185,23 @@ int	main(int argc,char **argv)
         { double sm=0.0; for(kk=-r;kk<=r;kk++){ ker[kk+r]=exp(-0.5*(double)kk*kk/(sig*sig)); sm+=ker[kk+r]; } for(kk=0;kk<2*r+1;kk++) ker[kk]/=sm; }
     }
 	M=hp.Nt/2;
+	if (D>M) D=M;
+	Msel = (M + D - 1) / D;		/* stride-selected pair count = ceil(M/D) */
+	if (D>1) (void)fprintf(stderr,"decimation: stride=%d -> %d of %d pairs\n",D,Msel,M);
 
-	for (m=0; m<M; m+=Threads) {
-	    T=(m+Threads<=M)?Threads:M-m;
+	for (m=0; m<Msel; m+=Threads) {
+	    T=(m+Threads<=Msel)?Threads:Msel-m;
 
 	    t0=Threads*Swapped;
 	    for (t=0; t<T; t++) {
-		ReadHiPic(&hp,m+t);
+		ReadHiPic(&hp,(m+t)*D);
 		F=G[t+t0];
 		for (y=0; y<hp.Ny; y++)
 		for (x=0; x<hp.Nx; x++) F[y][x]=(-Log(hp.T[y][x]));
 
 			if (sig>0.0) Smooth(G[t+t0],hp.Nx,hp.Ny,ker,r,tmp);
 
-		ReadHiPic(&hp,m+t+M);
+		ReadHiPic(&hp,(m+t)*D+M);
 		F=H[t+t0];
 		for (y=0; y<hp.Ny; y++)
 		for (x=0; x<hp.Nx; x++) F[y][hp.Nx-1-x]=(-Log(hp.T[y][x]));
@@ -205,7 +217,7 @@ int	main(int argc,char **argv)
 
 	    Swapped=1-Swapped; for (i=0; i<T; i++) INIT_MT(Thread[i],Compare,i);
 	}
-	T=M-(m0=m-Threads);
+	T=Msel-(m0=m-Threads);
 	for (t=0; t<T; t++) {
 	    TERM_MT(Thread[t],Compare);
 
@@ -220,7 +232,7 @@ int	main(int argc,char **argv)
 	    if (S[y][x]<s) {
 		s=S[y][x]; X=x; Y=y;
 	    }
-	    S[y][x]/=(double)M;
+	    S[y][x]/=(double)Msel;
 	}
 //	(void)fprintf(stderr,"%d\t%d\t%le\n",+X+Ox1,Y+Oy1,s/(double)M);
 //	(void)fprintf(stderr,"%d\t%d\t%le\n",(hp.Nx+X+Ox1)/2,Y+Oy1,s/(double)M);
