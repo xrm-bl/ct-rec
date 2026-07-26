@@ -16,6 +16,9 @@ rem GPU ring removal object (pure CUDA C replacement for sort_filter_omp.c).
 rem Built once; linked into the reconstruction programs compiled with /DUSE_GPU.
 %NVCC% sort_filter_g.cu -c
 
+rem GPU forward Radon transform object (rec2rec_g_*); filter-independent.
+%NVCC% radon_g.cu -c
+
 
 rem normal CT reconstruction
 rem GPU
@@ -109,6 +112,19 @@ rem GPU
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
 %CC2% /openmp /DUSE_GPU /Fep_rec_g_c.exe /DFOM=float /DFloat=float p_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+
+
+rem re-projection / re-reconstruction of CT slices (radon + sf_rec pipeline)
+rem GPU (radon_g.obj + cbp.obj)
+
+%NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
+%CC2% /openmp /DUSE_GPU /Ferec2rec_g_r.exe /DFloat=float rec2rec.c error.c radon_g.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+
+%NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
+%CC2% /openmp /DUSE_GPU /Ferec2rec_g_s.exe /DFloat=float rec2rec.c error.c radon_g.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+
+%NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
+%CC2% /openmp /DUSE_GPU /Ferec2rec_g_c.exe /DFloat=float rec2rec.c error.c radon_g.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem filters made by ClaudAI
 %NVCC% -o tif_blf_g.exe tif_blf_g.cu %TIFFLIB%

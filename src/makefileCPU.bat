@@ -65,6 +65,13 @@ rem CPU
 %CC2% /openmp /Fesf_rec_t_s.exe sf_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBPd% /DFloat=double /DFilter=Shepp
 %CC2% /openmp /Fesf_rec_t_c.exe sf_rec.c error.c sort_filter_omp.c %TIFFLIB% %CBPd% /DFloat=double /DFilter=Chesler
 
+rem re-projection / re-reconstruction of CT slices (radon + sf_rec pipeline)
+rem CPU
+
+%CC2% /openmp /Ferec2rec_r.exe rec2rec.c radon_omp.c error.c sort_filter_omp.c %TIFFLIB% %CBPd% /DFloat=double /DFilter=Ramachandran
+%CC2% /openmp /Ferec2rec_s.exe rec2rec.c radon_omp.c error.c sort_filter_omp.c %TIFFLIB% %CBPd% /DFloat=double /DFilter=Shepp
+%CC2% /openmp /Ferec2rec_c.exe rec2rec.c radon_omp.c error.c sort_filter_omp.c %TIFFLIB% %CBPd% /DFloat=double /DFilter=Chesler
+
 rem normalize
 %CC2% /Fetif_f2i.exe tif_f2i.c rif_f.c %TIFFLIB%
 
