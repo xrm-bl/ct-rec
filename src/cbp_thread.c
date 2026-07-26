@@ -1,4 +1,5 @@
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include "cbp.h"
@@ -131,12 +132,72 @@ static Work	**W;
 #define OVER(R,M)	(int)ceil(M_PI*(R)/(double)(M))
 #define ALLOC(type,noe)	(type *)malloc(sizeof(type)*(size_t)(noe))
 
+/* ---- Truncation (cupping) pad, controlled by env var PAD_THRESH ----
+   When PAD_THRESH (a plain ratio) > 0 and the mean amplitude of the
+   sinogram's outermost columns exceeds PAD_THRESH times the overall
+   mean (i.e. the sample overfills the field of view), each projection
+   is extended on both sides by N/2 samples holding the edge value
+   under a cosine decay before filtering.  The step left by the usual
+   zero padding, convolved with the ramp kernel's long -1/(2 pi^2 r^2)
+   tail, is what produces the bright rim (cupping); the smooth decay
+   removes it.  Backprojection stays at N (cost unchanged; only the
+   FFT length doubles).  Default (unset/<=0) is fully OFF and
+   bit-identical to the previous behaviour. */
+static double	PadThr=-1.0;
+static int	PadW=0;			/* pad width for this CBP() call (0=off) */
+
+static double	PadThreshold()
+{
+	char	*e;
+
+	if (PadThr<0.0)
+	    PadThr=((e=getenv("PAD_THRESH"))!=NULL && atof(e)>0.0)?atof(e):0.0;
+	return PadThr;
+}
+
+/* with the pad enabled the FFT must hold N+2*(N/2) input samples */
+#define PADPOW2(n)	((PadThreshold()>0.0)?POW2((n)+(n)/2):POW2(n))
+
+static void	DetectPad(Float **Pi,int Ni,int Mi)
+{
+	static int	said=0;
+	double		tot=0.0,edge=0.0;
+	int		m,n;
+
+	PadW=0;
+	if (PadThreshold()<=0.0) return;
+	for (m=0; m<Mi; m++) {
+	    for (n=0; n<Ni; n++) tot+=fabs((double)Pi[m][n]);
+	    edge+=fabs((double)Pi[m][0])+fabs((double)Pi[m][Ni-1]);
+	}
+	if (tot>0.0 &&
+	    edge/(2.0*(double)Mi)>PadThr*tot/((double)Mi*(double)Ni)) {
+	    PadW=Ni/2;
+	    if (!said) {
+		fprintf(stderr,"PAD_THRESH: truncation pad enabled (W=%d)\n",PadW);
+		said=1;
+	    }
+	}
+}
+
+static void	FillPad(Vector *z,Float *pr,int Li,int Ni)
+{
+	double	w;
+	int	n;
+
+	for (n=1; n<=PadW; n++) {
+	    w=0.5*(1.0+cos(M_PI*(double)n/(double)PadW));
+	    z[Li-n].x	  =pr[0]   *w;
+	    z[Li+Ni-1+n].x=pr[Ni-1]*w;
+	}
+}
+
 Float	**InitCBP(Ni,Mi)
 int	Ni,Mi;
 {
 	char	*env;
 	int	m,n,k,
-		L=POW2(Ni),L2=L<<1,MO=Mi*OVER((double)(Ni-1)/2.0,Mi),N2=Ni*Ni;
+		L=PADPOW2(Ni),L2=L<<1,MO=Mi*OVER((double)(Ni-1)/2.0,Mi),N2=Ni*Ni;
 	double	a,da=M_PI/(double)L2;
 
 #ifdef	PTW32_STATIC_LIB
@@ -239,7 +300,7 @@ Float	**CBP(dr,r0i,t0i)
 double	dr,r0i,t0i;
 {
 	double	dtq,R,R2,x,y,r,d;
-	int	O,m,l,n,o,v,k,h,L=POW2(N),L2=L<<1;
+	int	O,m,l,n,o,v,k,h,L=PADPOW2(N),L2=L<<1;
 	Float	*p,*q,*q0,*qM,**Fk,**F0=F[0];
 #ifdef	__64BIT_DATABUS
 	Float	q2,q1;
@@ -247,11 +308,13 @@ double	dr,r0i,t0i;
 	r0=r0i; t0=t0i;
 	N12=(double)(N-1)/2.0; R=N12-fabs(N12+r0); R2=R*R;
 	O=OVER(R,M); dtq=(dt=M_PI/(double)(MO=M*O))/(dr*(double)L2);
+	DetectPad(P,N,M);
 
 	for (m=0; m<M; m++) {
 	    for (	 l=0; l<L;	l++)   Z[l].x=	    Z[l].y=0.0;
 	    for (p=P[m], n=0; n<N; n++, l++) { Z[l].x=p[n]; Z[l].y=0.0; }
 	    for (	    ; n<L; n++, l++)   Z[l].x=	    Z[l].y=0.0;
+	    if (PadW>0) FillPad(Z,p,L,N);	/* truncation pad (PAD_THRESH) */
 
 	    FFT(L2,E,Z,-1);
 

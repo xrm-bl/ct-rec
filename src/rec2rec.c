@@ -17,8 +17,18 @@
  * Nt defaults to the original scan's view count recorded in the input
  * TIFF's ImageDescription ("Dr RC Nt RA0 min max", written by hp_tg /
  * sf_rec / ofct_srec); if that cannot be parsed, Nt=N.  The optional 3rd
- * argument overrides both.  Dr/RA0 from the description are carried over
- * to the output description unchanged.
+ * argument overrides both (0 keeps the automatic choice).  Dr/RA0 from
+ * the description are carried over to the output description unchanged.
+ *
+ * Truncation (cupping) correction is NOT handled here: it lives in the
+ * shared CBP layer (cbp_thread*.c / cbp.cu) and is controlled by the
+ * environment variable PAD_THRESH alone, default OFF -- see the comment
+ * block in those files.  When enabled there, the sinogram produced by
+ * this program is padded inside CBP like in every other reconstruction
+ * program.  Note that a sinogram Radon-transformed from a disk-limited
+ * reconstruction has geometrically attenuated edge bins (the outermost
+ * rays only graze the reconstruction circle), so a smaller threshold
+ * (PAD_THRESH ~ 0.1..0.2) may be needed here than for measured data.
  *
  * CPU build: radon_omp.c + sort_filter_omp.c + cbp_thread (makefileCPU).
  * GPU build: radon_g.cu  + sort_filter_g.cu  + cbp.cu      (makefileGPU).
@@ -53,6 +63,10 @@
 #endif
 
 extern void	Error(char *);
+
+#ifndef M_PI
+#define M_PI	3.14159265358979323846
+#endif
 
 #define LEN	2048
 
@@ -172,7 +186,7 @@ int	main(int argc,char *argv[])
 
 	if (argc!=3 && argc!=4)
 	    Error("usage : rec2rec rec_in/ rec_out/ [Nt]");
-	if (argc==4 && (NtArg=atoi(argv[3]))<2)
+	if (argc==4 && (NtArg=atoi(argv[3]))!=0 && NtArg<2)
 	    Error("bad number of views.");
 
 	if ((nfile=ListRecTif(argv[1],&name))==0)
@@ -224,7 +238,8 @@ int	main(int argc,char *argv[])
 	    RC=(double)(N-1)/2.0;
 	    RadonSlice(data32,N,sino,Nt,RA0);
 
-	    /* (2) ring removal + CBP, exactly as in sf_rec */
+	    /* (2) ring removal + CBP, exactly as in sf_rec (truncation
+	       padding, if enabled via PAD_THRESH, happens inside CBP) */
 	    if (SORT_FILTER_RESTORE(sino,result_data,N,Nt,kernel_size,num_threads)!=0)
 		Error("sort filter image processing failed.");
 	    for (j=0; j<Nt; j++)

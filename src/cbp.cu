@@ -164,11 +164,78 @@ static float		*gpf,*F;
 static float2		*G,*PQ,*SC,*scf;	/* SC:角度表(device) scf:host転送用 */
 static cufftHandle	R2C,C2R,R2Ct,C2Rt;	/* 本体チャンク用と端数用のFFTプラン */
 
+/* ---- Truncation (cupping) pad, controlled by env var PAD_THRESH ----
+   When PAD_THRESH (a plain ratio) > 0 and the mean amplitude of the
+   sinogram's outermost columns exceeds PAD_THRESH times the overall
+   mean (i.e. the sample overfills the field of view), each projection
+   is extended on both sides by N/2 samples holding the edge value
+   under a cosine decay before filtering.  The step left by the usual
+   zero padding, convolved with the ramp kernel's long -1/(2 pi^2 r^2)
+   tail, is what produces the bright rim (cupping); the smooth decay
+   removes it.  Backprojection stays at N (cost unchanged; only the
+   FFT length doubles).  Default (unset/<=0) is fully OFF and
+   bit-identical to the previous behaviour.
+   Same detection and taper as the CPU variants (cbp_thread*.c). */
+static double	PadThr=-1.0;
+static int	PadW=0;			/* pad width for this Prepare (0=off) */
+
+static double	PadThreshold()
+{
+	char	*e;
+
+	if (PadThr<0.0)
+	    PadThr=((e=getenv("PAD_THRESH"))!=NULL && atof(e)>0.0)?atof(e):0.0;
+	return PadThr;
+}
+
+static void	DetectPad(void)
+{
+	static int	said=0;
+	double		tot=0.0,edge=0.0;
+	int		m,n;
+
+	PadW=0;
+	if (PadThreshold()<=0.0) return;
+	for (m=0; m<M; m++) {
+	    for (n=0; n<N; n++) tot+=fabs((double)p[m][n]);
+	    edge+=fabs((double)p[m][0])+fabs((double)p[m][N-1]);
+	}
+	if (tot>0.0 &&
+	    edge/(2.0*(double)M)>PadThr*tot/((double)M*(double)N)) {
+	    PadW=N/2;
+	    if (!said) {
+		fprintf(stderr,"PAD_THRESH: truncation pad enabled (W=%d)\n",PadW);
+		said=1;
+	    }
+	}
+}
+
+/* write the taper outside [L..L+N) of each row (L1f2 floats = L1 float2) */
+__global__ void	PadPQ(int L,int Nn,int W,int L1f2,float *PQf)
+{
+	int	k=blockIdx.x*blockDim.x+threadIdx.x+1,
+		m=blockIdx.y;
+	float	*row,w;
+
+	if (k>W) return;
+	row=PQf+(size_t)m*(size_t)L1f2;
+	w=0.5f*(1.0f+cosf((float)M_PI*(float)k/(float)W));
+	row[L-k]     =row[L]     *w;
+	row[L+Nn-1+k]=row[L+Nn-1]*w;
+}
+
 EXTERN Float	**InitCBP(int n,int m)
 {
 	SETUP_CUDA_GPU();
 
-	N=n; M=m; for (L=1; L<N; L*=2) ; L1=L+1; L2=L*2;
+	N=n; M=m;
+	{
+	    /* with the pad enabled the FFT must hold N+2*(N/2) input samples */
+	    int nl=(PadThreshold()>0.0)?N+N/2:N;
+
+	    for (L=1; L<nl; L*=2) ;
+	}
+	L1=L+1; L2=L*2;
 
 #define ALLOC(type,noe)	(type *)malloc(sizeof(type)*noe)
 
@@ -241,6 +308,8 @@ EXTERN void	PrepareCBP()
 {
 	int	n,m;
 
+	DetectPad();	/* host-side truncation check (PAD_THRESH) */
+
 	if (sizeof(Float)==sizeof(float)) {
 	    /* 全行のゼロ詰めを1回のmemsetで行い、投影本体(N点×M行)は
 	       ピッチ付き2Dコピー1回で各行の中央へ転送する
@@ -250,6 +319,12 @@ EXTERN void	PrepareCBP()
 					p[0],sizeof(Float)*(size_t)N,
 					sof_N,(size_t)M,
 					cudaMemcpyHostToDevice));
+	    if (PadW>0) {
+		dim3	pb((PadW+THREADS_1D-1)/THREADS_1D,M);
+
+		PadPQ<<<pb,THREADS_1D>>>(L,N,PadW,L1*2,(float *)PQ);
+		CUT_CHECK_ERROR("kernel execution failed.");
+	    }
 	}
 	else {
 	    for (n=0; n<L; n++) gpf[n]=0.0;
@@ -257,6 +332,13 @@ EXTERN void	PrepareCBP()
 
 	    for (m=0; m<M; m++) {
 		for (n=0; n<N; n++) gpf[L+n]=p[m][n];
+		if (PadW>0)	/* edge hold + cosine decay (PAD_THRESH) */
+		    for (n=1; n<=PadW; n++) {
+			double w=0.5*(1.0+cos(M_PI*(double)n/(double)PadW));
+
+			gpf[L-n]    =(float)((double)p[m][0]  *w);
+			gpf[L+N-1+n]=(float)((double)p[m][N-1]*w);
+		    }
 
 		CUDA_SAFE_CALL(cudaMemcpy(PQ+(size_t)m*(size_t)L1,gpf,sof_L2,
 					  cudaMemcpyHostToDevice));
