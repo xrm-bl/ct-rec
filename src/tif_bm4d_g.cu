@@ -673,7 +673,7 @@ int main(int argc, char *argv[]){
     {FILE *f;int i;
      if((f=fopen("cmd-hst.log","a"))!=NULL){
          for(i=0;i<argc;++i)fprintf(f,"%s ",argv[i]);
-         fprintf(f,"\n");
+         fprintf(f,"\t");
          fprintf(f,"   %% block_radius %d  search_radius %d  sigma %g\n",params.block_radius,params.search_radius,params.sigma);
          fclose(f);
     }}

@@ -367,7 +367,7 @@ int main(int argc, char *argv[]) {
         FILE *flog = fopen("cmd-hst.log", "a");
         if (flog) {
             for (int i = 0; i < argc; ++i) fprintf(flog, "%s ", argv[i]);
-            fprintf(flog, "\n");
+            fprintf(flog, "\t");
             fprintf(flog, "   %% median_kernel_size %d  gaussian_sigma %g\n",
                     median_kernel_size, gaussian_sigma);
             fclose(flog);

@@ -526,7 +526,7 @@ int main(int argc, char *argv[]) {
         int i;
         if ((f = fopen("cmd-hst.log", "a")) != NULL) {
             for (i = 0; i < argc; ++i) fprintf(f, "%s ", argv[i]);
-            fprintf(f, "\n");
+            fprintf(f, "\t");
             fprintf(f, "   %% kernel_size %d\n", params.kernel_size);
             fclose(f);
         }

@@ -1033,7 +1033,7 @@ int main(int argc, char *argv[]) {
         int i;
         if ((f = fopen("cmd-hst.log", "a")) != NULL) {
             for (i = 0; i < argc; ++i) fprintf(f, "%s ", argv[i]);
-            fprintf(f, "\n");
+            fprintf(f, "\t");
             fprintf(f, "   %% levels %d  threshold_scale %g\n", params.levels, params.threshold_scale);
             fclose(f);
         }

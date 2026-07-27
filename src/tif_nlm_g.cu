@@ -767,7 +767,7 @@ int main(int argc, char *argv[]) {
         int i;
         if ((f = fopen("cmd-hst.log", "a")) != NULL) {
             for (i = 0; i < argc; ++i) fprintf(f, "%s ", argv[i]);
-            fprintf(f, "\n");
+            fprintf(f, "\t");
             fprintf(f, "   %% patch_radius %d  search_radius %d  h %g\n", params.patch_radius, params.search_radius, params.h);
             fclose(f);
         }
