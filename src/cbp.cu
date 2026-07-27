@@ -173,18 +173,22 @@ static cufftHandle	R2C,C2R,R2Ct,C2Rt;	/* 本体チャンク用と端数用のFFT
    zero padding, convolved with the ramp kernel's long -1/(2 pi^2 r^2)
    tail, is what produces the bright rim (cupping); the smooth decay
    removes it.  Backprojection stays at N (cost unchanged; only the
-   FFT length doubles).  Default (unset/<=0) is fully OFF and
-   bit-identical to the previous behaviour.
+   FFT length doubles).  The default when PAD_THRESH is unset is
+   PAD_THRESH_DEFAULT (cbp.h); PAD_THRESH=0 or a negative value forces
+   the pad OFF (bit-identical to no padding).
    Same detection and taper as the CPU variants (cbp_thread*.c). */
-static double	PadThr=-1.0;
+static double	PadThr;
+static int	PadResolved=0;
 static int	PadW=0;			/* pad width for this Prepare (0=off) */
 
 static double	PadThreshold()
 {
 	char	*e;
 
-	if (PadThr<0.0)
-	    PadThr=((e=getenv("PAD_THRESH"))!=NULL && atof(e)>0.0)?atof(e):0.0;
+	if (!PadResolved) {
+	    PadThr=((e=getenv("PAD_THRESH"))!=NULL)?atof(e):PAD_THRESH_DEFAULT;
+	    PadResolved=1;
+	}
 	return PadThr;
 }
 
