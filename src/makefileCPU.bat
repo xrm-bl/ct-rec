@@ -153,6 +153,9 @@ rem tif_ave
 rem tif_mgf
 %CC2% /openmp /Fetif_mgf.exe tif_mgf.c %TIFFLIB%
 
+rem tif_mgf5 (fast small-kernel median + gaussian; same output as tif_mgf)
+%CC2% /openmp /Fetif_mgf5.exe tif_mgf5.c %TIFFLIB%
+
 rem his_ave
 %CC2% /Fehis_ave.exe his_ave.c sif.c
 
