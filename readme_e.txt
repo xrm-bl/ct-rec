@@ -3,10 +3,38 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.07.30  ver. 2.3
 2026.07.02  ver. 2.2
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+[ver 2.3 changes]
+  - Added a truncation (cupping) correction to the CBP layer shared by every
+    reconstruction program. It is controlled by the environment variable
+    PAD_THRESH; when unset the default is 0.3 (auto-detection ON).
+    PAD_THRESH=0 forces it OFF (results identical to the previous version).
+    See 1f.
+  - The default CPU thread count changed from a fixed 8 to "number of logical
+    cores - 1" (environment variable CBP_THREADS). The included GPU
+    executables are now built with CUDA Toolkit 13.2 (CUDA 13 requires
+    Turing / sm_75 or newer).
+  - ofct_DO gained view decimation (stride); ofct_DO_g gained view-pair
+    averaging (navg) and decimation (stride), so the axis search can be run
+    in much less time.
+  - hp_tg / ofct_srec now read projections in parallel (environment variable
+    HPTG_READ_THREADS, default 16).
+  - Added ct_rec_loop, a wrapper that reproduces hp_tg's whole-volume
+    reconstruction by running ct_rec in parallel (2d). Both a Windows .bat
+    and a Linux .sh are provided, and dark.tif input is supported.
+  - Documented act_spl2 / act_spl, the split-and-save tools for continuously
+    acquired tif data (6q).
+  - Added rec2rec, re-projection / re-reconstruction of finished CT slices (6r).
+  - Added tif_mgf_g, a GPU version of the median + gaussian filter (6p).
+  - The bundled libtiff was updated from 3.6.0 to 4.6.0. Reading and writing
+    8/16/32-bit tiff is fully compatible with the previous version.
+  - The full list of environment variables (with defaults) is now collected in
+    20260723_CT_env_vars.md.
 
 [ver 2.2 changes]
   - Added a GPU version of the offset-CT rotation-axis finder, ofct_DO_g
@@ -53,20 +81,28 @@ Uesugi
       During normalization, the min/max values used for normalization are
       appended to the existing tags.
       For continuous reconstruction and normalization, a log is saved to
-      cmd-hst.log upon completion.
+      cmd-hst.log upon completion. The rotation-axis finder (ofct_DO), the
+      conversion / averaging utilities and the tif_* filters also append to
+      cmd-hst.log. The tif_* filters record the command and its parameters
+      as a single tab-separated line.
 
    c. Program Suffixes
       The reconstruction software has suffixes such as _t_c.
       These specify the processor and reconstruction filter to use.
       _P: Processor
           _t: Use CPU multi-threading. Controlled by the environment
-              variable CBP_THREADS. Default is 8 threads.
+              variable CBP_THREADS. The default is the number of logical
+              cores of the machine minus 1 (minimum 1); it used to be a
+              fixed 8.
           _g: Use GPGPU. The included executables are compiled with
-              CUDA Toolkit 10.2.
+              CUDA Toolkit 13.2 (CUDA 13 requires Turing / sm_75 or newer).
       _F: Filter
           _c: Chesler filter
           _s: Shepp-Logan filter
           _r: Ramachandran (HAN) filter
+      There are two exceptions to this naming: the sinogram reconstruction
+      sf_rec is CPU only (sf_rec_t_F), and the re-projection tool rec2rec has
+      no _t on its CPU build (rec2rec_F / rec2rec_g_F).
 
    d. Ring Artifact Removal
       Since version 1.4, a ring removal function based on Vo et al. (2018)
@@ -78,8 +114,7 @@ Uesugi
       when the environment variable is not defined).
       The ring removal processing uses OpenMP-based CPU parallelization,
       with a default of OMP_NUM_THREADS=40. This is independent of
-      CBP_THREADS (for back-projection computation, default 8) described
-      in section 1c.
+      CBP_THREADS (for back-projection computation) described in section 1c.
 
    e. Missing Angle Handling
       For plate-like samples, transmittance can drop drastically at certain
@@ -89,6 +124,40 @@ Uesugi
       is 1 if not set).
       When missing angles are present, change this value to 1, 10, 100,
       1000, etc. and run ct_rec to adjust the reconstruction behavior.
+
+   f. Truncation (Cupping) Correction
+      When the sample overfills the field of view (truncated data), the step
+      left at both ends of each projection, convolved with the long tail of
+      the ramp filter, produces a bright rim (cupping) around the outside of
+      the reconstruction. To suppress it, the CBP layer shared by every
+      reconstruction program extends each projection on both sides by N/2
+      samples before filtering, holding the edge value under a cosine decay.
+      The cost of back-projection is unchanged (only the FFT length doubles).
+      Whether the pad is applied is decided automatically: it is enabled only
+      when the mean amplitude of the sinogram's outermost columns exceeds a
+      given ratio of the overall mean. That ratio is the environment variable
+      PAD_THRESH, and when it is unset the default is 0.3 (auto-detection ON).
+      When the pad becomes active the program prints
+        PAD_THRESH: truncation pad enabled (W=...)
+      A sample that fits inside the field of view has edge values of nearly
+      zero, so the pad is automatically not applied. Setting PAD_THRESH=0
+      (or negative) forces it OFF, giving results identical to the previous
+      version.
+      This applies to ct_rec / hp_tg / p_rec / ofct_rec / ofct_srec / sf_rec /
+      rec2rec alike. Note that the input of rec2rec is already attenuated at
+      the edges by the reconstruction circle, so a smaller value of about
+      0.1-0.2 is appropriate there.
+
+   g. Other Environment Variables
+      Besides the above there are the number of parallel projection-read
+      threads (HPTG_READ_THREADS, default 16; effective in hp_tg / ofct_srec),
+      the memory-based chunking controls (HPTG_MEM_FRACTION /
+      HPTG_MEM_LIMIT_MB / HPTG_CHUNK_ROWS), the CUDA device number to use
+      (CUDA_GPU, default 0) and the input file name overrides (RHP_O / RHP_D /
+      RHP_Q). See 20260723_CT_env_vars.md for the full list with defaults.
+      When several processes are run on the same node, lower
+      HPTG_MEM_FRACTION; with the default every process asks for 90% of the
+      free memory.
 
 2. 180-degree Scan: Standard Absorption CT Reconstruction
 
@@ -152,18 +221,49 @@ Uesugi
       C2: Rotation axis position at L2
       RA0: Rotation axis origin offset
 
+   d. Continuous Reconstruction by Running ct_rec in Parallel
+      ct_rec_loop.bat HiPic Dr RC RA0 rec {Njobs}            (Windows)
+      ct_rec_loop.bat HiPic Dr L1 C1 L2 C2 RA0 rec {Njobs}
+      ct_rec_loop.sh  HiPic Dr RC RA0 rec {Njobs}            (Linux; in bin/)
+      ct_rec_loop.sh  HiPic Dr L1 C1 L2 C2 RA0 rec {Njobs}
+
+      The arguments follow hp_tg; only the number of parallel jobs Njobs is
+      added at the end (default 1).
+      This wrapper produces the same whole-volume reconstruction as hp_tg by
+      running the single-slice program ct_rec once per layer, several layers
+      at a time. Use it when hp_tg cannot be used, or to load the GPU more
+      heavily.
+      The input format is auto-detected from dark.img / dark.tif in HiPic.
+      In the fixed-center (RC) form, the layer range is taken automatically
+      from the height stored in the dark file.
+      Results are collected in rec/ and the per-layer logs in rec/log/.
+      The executable used is ct_rec_g_c by default; the .sh version can be
+      pointed elsewhere with the environment variable CT_EXE.
+      Tune Njobs to the available GPU memory.
+
+      *) As with hp_tg, run one directory above the HiPic directory.
+
 3. 360-degree Scan (Offset CT): Standard Absorption CT Reconstruction
    a. Rotation Axis Position Estimation
-      ofct_DO   raw     (CPU)
-      ofct_DO_g raw     (GPU; same result as ofct_DO)
+      ofct_DO   raw {stride}          (CPU)
+      ofct_DO_g raw {navg {stride}}   (GPU; same result as ofct_DO)
 
       raw: Directory containing q????.img or q????.tif files (no trailing /;
            input format auto-detected from dark.img / dark.tif)
+      stride: Use only every stride-th view pair. Defaults to 1 (use all).
+              This tool is limited by projection reading, so the run time
+              becomes roughly 1/stride while the estimated center/Oy hardly
+              changes.
+      navg: GPU version only. Number of view pairs averaged before taking
+            -log. Defaults to 10; the averaging raises the S/N of the search.
 
       Estimates the rotation-axis position from the offset-CT data and prints
       a ready-to-run ofct_srec command (suggested center and Oy).
       ofct_DO_g computes the per-view-pair MSD on the GPU (host-side
       processing is identical, so the estimate matches the CPU version).
+      Both versions apply a gaussian smoothing before the MSD computation.
+      Its sigma is set by the environment variable OFCT_DO_SMOOTH (default
+      1.0); specifying 0 disables the smoothing.
 
    b. Reconstruction
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
@@ -231,8 +331,8 @@ Uesugi
       a factor of skip.
 
    c. Reconstruction from Sinogram (generated by 6b)
-      sf_rec_P_F input output {Dr RC RA0}
-      Output as 32-bit TIFF.
+      sf_rec_t_F input output {Dr RC RA0}
+      Output as 32-bit TIFF. CPU only; there is no GPU version.
       input: Sinogram as float TIFF
       output: Output as float TIFF
       Dr: Pixel size
@@ -247,6 +347,7 @@ Uesugi
       spl N-shot N-split
       Likely used for Z-scans or energy scans.
       Splits a his file and saves as img files.
+      For data acquired as tif, use act_spl2, which also applies filters (6q).
 
    f. Renumber rec Sequence
       rec_stk num_stack start end
@@ -337,9 +438,55 @@ Uesugi
       See 20260504_filter_readme.pdf for details on additional filters.
 
    p. Apply Median Filter Followed by Gaussian Filter to TIFF Images
-      tif_mgf <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
+      tif_mgf[_g] <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
       Used to remove noise such as scattered light in X-ray transmission
-      images.
+      images. _g is the GPU version.
 
       Example: tif_mgf a000401.tif 001/raw/a0401.tif 3 1
       Example: tif_mgf a000401.tif 001/raw/a0401.tif 0 1
+      Example: tif_mgf_g a000401.tif 001/raw/a0401.tif 3 1
+
+   q. Split and Save Continuously Acquired tif Data (with Filtering)
+      act_spl2 N-shot N-split {m_kernel_size} {g_kernel_size}
+      act_spl  N-shot N-split {kernel_size}
+
+      When a??????.tif files are acquired continuously in a Z-scan or an
+      energy scan, these tools distribute them one scan at a time into
+      001/raw, 002/raw, ... They are the tif counterpart of spl (6e), which
+      splits a his file into img files.
+      N-shot: Number of shots per scan
+      N-split: Number of splits (number of Z-stacks)
+      act_spl2 applies tif_mgf (median + gaussian) while distributing:
+        m_kernel_size: Median kernel size (0 if omitted, i.e. no median)
+        g_kernel_size: Gaussian sigma (0 if omitted, i.e. no gaussian)
+      act_spl applies only a gaussian via gf_sd, and simply moves the files
+      without filtering when kernel_size is omitted.
+      Both copy conv.bat and output.log from the working directory into every
+      raw/, rewriting img to tif inside conv.bat, and append a record to
+      cmd-hst.log when finished.
+      The filters are run in the background: with start /b on Windows and with
+      fork+exec on Linux. On Linux the number of concurrent jobs is limited by
+      the environment variable ACT_SPL_JOBS (default 8), and all jobs are
+      waited for before the program exits.
+
+      Example: act_spl2 7501 8 3 1
+      Example: act_spl  7501 8
+
+   r. Re-projection / Re-reconstruction of Finished CT Slices
+      rec2rec_F   rec_in rec_out {Nt}      (CPU)
+      rec2rec_g_F rec_in rec_out {Nt}      (GPU)
+
+      rec_in: Directory containing 32-bit float CT slices (rec*.tif, square)
+      rec_out: Output directory (same file names as the input)
+      Nt: Number of views of the forward projection. If omitted, the number of
+          projections recorded in the input TIFF tag is used, falling back to
+          the image size N when it cannot be read. Specifying 0 also selects
+          the automatic choice.
+
+      Each input slice is forward Radon-transformed into a sinogram and then
+      reconstructed again with ring removal + CBP. No scaling is applied, so
+      the input values come out as they are. When combining this with the
+      truncation correction of 1f, lower PAD_THRESH to about 0.1-0.2.
+
+      Example: rec2rec_g_c rec rec2 1800
+

@@ -2,10 +2,31 @@
 
 上杉
 
+2026.07.30  ver. 2.3
 2026.07.02  ver. 2.2
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+【ver 2.3 の変更点】
+  ・打ち切り(カッピング)補正を、全再構成ソフト共通の CBP 層に追加。環境変数
+    PAD_THRESH で制御し、未設定時は 0.3(自動判定ON)。PAD_THRESH=0 で強制OFF
+    (以前の版と同一の結果)。詳細は 1f。
+  ・CPU 版の既定スレッド数を固定8から「実行PCの論理コア数-1」に変更
+    (環境変数 CBP_THREADS)。GPU 版の添付 exe は CUDA toolkit 13.2 でビルド
+    (CUDA 13 系の最低要件は Turing 世代/sm_75 以降)。
+  ・ofct_DO にビュー間引き(stride)、ofct_DO_g にビュー対平均(navg)と
+    間引き(stride)を追加。回転軸推定を短時間で回せる。
+  ・hp_tg / ofct_srec が投影を並列に読み込むようにした
+    (環境変数 HPTG_READ_THREADS、既定16)。
+  ・hp_tg 相当の全層再構成を ct_rec の並列実行で行う ct_rec_loop を追加(2d)。
+    Windows 用 .bat と Linux 用 .sh の両方があり、dark.tif にも対応。
+  ・tif で連続取得したデータの分割保存 act_spl2 / act_spl を追記(6q)。
+  ・再構成済み CT 像の再投影・再再構成 rec2rec を追加(6r)。
+  ・median + gaussian の tif_mgf に GPU 版 tif_mgf_g を追加(6p)。
+  ・同梱の libtiff を 3.6.0 から 4.6.0 に更新。8/16/32bit tiff の入出力は
+    従来と完全に互換。
+  ・環境変数の一覧(既定値つき)を 20260723_CT_env_vars.md にまとめた。
 
 【ver 2.2 の変更点】
   ・オフセットCT 回転軸推定 ofct_DO の GPU 版 ofct_DO_g（ofct_DO.cu）を追加。
@@ -44,19 +65,26 @@
       画素サイズ・回転軸の位置・投影数・回転角オフセット・その画像での最小・最大値
       がその順番に埋め込まれている。
       規格化時には、それまでのタグに加え、規格化時の最小最大値が追記される。
-      連続再構成と規格化に関しては、実行完了時に cmd-hst.log にログが残る
+      連続再構成と規格化に関しては、実行完了時に cmd-hst.log にログが残る。
+      回転軸推定(ofct_DO)、変換・平均系のユーティリティ、tif_* のフィルタ群も
+      同様に cmd-hst.log に記録する。tif_* のフィルタはコマンドとパラメータを
+      1行のタブ区切りで残すので、表計算ソフトで開いても崩れない。
 
    c. プログラムの添え字
       画像再構成ソフトには _t_c などの添え字がついている。
       これらは演算に使用するプロセッサーと再構成フィルターを指定する。
       _P: プロセッサー
-          _t: CPU のマルチスレッド機能を使用する。環境変数CBP_THREADSで制御。デフォルトは８スレ。
-          _g: GPGPU を使用。添付のexeは CUDA toolkit 10.2 でコンパイル済み。
+          _t: CPU のマルチスレッド機能を使用する。環境変数CBP_THREADSで制御。
+              デフォルトは実行PCの論理コア数-1(下限1)。以前は固定8だった。
+          _g: GPGPU を使用。添付のexeは CUDA toolkit 13.2 でコンパイル済み
+              (CUDA 13 系の最低要件は Turing 世代/sm_75 以降)。
       _F: フィルター
           _c: Chesler フィルター
           _s: Shepp-Logan フィルター
           _r: Ramachandran(HAN)フィルター
       となっている。
+      ただし例外があり、シノグラム再構成 sf_rec は CPU 版のみ(sf_rec_t_F)、
+      再投影 rec2rec は CPU 版に _t が付かない(rec2rec_F / rec2rec_g_F)。
 
    d. リングアーティファクトの除去
       バージョン1.4からVo et al.(2018)のAlgorithm 3型のリング除去機能を設けた。
@@ -65,7 +93,7 @@
       デフォルト値は5としている(環境変数が定義されていない場合も5になる)。
       また、リング除去処理はOpenMPによるCPU並列計算で行っており、デフォルト値は
       OMP_NUM_THREADSを40としている。これは1cで述べたCBP_THREADS（逆投影計算用の
-      スレッド数、デフォルト8）とは独立した設定である。
+      スレッド数）とは独立した設定である。
 
    e. missing angle の処理
       板状試料などの場合、角度によっては透過率が極端に低下する。極端な値の場合は
@@ -73,6 +101,32 @@
       環境変数 CT_REC_BLACK_THRESH で指定する(未設定の場合は 1 とする)。
       missing angle がある場合この値を 1, 10, 100, 1000 など変更し ct_rec を実行する事で
       画像再構成の状況を変更可能。
+
+   f. 打ち切り(カッピング)補正
+      試料が視野からはみ出したデータ(打ち切りデータ)では、投影の両端にできる
+      段差とランプフィルタの裾との畳み込みが、再構成像の外周に明るいリム
+      (カッピング)を作る。これを抑えるため、フィルタをかける前に投影の両端を
+      端の値のままコサインで減衰させながら幅 N/2 だけ外挿する機能を、全再構成
+      ソフト共通の CBP 層に設けた。逆投影の計算量は変わらない(FFT長のみ2倍)。
+      適用するかどうかは自動判定で、シノグラム両端列の平均振幅が全体平均の
+      一定比率を超えたときだけ有効になる。この比率を環境変数 PAD_THRESH で
+      指定し、未設定の場合は 0.3(自動判定ON)とする。有効になったときは
+        PAD_THRESH: truncation pad enabled (W=...)
+      と表示する。視野内に収まっている試料は端の値がほぼ0のため、自動的に
+      無適用となる。PAD_THRESH=0(以下)を指定すると強制的にOFFで、以前の版と
+      完全に同一の結果になる。
+      ct_rec / hp_tg / p_rec / ofct_rec / ofct_srec / sf_rec / rec2rec の
+      すべてに効く。ただし rec2rec の入力は再構成円の外で端が減衰しているので、
+      この場合は 0.1-0.2 程度の小さい値が適当。
+
+   g. その他の環境変数
+      上記のほかに、投影の並列読み込みスレッド数(HPTG_READ_THREADS、既定16。
+      hp_tg / ofct_srec で有効)、メモリに合わせたチャンク分割の指定
+      (HPTG_MEM_FRACTION / HPTG_MEM_LIMIT_MB / HPTG_CHUNK_ROWS)、使用する
+      GPU 番号(CUDA_GPU、既定0)、入力ファイル名の上書き(RHP_O / RHP_D / RHP_Q)
+      などがある。既定値を含む一覧は 20260723_CT_env_vars.md を参照のこと。
+      同一ノードで複数プロセスを並走させる場合は HPTG_MEM_FRACTION を
+      下げること(既定のままだと全プロセスが空きメモリの9割を要求する)。
 
 2. 180deg scan。標準的な吸収の画像再構成。
 
@@ -132,18 +186,43 @@
       C2: L2での回転軸の位置
       RA0: 回転軸の原点オフセット
 
+   d. ct_rec の並列実行による連続再構成
+      ct_rec_loop.bat HiPic Dr RC RA0 rec {Njobs}            (Windows)
+      ct_rec_loop.bat HiPic Dr L1 C1 L2 C2 RA0 rec {Njobs}
+      ct_rec_loop.sh  HiPic Dr RC RA0 rec {Njobs}            (Linux。bin/ にある)
+      ct_rec_loop.sh  HiPic Dr L1 C1 L2 C2 RA0 rec {Njobs}
+
+      引数は hp_tg と同じで、最後に並列ジョブ数 Njobs を足すだけ(省略時は1)。
+      hp_tg と同じ全層再構成を、1枚再構成の ct_rec をレイヤーごとに並列実行して
+      行うラッパー。hp_tg が使えない場合や、GPU をもっと使いたい場合に用いる。
+      HiPic の dark.img / dark.tif を見て img/tif を自動判別する。
+      RC 指定(中心固定)の形では dark ファイルの高さから全レイヤーを自動で決める。
+      結果は rec/ に集め、レイヤーごとのログは rec/log/ に置く。
+      使用する実行ファイルは既定で ct_rec_g_c。.sh 版は環境変数 CT_EXE で変更可能。
+      Njobs は GPU メモリに合わせて調整すること。
+
+      *) hp_tg と同じく、HiPic ディレクトリの一つ上で実行する。
+
 3. 360deg scan (offset CT)。標準的な吸収の画像再構成
    a. 回転軸位置の推定
-       ofct_DO   raw     (CPU)
-       ofct_DO_g raw     (GPU; 結果は ofct_DO と同一)
+       ofct_DO   raw {stride}          (CPU)
+       ofct_DO_g raw {navg {stride}}   (GPU; 結果は ofct_DO と同一)
 
        raw: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
             dark.img / dark.tif の有無で img/tif を自動判別。
+       stride: ビュー対を stride 個に1つだけ使って間引く。省略した場合は 1(全部使用)。
+               この処理は投影の読み込み律速なので、実行時間はほぼ 1/stride になる。
+               推定される中心/Oy はほとんど変わらない。
+       navg: GPU 版のみの引数。-log を取る前に平均するビュー対の数。省略した場合は 10。
+             平均によって軸探索の S/N が上がる。
 
        オフセットCTデータから回転軸位置を推定し、そのまま実行できる
        ofct_srec コマンド（中心と Oy）を提案表示する。
 
        ofct_DO_g はビュー対ごとの MSD を GPU で計算する（ホスト側処理は同一で結果も一致）。
+
+       いずれも MSD の計算前にガウシアン平滑化をかけている。環境変数
+       OFCT_DO_SMOOTH で σ を指定し、未設定の場合は 1.0。0 を指定すると平滑化しない。
 
    b. 再構成
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
@@ -205,8 +284,8 @@
       skip を指定すると、投影数をskip分の1にして出力する。
 
    c. b のシノグラムから再構成
-      sf_rec_P_F input output {Dr RC RA0}
-      32bit tiff にて出力。
+      sf_rec_t_F input output {Dr RC RA0}
+      32bit tiff にて出力。CPU 版のみで GPU 版はない。
       input: float tiff で出来たシノグラム
       output: float tiff で出力
       Dr: 画素サイズ
@@ -221,6 +300,7 @@
       spl N-shot N-split
       Zスキャンやエネルギースキャンをしたときに使う可能性が高い。
       his ファイルを分割して img に保存。
+      tif で連続取得した場合はフィルタ処理も兼ねる act_spl2 を使う(6q)。
 
    f. rec 連番振りなおし。
       rec_stk num_stack start end
@@ -310,10 +390,52 @@
       
 
    p. tif画像にmedian filterかけてからgaussian filterをかける。
-      tif_mgf <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
+      tif_mgf[_g] <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
       X線透過像に散乱光のノイズなどがある場合に、除去するようなときに用いる。
-      
+      _g は GPU 使用版。
+
       例: tif_mgf a000401.tif 001/raw/a0401.tif 3 1
       例: tif_mgf a000401.tif 001/raw/a0401.tif 0 1
+      例: tif_mgf_g a000401.tif 001/raw/a0401.tif 3 1
+
+   q. tif で連続取得したデータの分割保存(フィルタ処理つき)
+      act_spl2 N-shot N-split {m_kernel_size} {g_kernel_size}
+      act_spl  N-shot N-split {kernel_size}
+
+      Zスキャンやエネルギースキャンで a??????.tif を連続取得した場合に、
+      1回の撮影分ずつ 001/raw, 002/raw, ... へ振り分けて保存する。
+      6e の spl (his を img に分割) の tif 版にあたる。
+      N-shot: 1回の撮影枚数
+      N-split: 分割数(Zスタックの数)
+      act_spl2 は振り分けと同時に tif_mgf (median + gaussian) をかける。
+        m_kernel_size: median のカーネルサイズ(省略時は 0 = かけない)
+        g_kernel_size: gaussian の σ(省略時は 0 = かけない)
+      act_spl は gf_sd による gaussian のみで、kernel_size を省略した場合は
+      フィルタなしの移動だけを行う。
+      どちらも実行ディレクトリの conv.bat と output.log を各 raw/ にコピーし、
+      conv.bat 中の img を tif に書き換える。実行後 cmd-hst.log に記録が残る。
+      フィルタは Windows では start /b、Linux では fork+exec で背景実行する。
+      Linux での同時実行数は環境変数 ACT_SPL_JOBS(既定8)で制限し、終了前に
+      全ジョブの完了を待ち合わせる。
+
+      例: act_spl2 7501 8 3 1
+      例: act_spl  7501 8
+
+   r. 再構成済み CT 像の再投影・再再構成
+      rec2rec_F   rec_in rec_out {Nt}      (CPU)
+      rec2rec_g_F rec_in rec_out {Nt}      (GPU)
+
+      rec_in: 32bit float の CT 断面(rec*.tif、正方形)があるディレクトリ
+      rec_out: 出力ディレクトリ(入力と同じファイル名で出力)
+      Nt: 順投影のビュー数。省略した場合は入力 tiff のタグにある投影数を使い、
+          読めない場合は画像サイズ N とする。0 を指定しても自動になる。
+
+      入力像を順投影(Radon 変換)してシノグラムを作り、リング除去 + CBP で
+      もう一度再構成する。値のスケール変換はしないので、入力の値がそのまま
+      出てくる。1f の打ち切り補正を併用する場合は、PAD_THRESH を 0.1-0.2
+      程度に下げるとよい。
+
+      例: rec2rec_g_c rec rec2 1800
 
       
+
