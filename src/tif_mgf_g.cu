@@ -63,6 +63,19 @@ __device__ void insertion_sort(float *arr, int n) {
     }
 }
 
+/* Mirror reflection of an index, as in tif_mgf.c.
+ * A single reflection can still land outside when the window is wider than
+ * the image (3x3 on a 1x1 image, 13 gaussian taps on a 5-row image), so the
+ * result is clamped.  For indices the reflection already resolves, the clamp
+ * does nothing. */
+__device__ __forceinline__ int mirror(int v, int n) {
+    if (v < 0)  v = -v;
+    if (v >= n) v = 2 * n - v - 2;
+    if (v < 0)  v = 0;
+    if (v >= n) v = n - 1;
+    return v;
+}
+
 /* 2D median, mirror boundary. Matches tif_mgf.c apply_median_filter (EDGE_MIRROR). */
 template<typename T>
 __global__ void median2d_kernel(const T* __restrict__ in, T* __restrict__ out,
@@ -76,13 +89,8 @@ __global__ void median2d_kernel(const T* __restrict__ in, T* __restrict__ out,
     int count = 0;
     for (int j = -half; j <= half; j++) {
         for (int i = -half; i <= half; i++) {
-            int nx = x + i;
-            int ny = y + j;
-            if (nx < 0) nx = -nx;
-            if (nx >= width) nx = 2 * width - nx - 2;
-            if (ny < 0) ny = -ny;
-            if (ny >= height) ny = 2 * height - ny - 2;
-            win[count++] = (float)in[(size_t)ny * width + nx];
+            win[count++] = (float)in[(size_t)mirror(y + j, height) * width
+                                     + mirror(x + i, width)];
         }
     }
     insertion_sort(win, count);
@@ -120,12 +128,8 @@ __global__ void gauss_h_kernel(const float* __restrict__ in, float* __restrict__
     if (x >= width || y >= height) return;
     const int half = kernel_size / 2;
     float s = 0.0f;
-    for (int i = 0; i < kernel_size; i++) {
-        int sx = x + i - half;
-        if (sx < 0) sx = -sx;
-        if (sx >= width) sx = 2 * width - sx - 2;
-        s += in[(size_t)y * width + sx] * c_gk[i];
-    }
+    for (int i = 0; i < kernel_size; i++)
+        s += in[(size_t)y * width + mirror(x + i - half, width)] * c_gk[i];
     out[(size_t)y * width + x] = s;
 }
 
@@ -137,12 +141,8 @@ __global__ void gauss_v_kernel(const float* __restrict__ in, float* __restrict__
     if (x >= width || y >= height) return;
     const int half = kernel_size / 2;
     float s = 0.0f;
-    for (int i = 0; i < kernel_size; i++) {
-        int sy = y + i - half;
-        if (sy < 0) sy = -sy;
-        if (sy >= height) sy = 2 * height - sy - 2;
-        s += in[(size_t)sy * width + x] * c_gk[i];
-    }
+    for (int i = 0; i < kernel_size; i++)
+        s += in[(size_t)mirror(y + i - half, height) * width + x] * c_gk[i];
     out[(size_t)y * width + x] = s;
 }
 

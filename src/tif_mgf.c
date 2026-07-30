@@ -338,14 +338,22 @@ static void convert_from_float(double* float_data, void* data, int width, int he
     }
 }
 
-/* Pixel access with mirror boundary condition */
+/* Pixel access with mirror boundary condition.
+ * One reflection is not enough when the kernel is wider than the image
+ * (e.g. sigma=2 -> 13 taps on a 5-row image): the reflected index can still
+ * fall outside, so it is clamped afterwards.  For every index the single
+ * reflection already resolves, the clamp does nothing. */
 static double get_pixel_value_mirror(double* data, int x, int y, int width, int height)
 {
     if (x < 0) x = -x;
     if (x >= width) x = 2 * width - x - 2;
+    if (x < 0) x = 0;
+    if (x >= width) x = width - 1;
     if (y < 0) y = -y;
     if (y >= height) y = 2 * height - y - 2;
-    
+    if (y < 0) y = 0;
+    if (y >= height) y = height - 1;
+
     return data[y * width + x];
 }
 
@@ -381,9 +389,10 @@ static int process_tiff_file(const char* input_file, const char* output_file,
     size_t scanline_size;
     uint32_t row;
     int is_16bit;
+    int have_desc;
     clock_t filter_start;
     FilterConfig config;
-    
+
     /* Set configuration */
     config.edge_mode = EDGE_MIRROR;  /* Default to mirror mode like ImageJ */
     config.use_32bit_precision = 1;   /* Always use high precision */
@@ -401,7 +410,9 @@ static int process_tiff_file(const char* input_file, const char* output_file,
     TIFFGetField(in_tiff, TIFFTAG_IMAGELENGTH, &height);
     TIFFGetField(in_tiff, TIFFTAG_BITSPERSAMPLE, &bits_per_sample);
 //    TIFFGetField(in_tiff, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel);
-    TIFFGetField(in_tiff, TIFFTAG_IMAGEDESCRIPTION, &desc);
+    /* Keep the return value: without a description tag, desc would stay
+     * uninitialised and be handed to TIFFSetField() further down. */
+    have_desc = TIFFGetField(in_tiff, TIFFTAG_IMAGEDESCRIPTION, &desc);
 
 //    write_log("Image properties: width=%u, height=%u, bits=%u", width, height, bits_per_sample);
     
@@ -440,7 +451,20 @@ static int process_tiff_file(const char* input_file, const char* output_file,
 //            write_log("Read %u/%u scanlines", row, height);
 //        }
     }
-    
+
+    /* desc points into the input TIFF's own directory storage, which
+     * TIFFClose() releases; copy it before closing (it is written to the
+     * output file long afterwards). */
+    if (have_desc && desc != NULL) {
+        char* desc_copy = (char*)malloc(strlen(desc) + 1);
+        if (desc_copy != NULL) {
+            strcpy(desc_copy, desc);
+            desc = desc_copy;
+        } else {
+            have_desc = 0;
+        }
+    }
+
     TIFFClose(in_tiff);
     
     /* Apply median filter if kernel size > 0 */
@@ -488,7 +512,7 @@ static int process_tiff_file(const char* input_file, const char* output_file,
     TIFFSetField(out_tiff, TIFFTAG_SAMPLESPERPIXEL, 1);
 	TIFFSetField(out_tiff, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(out_tiff, 0));
 	TIFFSetField(out_tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
-	TIFFSetField(out_tiff, TIFFTAG_IMAGEDESCRIPTION, desc);
+	if (have_desc) TIFFSetField(out_tiff, TIFFTAG_IMAGEDESCRIPTION, desc);
 	TIFFSetField(out_tiff, TIFFTAG_ARTIST, "tif_mgf2_libtiff");
 
 
@@ -512,6 +536,7 @@ static int process_tiff_file(const char* input_file, const char* output_file,
     
     TIFFClose(out_tiff);
     free(data);
+    if (have_desc) free(desc);
 
 //    write_log("Output file written successfully");
     return 0;
@@ -524,7 +549,10 @@ static int apply_median_filter(void* data, int width, int height, int kernel_siz
     void* temp_data;
     int x, y, i, j;
     int half_kernel = kernel_size / 2;
-    int kernel_area = kernel_size * kernel_size;
+    /* The window actually gathered below is (2*half+1)^2, which is larger
+     * than kernel_size*kernel_size for an even kernel_size (k=2 gathers 9,
+     * k=4 gathers 25).  Size the buffer after the loop, not after k. */
+    int kernel_area = (2 * half_kernel + 1) * (2 * half_kernel + 1);
     size_t data_size;
     
     /* Allocate temporary buffer */
@@ -561,11 +589,17 @@ static int apply_median_filter(void* data, int width, int height, int kernel_siz
                     
                     /* Handle boundaries based on edge mode */
                     if (config->edge_mode == EDGE_MIRROR) {
-                        /* Mirror boundary */
+                        /* Mirror boundary, clamped: a single reflection can
+                         * still land outside when the window is wider than
+                         * the image (e.g. 3x3 on a 1x1 image). */
                         if (nx < 0) nx = -nx;
                         if (nx >= width) nx = 2 * width - nx - 2;
+                        if (nx < 0) nx = 0;
+                        if (nx >= width) nx = width - 1;
                         if (ny < 0) ny = -ny;
                         if (ny >= height) ny = 2 * height - ny - 2;
+                        if (ny < 0) ny = 0;
+                        if (ny >= height) ny = height - 1;
                     } else if (config->edge_mode == EDGE_EXTEND) {
                         /* Extend boundary */
                         if (nx < 0) nx = 0;
