@@ -169,7 +169,7 @@ p_rec_g_c: sort_filter_g.o
 # ---------------------------------------------------------------
 # Filters made by ClaudeAI (GPU)
 # ---------------------------------------------------------------
-filters_g: tif_adf_g tif_blf_g tif_bm4d_g tif_gsf_g tif_mdf_g tif_mgf_g tif_mgf5_g tif_nlm_g tif_tvd_g tif_wvd_g
+filters_g: tif_adf_g tif_blf_g tif_bm4d_g tif_gsf_g tif_mdf_g tif_mgf_g tif_nlm_g tif_tvd_g tif_wvd_g
 
 tif_adf_g:
 	nvcc $(NVCCFLAGS) -o $(EXE_DIR)/tif_adf_g tif_adf_g.cu $(TIFFLIB)
@@ -188,9 +188,6 @@ tif_mdf_g:
 
 tif_mgf_g:
 	nvcc $(NVCCFLAGS) -o $(EXE_DIR)/tif_mgf_g tif_mgf_g.cu $(TIFFLIB)
-
-tif_mgf5_g:
-	nvcc $(NVCCFLAGS) -o $(EXE_DIR)/tif_mgf5_g tif_mgf5_g.cu $(TIFFLIB)
 
 tif_nlm_g:
 	nvcc $(NVCCFLAGS) -o $(EXE_DIR)/tif_nlm_g tif_nlm_g.cu $(TIFFLIB)
@@ -216,7 +213,6 @@ clean:
 	$(EXE_DIR)/oftf_srec_g_r $(EXE_DIR)/oftf_srec_g_s $(EXE_DIR)/oftf_srec_g_c \
 	$(EXE_DIR)/p_rec_g_r $(EXE_DIR)/p_rec_g_s $(EXE_DIR)/p_rec_g_c \
 	$(EXE_DIR)/tif_adf_g $(EXE_DIR)/tif_blf_g $(EXE_DIR)/tif_bm4d_g \
-	$(EXE_DIR)/tif_gsf_g $(EXE_DIR)/tif_mdf_g $(EXE_DIR)/tif_mgf_g $(EXE_DIR)/tif_mgf5_g \
-	$(EXE_DIR)/tif_nlm_g \
+	$(EXE_DIR)/tif_gsf_g $(EXE_DIR)/tif_mdf_g $(EXE_DIR)/tif_mgf_g $(EXE_DIR)/tif_nlm_g \
 	$(EXE_DIR)/tif_tvd_g $(EXE_DIR)/tif_wvd_g
 	

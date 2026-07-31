@@ -1,21 +1,46 @@
 /*
- * tif_mgf_g.cu - 2D Filter (Median + Gaussian) for a single TIFF (CUDA version)
+ * tif_mgf_g.cu - 2D filter (median + gaussian) for a single TIFF, CUDA
+ *                version.
  *
- * GPU port of tif_mgf.c.  Same CLI and semantics:
  *   tif_mgf_g <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
- *     median_kernel_size : 0-25  (default 1, 0 to skip)
+ *     median_kernel_size : 0-25      (default 1, 0 to skip)
  *     gaussian_sigma     : 0.0-100.0 (default 0.5, 0.0 to skip)
  *
- * Processing order matches tif_mgf.c: median first (on integer pixels, mirror
- * boundary), then separable Gaussian (mirror boundary).  Supports 8- and 16-bit
+ * Processing order matches tif_mgf.c: median first (on integer pixels,
+ * mirror boundary), then the separable gaussian.  Supports 8- and 16-bit
  * grayscale.  Edge mode is MIRROR (as in tif_mgf.c).
  *
- * Precision note: the Gaussian pass accumulates in single precision on the GPU
- * (tif_mgf.c uses double on the CPU).  Results can differ from the CPU build by
- * at most 1 LSB after rounding.  The median pass is exact (integer values).
+ * Rewritten 2026-07 around the median kernel sizes that are actually used
+ * (3 and 5).  Same CLI, same edge handling and the same results as the
+ * version it replaces, only much faster.
+ *
+ * Precision note: the gaussian pass accumulates in single precision on the
+ * GPU (tif_mgf.c uses double on the CPU).  Results can differ from the CPU
+ * build by at most 1 LSB after rounding.  The median pass is exact.
+ *
+ * How the small kernels are made fast
+ *   1. The pre-merge kernel declared "float win[625]" (25x25) in every
+ *      median thread.  625 floats = 2500 bytes per thread cannot live in
+ *      registers, so the array went to local memory (off-chip) and the
+ *      insertion sort did its data-dependent swaps through it.  That single
+ *      array dominated the run time regardless of the kernel size actually
+ *      requested.  Here the window size is a template parameter, so 3x3 /
+ *      5x5 use a 9- or 25-element array with compile-time indices, which
+ *      stays in registers, and the pixel type is kept (no float conversion
+ *      needed).
+ *   2. The sort is replaced by a branch-free sorting network - 19
+ *      compare-exchanges for 3x3 (Smith 1996), 99 for 5x5 - which suits
+ *      SIMT execution because all threads of a warp run the same
+ *      instruction sequence regardless of the data.  The median of a window
+ *      is by definition the same value, so the result does not change.
+ *   3. Median kernel size 1 is the identity and is skipped entirely.
+ *
+ * Median kernel sizes above 5 use the generic local-array path.
+ * Even kernel sizes take the odd window that is actually gathered:
+ * k=2 -> 3x3, k=4 -> 5x5 (the window is (2*(k/2)+1)^2).
  *
  * Compile:
- *   nvcc -O3 -o tif_mgf_g tif_mgf_g.cu -ltiff          (Linux)
+ *   nvcc -O3 -o tif_mgf_g tif_mgf_g.cu -ltiff                      (Linux)
  *   nvcc -O3 -o tif_mgf_g.exe tif_mgf_g.cu libtiff.lib jpeg.lib lzma.lib zs.lib   (Windows)
  */
 
@@ -46,7 +71,7 @@
 
 #define BLOCK_X 16
 #define BLOCK_Y 16
-#define MEDIAN_MAX 625   /* 25 x 25 */
+#define MEDIAN_MAX 625   /* 25 x 25, generic path only */
 #define GAUSS_MAX  64    /* kernel size capped at 51 in calculate_kernel_size() */
 
 /* 1D Gaussian kernel in constant memory (host fills it before the passes). */
@@ -54,7 +79,63 @@ __constant__ float c_gk[GAUSS_MAX];
 
 /* ---- device helpers ------------------------------------------------------ */
 
-__device__ void insertion_sort(float *arr, int n) {
+#define MSORT(a,b) do { if ((b) < (a)) { T t_=(a); (a)=(b); (b)=t_; } } while(0)
+
+/* median of 9 (3x3): 19 compare-exchanges */
+template<typename T>
+__device__ __forceinline__ T med9(T *p)
+{
+    MSORT(p[1],p[2]); MSORT(p[4],p[5]); MSORT(p[7],p[8]);
+    MSORT(p[0],p[1]); MSORT(p[3],p[4]); MSORT(p[6],p[7]);
+    MSORT(p[1],p[2]); MSORT(p[4],p[5]); MSORT(p[7],p[8]);
+    MSORT(p[0],p[3]); MSORT(p[5],p[8]); MSORT(p[4],p[7]);
+    MSORT(p[3],p[6]); MSORT(p[1],p[4]); MSORT(p[2],p[5]);
+    MSORT(p[4],p[7]); MSORT(p[4],p[2]); MSORT(p[6],p[4]);
+    MSORT(p[4],p[2]);
+    return p[4];
+}
+
+/* median of 25 (5x5): 99 compare-exchanges */
+template<typename T>
+__device__ __forceinline__ T med25(T *p)
+{
+    MSORT(p[0],p[1]);   MSORT(p[3],p[4]);   MSORT(p[2],p[4]);
+    MSORT(p[2],p[3]);   MSORT(p[6],p[7]);   MSORT(p[5],p[7]);
+    MSORT(p[5],p[6]);   MSORT(p[9],p[10]);  MSORT(p[8],p[10]);
+    MSORT(p[8],p[9]);   MSORT(p[12],p[13]); MSORT(p[11],p[13]);
+    MSORT(p[11],p[12]); MSORT(p[15],p[16]); MSORT(p[14],p[16]);
+    MSORT(p[14],p[15]); MSORT(p[18],p[19]); MSORT(p[17],p[19]);
+    MSORT(p[17],p[18]); MSORT(p[21],p[22]); MSORT(p[20],p[22]);
+    MSORT(p[20],p[21]); MSORT(p[23],p[24]); MSORT(p[2],p[5]);
+    MSORT(p[3],p[6]);   MSORT(p[0],p[6]);   MSORT(p[0],p[3]);
+    MSORT(p[4],p[7]);   MSORT(p[1],p[7]);   MSORT(p[1],p[4]);
+    MSORT(p[11],p[14]); MSORT(p[8],p[14]);  MSORT(p[8],p[11]);
+    MSORT(p[12],p[15]); MSORT(p[9],p[15]);  MSORT(p[9],p[12]);
+    MSORT(p[13],p[16]); MSORT(p[10],p[16]); MSORT(p[10],p[13]);
+    MSORT(p[20],p[23]); MSORT(p[17],p[23]); MSORT(p[17],p[20]);
+    MSORT(p[21],p[24]); MSORT(p[18],p[24]); MSORT(p[18],p[21]);
+    MSORT(p[19],p[22]); MSORT(p[8],p[17]);  MSORT(p[9],p[18]);
+    MSORT(p[0],p[18]);  MSORT(p[0],p[9]);   MSORT(p[10],p[19]);
+    MSORT(p[1],p[19]);  MSORT(p[1],p[10]);  MSORT(p[11],p[20]);
+    MSORT(p[2],p[20]);  MSORT(p[2],p[11]);  MSORT(p[12],p[21]);
+    MSORT(p[3],p[21]);  MSORT(p[3],p[12]);  MSORT(p[13],p[22]);
+    MSORT(p[4],p[22]);  MSORT(p[4],p[13]);  MSORT(p[14],p[23]);
+    MSORT(p[5],p[23]);  MSORT(p[5],p[14]);  MSORT(p[15],p[24]);
+    MSORT(p[6],p[24]);  MSORT(p[6],p[15]);  MSORT(p[7],p[16]);
+    MSORT(p[7],p[19]);  MSORT(p[13],p[21]); MSORT(p[15],p[23]);
+    MSORT(p[7],p[13]);  MSORT(p[7],p[15]);  MSORT(p[1],p[9]);
+    MSORT(p[3],p[11]);  MSORT(p[5],p[17]);  MSORT(p[11],p[17]);
+    MSORT(p[9],p[17]);  MSORT(p[4],p[10]);  MSORT(p[6],p[12]);
+    MSORT(p[7],p[14]);  MSORT(p[4],p[6]);   MSORT(p[4],p[7]);
+    MSORT(p[12],p[14]); MSORT(p[10],p[14]); MSORT(p[6],p[7]);
+    MSORT(p[10],p[12]); MSORT(p[6],p[10]);  MSORT(p[6],p[17]);
+    MSORT(p[12],p[17]); MSORT(p[7],p[17]);  MSORT(p[7],p[10]);
+    MSORT(p[12],p[18]); MSORT(p[7],p[12]);  MSORT(p[10],p[18]);
+    MSORT(p[12],p[20]); MSORT(p[10],p[20]); MSORT(p[10],p[12]);
+    return p[12];
+}
+
+__device__ __forceinline__ void insertion_sort(float *arr, int n) {
     for (int i = 1; i < n; i++) {
         float key = arr[i];
         int j = i - 1;
@@ -63,23 +144,53 @@ __device__ void insertion_sort(float *arr, int n) {
     }
 }
 
-/* Mirror reflection of an index, as in tif_mgf.c.
- * A single reflection can still land outside when the window is wider than
- * the image (3x3 on a 1x1 image, 13 gaussian taps on a 5-row image), so the
- * result is clamped.  For indices the reflection already resolves, the clamp
- * does nothing. */
+/* mirror reflection of an index, as in tif_mgf.c */
 __device__ __forceinline__ int mirror(int v, int n) {
     if (v < 0)  v = -v;
     if (v >= n) v = 2 * n - v - 2;
-    if (v < 0)  v = 0;
+    if (v < 0)  v = 0;          /* window wider than the image */
     if (v >= n) v = n - 1;
     return v;
 }
 
-/* 2D median, mirror boundary. Matches tif_mgf.c apply_median_filter (EDGE_MIRROR). */
+/* Pick the network for the window size at compile time.  A plain
+ * "(K == 3) ? med9(p) : med25(p)" would also compile the 25-element network
+ * against a 9-element array, so the choice is made by specialisation. */
+template<typename T, int K> struct MedNet;
+template<typename T> struct MedNet<T, 3> {
+    __device__ __forceinline__ static T of(T *p) { return med9<T>(p); }
+};
+template<typename T> struct MedNet<T, 5> {
+    __device__ __forceinline__ static T of(T *p) { return med25<T>(p); }
+};
+
+/* K x K median (K = 3 or 5), mirror boundary.  The window is a fixed-size
+ * array indexed by compile-time constants, so it stays in registers. */
+template<typename T, int K>
+__global__ void median_small_kernel(const T* __restrict__ in, T* __restrict__ out,
+                                   int width, int height) {
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= width || y >= height) return;
+    const int half = K / 2;
+
+    T p[K * K];
+#pragma unroll
+    for (int j = 0; j < K; j++) {
+        const int ny = mirror(y + j - half, height);
+        const T *row = in + (size_t)ny * width;
+#pragma unroll
+        for (int i = 0; i < K; i++)
+            p[j * K + i] = row[mirror(x + i - half, width)];
+    }
+    out[(size_t)y * width + x] = MedNet<T, K>::of(p);
+}
+
+/* Generic median for kernel sizes above 5 (window in local memory).
+ * Kept so that kernel sizes above 5 still work. */
 template<typename T>
-__global__ void median2d_kernel(const T* __restrict__ in, T* __restrict__ out,
-                                int width, int height, int kernel_size) {
+__global__ void median_generic_kernel(const T* __restrict__ in, T* __restrict__ out,
+                                      int width, int height, int kernel_size) {
     ENABLE_SMEM_SPILLING();
     const int x = blockIdx.x * blockDim.x + threadIdx.x;
     const int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -127,9 +238,10 @@ __global__ void gauss_h_kernel(const float* __restrict__ in, float* __restrict__
     const int y = blockIdx.y * blockDim.y + threadIdx.y;
     if (x >= width || y >= height) return;
     const int half = kernel_size / 2;
+    const float *row = in + (size_t)y * width;
     float s = 0.0f;
     for (int i = 0; i < kernel_size; i++)
-        s += in[(size_t)y * width + mirror(x + i - half, width)] * c_gk[i];
+        s += row[mirror(x + i - half, width)] * c_gk[i];
     out[(size_t)y * width + x] = s;
 }
 
@@ -170,10 +282,9 @@ static void create_gaussian_kernel_1d(double *kernel, int size, double sigma) {
     for (int i = 0; i < size; i++) kernel[i] /= sum;
 }
 
-/* Copy non-geometry metadata from input to output (mirrors tif_mdf_g.cu).
+/* Copy non-geometry metadata from input to output.
  * Guards every field, so a missing tag is skipped rather than propagating a
- * NULL/garbage value (this also avoids the NULL-ImageDescription crash that the
- * scalar approach in tif_mgf.c has). Call before closing the input TIFF. */
+ * NULL/garbage value.  Call before closing the input TIFF. */
 static void copy_tiff_metadata(TIFF *in, TIFF *out) {
     uint32_t u32, count;
     uint16_t u16, u16a, u16b, *u16ptr;
@@ -224,9 +335,17 @@ static void run_pipeline(void *host, int width, int height,
     CUDA_CHECK(cudaMalloc(&d_b, nbytes));
     CUDA_CHECK(cudaMemcpy(d_a, host, nbytes, cudaMemcpyHostToDevice));
 
-    /* Median (integer, exact) */
-    if (median_size > 0) {
-        median2d_kernel<T><<<grid, block>>>(d_a, d_b, width, height, median_size);
+    /* Median (integer, exact).  half = median_size/2, so 2 -> 3x3 and
+     * 4 -> 5x5, and 1 (half = 0) is the identity and is skipped. */
+    const int half = median_size / 2;
+    if (half > 0) {
+        if (half == 1)
+            median_small_kernel<T, 3><<<grid, block>>>(d_a, d_b, width, height);
+        else if (half == 2)
+            median_small_kernel<T, 5><<<grid, block>>>(d_a, d_b, width, height);
+        else
+            median_generic_kernel<T><<<grid, block>>>(d_a, d_b, width, height,
+                                                      2 * half + 1);
         CUDA_CHECK(cudaGetLastError());
         T *tmp = d_a; d_a = d_b; d_b = tmp;   /* result now in d_a */
     }
@@ -297,7 +416,7 @@ static int process_tiff_file(const char *input_file, const char *output_file,
     else
         run_pipeline<unsigned char>(data, width, height, median_size, sigma, 255.0f);
 
-    /* Write output (same tags as tif_mgf.c; metadata copied safely from input) */
+    /* Write output */
     TIFF *out_tiff = TIFFOpen(output_file, "w");
     if (!out_tiff) {
         fprintf(stderr, "Error: Cannot create output TIFF file\n");
@@ -330,7 +449,7 @@ static int process_tiff_file(const char *input_file, const char *output_file,
 int main(int argc, char *argv[]) {
     if (argc < 3 || argc > 5) {
         fprintf(stderr, "Usage: %s <input_file> <output_file> [median_kernel_size] [gaussian_sigma]\n", argv[0]);
-        fprintf(stderr, "  median_kernel_size: 0-25 (default: 1, 0 to skip)\n");
+        fprintf(stderr, "  median_kernel_size: 0-25 (default: 1, 0 to skip; 3 and 5 take the fast path)\n");
         fprintf(stderr, "  gaussian_sigma: 0.0-100.0 (default: 0.5, 0.0 to skip)\n");
         return 1;
     }

@@ -6,8 +6,8 @@ CC      = gcc
 CFLAGS  = -O2 -D_USE_MATH_DEFINES
 OMPF    = -fopenmp
 AVXF    = -mavx2
-# extra flags for tif_mgf5 only (see the tif_mgf5 target below)
-MGF5FLAGS = -O3 -march=native -fno-math-errno
+# extra flags for tif_mgf only (see the tif_mgf target below)
+MGFFLAGS = -O3 -march=native -fno-math-errno
 LIBS    = -lm
 TIFFLIB = -ltiff
 CBP     = cbp_thread_int.c
@@ -129,7 +129,7 @@ sf_rec_t_c:
 misc: tif_f2i rec_crop sinog of_sinog pid stop_watch img_ave \
       spl his_spl_K his_spl_E his_spl_tif rec_stk chk-rc set-rc \
       his2img ct_prj_f ct_sub_f ict_prj_fc ct_prj_fc \
-      tif2hst rec_gf hp2DO tif_ave tif_mgf tif_mgf5 his_ave \
+      tif2hst rec_gf hp2DO tif_ave tif_mgf his_ave \
       q3_ave q4_ave act_spl act_spl2 gf_sd gf_fd his2tif6 ofsfa
 
 tif_f2i:
@@ -180,16 +180,14 @@ hp2DO:
 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/hp2DO hp2DO.c $(TIFFLIB) $(LIBS)
 tif_ave:
 	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/tif_ave tif_ave.c rif_fast.c $(TIFFLIB) $(LIBS)
-tif_mgf:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tif_mgf tif_mgf.c $(TIFFLIB) $(LIBS)
-# tif_mgf5 is built with $(MGF5FLAGS) on top of $(CFLAGS): -O3 -march=native
+# tif_mgf is built with $(MGFFLAGS) on top of $(CFLAGS): -O3 -march=native
 # is what lets gcc vectorise the median sorting networks across neighbouring
 # pixels (pminub/pmaxub for 8bit, pminuw/pmaxuw for 16bit).
 # NEVER add -ffast-math / -Ofast / -fassociative-math here: reassociating the
 # gaussian tap sum would change the output.  Remove -march=native when the
 # binary has to run on a different machine than the one that builds it.
-tif_mgf5:
-	$(CC) $(CFLAGS) $(MGF5FLAGS) $(OMPF) -o $(EXE_DIR)/tif_mgf5 tif_mgf5.c $(TIFFLIB) $(LIBS)
+tif_mgf:
+	$(CC) $(CFLAGS) $(MGFFLAGS) $(OMPF) -o $(EXE_DIR)/tif_mgf tif_mgf.c $(TIFFLIB) $(LIBS)
 his_ave:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/his_ave his_ave.c sif.c $(LIBS)
 q3_ave:
@@ -259,7 +257,7 @@ clean:
 	$(EXE_DIR)/rec_stk $(EXE_DIR)/chk-rc $(EXE_DIR)/set-rc $(EXE_DIR)/his2img \
 	$(EXE_DIR)/ct_prj_f $(EXE_DIR)/ct_sub_f $(EXE_DIR)/ict_prj_fc $(EXE_DIR)/ct_prj_fc \
 	$(EXE_DIR)/tf_prj_f $(EXE_DIR)/tif2hst $(EXE_DIR)/rec_gf \
-	$(EXE_DIR)/hp2DO $(EXE_DIR)/tif_ave $(EXE_DIR)/tif_mgf $(EXE_DIR)/tif_mgf5 \
+	$(EXE_DIR)/hp2DO $(EXE_DIR)/tif_ave $(EXE_DIR)/tif_mgf \
 	$(EXE_DIR)/his_ave $(EXE_DIR)/q3_ave $(EXE_DIR)/q4_ave \
 	$(EXE_DIR)/act_spl $(EXE_DIR)/act_spl2 $(EXE_DIR)/gf_sd $(EXE_DIR)/gf_fd \
 	$(EXE_DIR)/his2tif6 $(EXE_DIR)/ofsfa \

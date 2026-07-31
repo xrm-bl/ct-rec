@@ -1,6 +1,66 @@
 /*
- * tif_mgf.c - High-precision 2D Filter Software (Median + Gaussian)
- * C89 compliant implementation with ImageJ-level accuracy
+ * tif_mgf.c - 2D filter (median + gaussian) for a single TIFF.
+ *
+ *   tif_mgf <input_file> <output_file> [median_kernel_size] [gaussian_sigma]
+ *     median_kernel_size : 0-25      (default 1, 0 to skip)
+ *     gaussian_sigma     : 0.0-100.0 (default 0.5, 0.0 to skip)
+ *
+ * Median first, on the integer pixels, then a separable gaussian carried
+ * out in double precision.  Edge mode is mirror (as in ImageJ).  8- and
+ * 16-bit grayscale.
+ *
+ * Rewritten 2026-07 around the median kernel sizes that are actually used
+ * (3 and 5).  Same CLI, same edge handling, same processing order and the
+ * same double-precision arithmetic in the same order as the version it
+ * replaces, so the output is unchanged - only much faster.
+ *
+ * How the small kernels are made fast
+ *   1. Median: branch-free sorting networks - 19 compare-exchanges for 3x3
+ *      (Smith 1996) and 99 for 5x5 - instead of an insertion sort over the
+ *      whole window (~20 / ~150 element moves on average, with a data
+ *      dependent branch per move).  The median of a window is by definition
+ *      the same value, so the result does not change.
+ *   2. Median: the row is split into a 'half'-wide border and an interior.
+ *      In the interior (more than 99% of the pixels for k <= 5) the mirror
+ *      test cannot trigger, so the four boundary comparisons per window
+ *      sample disappear and the window is gathered through row pointers.
+ *   3. Median: the window lives in local variables; there is no per-row
+ *      malloc/free of a window buffer.
+ *   4. Gaussian, vertical pass: row-blocked (y outer, x inner) with the
+ *      mirrored source row pointers computed once per output row, rather
+ *      than column-blocked, which touched a new cache line for every
+ *      single sample.  Each output pixel still accumulates the same
+ *      products in the same order, so the arithmetic is unchanged, but the
+ *      memory traffic drops by more than an order of magnitude on large
+ *      images.
+ *   5. Gaussian, both passes: same interior/border split as in 2., and the
+ *      integer <-> double conversions are OpenMP-parallel.
+ *
+ * Median kernel sizes above 5 fall back to a plain insertion sort over the
+ * window (items 2-5 above still apply).
+ *
+ * Two edge cases worth knowing: an even kernel size is treated as the odd
+ * window that is actually gathered (k=2 -> 3x3, k=4 -> 5x5), and a mirror
+ * index is clamped afterwards so that a window wider than the image (3x3
+ * on a 1x1 image, sigma=2 on a 5-row image) cannot read outside the buffer.
+ *
+ * Build (Windows):
+ *   cl /DWINDOWS /O2 /openmp /Fetif_mgf.exe tif_mgf.c libtiff.lib jpeg.lib lzma.lib zs.lib
+ *
+ * Build (Linux, recommended - lets gcc vectorise the median networks):
+ *   gcc -O3 -march=native -fno-math-errno -o tif_mgf tif_mgf.c -ltiff -lm
+ *   add -fopenmp for the multi-threaded build.
+ *
+ *   Do NOT add -ffast-math (or -Ofast, or -fassociative-math): it would let
+ *   gcc reassociate the gaussian tap sum and the output would no longer
+ *   match.  -fno-math-errno is safe here (no libm call in the filter loops;
+ *   it only frees the compiler from the errno side effect).
+ *   -march=native selects pminub/pmaxub / pminuw/pmaxuw; without it the
+ *   baseline x86-64 SSE2 forms are used, which are still vectorised.
+ *
+ *   To inspect what was vectorised:
+ *     gcc -O3 -march=native -fno-math-errno -fopt-info-vec-optimized \
+ *         -fopt-info-vec-missed -c tif_mgf.c
  */
 
 #include <stdio.h>
@@ -9,847 +69,618 @@
 #include <string.h>
 #include <time.h>
 #include <math.h>
-#include <limits.h>
-#include <float.h>
 
 #ifdef _WIN32
 #include "tiffio.h"
-#include <windows.h>
-#include <direct.h>
-#define MKDIR(path) _mkdir(path)
-#define PATH_SEPARATOR "\\"
-#define HOME_ENV "USERPROFILE"
 #else
 #include <tiffio.h>
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#define MKDIR(path) mkdir(path, 0755)
-#define PATH_SEPARATOR "/"
-#define HOME_ENV "HOME"
 #endif
 
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 
-/* Edge handling modes */
-#define EDGE_MIRROR 0
-#define EDGE_EXTEND 1
-#define EDGE_ZERO 2
+#define MEDIAN_KMAX	25		/* CLI limit for the median kernel size */
+#define GAUSS_KMAX	51		/* calculate_kernel_size() caps here */
 
-/* Global variables for logging */
-static FILE* g_log_file = NULL;
-static clock_t g_start_time;
+/*----------------------------------------------------------------------*/
+/* Compiler helpers.  None of these change any arithmetic; they only tell
+   the compiler what it may assume, so that the straight-line min/max code
+   of the median networks can be vectorised across neighbouring pixels. */
 
-/* Configuration structure */
-typedef struct {
-    int edge_mode;
-    int use_32bit_precision;
-} FilterConfig;
+/* no aliasing between the source and destination images */
+#if	defined(__GNUC__) || defined(_MSC_VER)
+#define RESTRICT	__restrict
+#elif	defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#define RESTRICT	restrict
+#else
+#define RESTRICT
+#endif
 
-/* Function prototypes */
-static void init_log(void);
-static void close_log(void);
-//static void write_log(const char* format, ...);
-static int validate_arguments(int argc, char* argv[]);
-static int process_tiff_file(const char* input_file, const char* output_file, 
-                            int median_size, double gaussian_sigma);
-static int apply_median_filter(void* data, int width, int height, int kernel_size, 
-                              int is_16bit, FilterConfig* config);
-static int apply_gaussian_filter_separable(void* data, int width, int height, 
-                                          double sigma, int is_16bit, FilterConfig* config);
-static void sort_array_8bit(unsigned char* arr, int size);
-static void sort_array_16bit(unsigned short* arr, int size);
-static void create_gaussian_kernel_1d(double* kernel, int size, double sigma);
-static int calculate_kernel_size(double sigma);
-static double* convert_to_float(void* data, int width, int height, int is_16bit);
-static void convert_from_float(double* float_data, void* data, int width, int height, int is_16bit);
-static double get_pixel_value_mirror(double* data, int x, int y, int width, int height);
-static double get_pixel_value_extend(double* data, int x, int y, int width, int height);
-static double get_pixel_value_zero(double* data, int x, int y, int width, int height);
+/* the window networks must be inlined into the pixel loop, otherwise the
+   window array stays in memory and no scalar replacement happens */
+#if	defined(__GNUC__)
+#define ALWAYS_INLINE	static __inline__ __attribute__((always_inline))
+#elif	defined(_MSC_VER)
+#define ALWAYS_INLINE	static __forceinline
+#else
+#define ALWAYS_INLINE	static
+#endif
 
-static char *desc;
+/* iterations of the pixel loops are independent (restrict already says so;
+   this is a fallback for the cases where gcc's alias analysis gives up) */
+#if	defined(__GNUC__)
+#define IVDEP		_Pragma("GCC ivdep")
+#else
+#define IVDEP
+#endif
 
-/* Main function */
-int main(int argc, char* argv[])
+/*----------------------------------------------------------------------*/
+/* index reflection (EDGE_MIRROR), with a final clamp so that a window
+   wider than the image cannot read out of bounds */
+
+#define MIRROR(v,n)	do {					\
+		if ((v) <  0)  (v) = -(v);			\
+		if ((v) >= (n)) (v) = 2*(n)-(v)-2;		\
+		if ((v) <  0)  (v) = 0;				\
+		if ((v) >= (n)) (v) = (n)-1;			\
+	} while (0)
+
+/*----------------------------------------------------------------------*/
+/* sorting networks: compare-exchange of two window elements.
+
+   Written as an explicit min/max pair rather than "if (b<a) swap(a,b)".
+   The two forms are the same function on integers (they also agree when
+   a==b), but the branchless min/max form is what gcc recognises as the
+   MIN_EXPR/MAX_EXPR idiom, which it can widen to pminub/pmaxub (8bit) and
+   pminuw/pmaxuw (16bit) when the surrounding pixel loop is vectorised.
+   The conditional-swap form keeps a data-dependent branch and blocks it. */
+
+#define MSORT(T,a,b)	do {					\
+		T lo_=((a)<(b))?(a):(b);			\
+		T hi_=((a)<(b))?(b):(a);			\
+		(a)=lo_; (b)=hi_;				\
+	} while (0)
+
+/* median of 9 (3x3): 19 compare-exchanges.
+   ALWAYS_INLINE so that the window array of the caller never has its
+   address taken across a call boundary: after inlining, p[] is written and
+   read only through constant indices, so gcc's scalar replacement turns it
+   into 9 (25) values that the vectoriser can hold in vector lanes. */
+#define DEFINE_MED9(NAME,T)						\
+ALWAYS_INLINE T NAME(T *p)						\
+{									\
+	MSORT(T,p[1],p[2]); MSORT(T,p[4],p[5]); MSORT(T,p[7],p[8]);	\
+	MSORT(T,p[0],p[1]); MSORT(T,p[3],p[4]); MSORT(T,p[6],p[7]);	\
+	MSORT(T,p[1],p[2]); MSORT(T,p[4],p[5]); MSORT(T,p[7],p[8]);	\
+	MSORT(T,p[0],p[3]); MSORT(T,p[5],p[8]); MSORT(T,p[4],p[7]);	\
+	MSORT(T,p[3],p[6]); MSORT(T,p[1],p[4]); MSORT(T,p[2],p[5]);	\
+	MSORT(T,p[4],p[7]); MSORT(T,p[4],p[2]); MSORT(T,p[6],p[4]);	\
+	MSORT(T,p[4],p[2]);						\
+	return p[4];							\
+}
+
+/* median of 25 (5x5): 99 compare-exchanges (ALWAYS_INLINE, see above) */
+#define DEFINE_MED25(NAME,T)						\
+ALWAYS_INLINE T NAME(T *p)						\
+{									\
+	MSORT(T,p[0],p[1]);   MSORT(T,p[3],p[4]);   MSORT(T,p[2],p[4]);	\
+	MSORT(T,p[2],p[3]);   MSORT(T,p[6],p[7]);   MSORT(T,p[5],p[7]);	\
+	MSORT(T,p[5],p[6]);   MSORT(T,p[9],p[10]);  MSORT(T,p[8],p[10]);\
+	MSORT(T,p[8],p[9]);   MSORT(T,p[12],p[13]); MSORT(T,p[11],p[13]);\
+	MSORT(T,p[11],p[12]); MSORT(T,p[15],p[16]); MSORT(T,p[14],p[16]);\
+	MSORT(T,p[14],p[15]); MSORT(T,p[18],p[19]); MSORT(T,p[17],p[19]);\
+	MSORT(T,p[17],p[18]); MSORT(T,p[21],p[22]); MSORT(T,p[20],p[22]);\
+	MSORT(T,p[20],p[21]); MSORT(T,p[23],p[24]); MSORT(T,p[2],p[5]);	\
+	MSORT(T,p[3],p[6]);   MSORT(T,p[0],p[6]);   MSORT(T,p[0],p[3]);	\
+	MSORT(T,p[4],p[7]);   MSORT(T,p[1],p[7]);   MSORT(T,p[1],p[4]);	\
+	MSORT(T,p[11],p[14]); MSORT(T,p[8],p[14]);  MSORT(T,p[8],p[11]);\
+	MSORT(T,p[12],p[15]); MSORT(T,p[9],p[15]);  MSORT(T,p[9],p[12]);\
+	MSORT(T,p[13],p[16]); MSORT(T,p[10],p[16]); MSORT(T,p[10],p[13]);\
+	MSORT(T,p[20],p[23]); MSORT(T,p[17],p[23]); MSORT(T,p[17],p[20]);\
+	MSORT(T,p[21],p[24]); MSORT(T,p[18],p[24]); MSORT(T,p[18],p[21]);\
+	MSORT(T,p[19],p[22]); MSORT(T,p[8],p[17]);  MSORT(T,p[9],p[18]);\
+	MSORT(T,p[0],p[18]);  MSORT(T,p[0],p[9]);   MSORT(T,p[10],p[19]);\
+	MSORT(T,p[1],p[19]);  MSORT(T,p[1],p[10]);  MSORT(T,p[11],p[20]);\
+	MSORT(T,p[2],p[20]);  MSORT(T,p[2],p[11]);  MSORT(T,p[12],p[21]);\
+	MSORT(T,p[3],p[21]);  MSORT(T,p[3],p[12]);  MSORT(T,p[13],p[22]);\
+	MSORT(T,p[4],p[22]);  MSORT(T,p[4],p[13]);  MSORT(T,p[14],p[23]);\
+	MSORT(T,p[5],p[23]);  MSORT(T,p[5],p[14]);  MSORT(T,p[15],p[24]);\
+	MSORT(T,p[6],p[24]);  MSORT(T,p[6],p[15]);  MSORT(T,p[7],p[16]);\
+	MSORT(T,p[7],p[19]);  MSORT(T,p[13],p[21]); MSORT(T,p[15],p[23]);\
+	MSORT(T,p[7],p[13]);  MSORT(T,p[7],p[15]);  MSORT(T,p[1],p[9]);	\
+	MSORT(T,p[3],p[11]);  MSORT(T,p[5],p[17]);  MSORT(T,p[11],p[17]);\
+	MSORT(T,p[9],p[17]);  MSORT(T,p[4],p[10]);  MSORT(T,p[6],p[12]);\
+	MSORT(T,p[7],p[14]);  MSORT(T,p[4],p[6]);   MSORT(T,p[4],p[7]);	\
+	MSORT(T,p[12],p[14]); MSORT(T,p[10],p[14]); MSORT(T,p[6],p[7]);	\
+	MSORT(T,p[10],p[12]); MSORT(T,p[6],p[10]);  MSORT(T,p[6],p[17]);\
+	MSORT(T,p[12],p[17]); MSORT(T,p[7],p[17]);  MSORT(T,p[7],p[10]);\
+	MSORT(T,p[12],p[18]); MSORT(T,p[7],p[12]);  MSORT(T,p[10],p[18]);\
+	MSORT(T,p[12],p[20]); MSORT(T,p[10],p[20]); MSORT(T,p[10],p[12]);\
+	return p[12];							\
+}
+
+/* insertion sort (k > 5 path) */
+#define DEFINE_ISORT(NAME,T)						\
+static void NAME(T *arr,int size)					\
+{									\
+	int	i,j;							\
+	T	temp;							\
+									\
+	for (i = 1; i < size; i++) {					\
+	    temp = arr[i];						\
+	    j = i-1;							\
+	    while (j >= 0 && arr[j] > temp) { arr[j+1] = arr[j]; j--; }	\
+	    arr[j+1] = temp;						\
+	}								\
+}
+
+DEFINE_MED9 (med9_u8 ,unsigned char)
+DEFINE_MED9 (med9_u16,unsigned short)
+DEFINE_MED25(med25_u8 ,unsigned char)
+DEFINE_MED25(med25_u16,unsigned short)
+DEFINE_ISORT(isort_u8 ,unsigned char)
+DEFINE_ISORT(isort_u16,unsigned short)
+
+/*----------------------------------------------------------------------*/
+/* median filter, one output row.  Window is (2*half+1)^2, mirror boundary.
+   The OpenMP directive lives in the wrapper below, not in this macro, so
+   that no _Pragma() is needed (MSVC /openmp uses the legacy preprocessor). */
+
+#define DEFINE_MEDIAN_ROW(NAME,T,MED9,MED25,ISORT)			\
+static void NAME(const T * RESTRICT src,T * RESTRICT dst,		\
+		 int width,int height,int half,int y)			\
+{									\
+	const T	*rows[MEDIAN_KMAX];					\
+	T	win[MEDIAN_KMAX*MEDIAN_KMAX];				\
+	T	* RESTRICT out=dst+(size_t)y*width;			\
+	const int k=2*half+1, n=k*k;					\
+	int	xi0=(half<width)?half:width,				\
+		xi1=(width-half>xi0)?width-half:xi0,			\
+		x,i,j,sy;						\
+									\
+	for (j = 0; j < k; j++) {					\
+	    sy=y+j-half; MIRROR(sy,height);				\
+	    rows[j]=src+(size_t)sy*width;				\
+	}								\
+	/* left border: reflection can trigger */			\
+	for (x = 0; x < xi0; x++) {					\
+	    int c=0;							\
+	    for (j = 0; j < k; j++)					\
+	    for (i = 0; i < k; i++) {					\
+		int nx=x+i-half; MIRROR(nx,width);			\
+		win[c++]=rows[j][nx];					\
+	    }								\
+	    if	    (k==3) out[x]=MED9(win);				\
+	    else if (k==5) out[x]=MED25(win);				\
+	    else { ISORT(win,n); out[x]=win[n/2]; }			\
+	}								\
+	/* Interior: no reflection can trigger here, so the window is read
+	   straight through the row base pointers with compile-time constant
+	   offsets.  Each x is independent and every access is contiguous in
+	   x, which is what lets gcc vectorise these two loops across
+	   neighbouring pixels. */					\
+	if (k == 3) {							\
+	    const T * RESTRICT q0=rows[0];				\
+	    const T * RESTRICT q1=rows[1];				\
+	    const T * RESTRICT q2=rows[2];				\
+	    IVDEP							\
+	    for (x = xi0; x < xi1; x++) {				\
+		T p[9];							\
+		p[0]=q0[x-1]; p[1]=q0[x]; p[2]=q0[x+1];			\
+		p[3]=q1[x-1]; p[4]=q1[x]; p[5]=q1[x+1];			\
+		p[6]=q2[x-1]; p[7]=q2[x]; p[8]=q2[x+1];			\
+		out[x]=MED9(p);						\
+	    }								\
+	} else if (k == 5) {						\
+	    const T * RESTRICT q0=rows[0];				\
+	    const T * RESTRICT q1=rows[1];				\
+	    const T * RESTRICT q2=rows[2];				\
+	    const T * RESTRICT q3=rows[3];				\
+	    const T * RESTRICT q4=rows[4];				\
+	    IVDEP							\
+	    for (x = xi0; x < xi1; x++) {				\
+		T p[25];						\
+		p[ 0]=q0[x-2]; p[ 1]=q0[x-1]; p[ 2]=q0[x];		\
+		p[ 3]=q0[x+1]; p[ 4]=q0[x+2];				\
+		p[ 5]=q1[x-2]; p[ 6]=q1[x-1]; p[ 7]=q1[x];		\
+		p[ 8]=q1[x+1]; p[ 9]=q1[x+2];				\
+		p[10]=q2[x-2]; p[11]=q2[x-1]; p[12]=q2[x];		\
+		p[13]=q2[x+1]; p[14]=q2[x+2];				\
+		p[15]=q3[x-2]; p[16]=q3[x-1]; p[17]=q3[x];		\
+		p[18]=q3[x+1]; p[19]=q3[x+2];				\
+		p[20]=q4[x-2]; p[21]=q4[x-1]; p[22]=q4[x];		\
+		p[23]=q4[x+1]; p[24]=q4[x+2];				\
+		out[x]=MED25(p);					\
+	    }								\
+	} else {							\
+	    for (x = xi0; x < xi1; x++) {				\
+		int c=0;						\
+		for (j = 0; j < k; j++) {				\
+		    const T *r=rows[j]+x-half;				\
+		    for (i = 0; i < k; i++) win[c++]=r[i];		\
+		}							\
+		ISORT(win,n); out[x]=win[n/2];				\
+	    }								\
+	}								\
+	/* right border */						\
+	for (x = xi1; x < width; x++) {					\
+	    int c=0;							\
+	    for (j = 0; j < k; j++)					\
+	    for (i = 0; i < k; i++) {					\
+		int nx=x+i-half; MIRROR(nx,width);			\
+		win[c++]=rows[j][nx];					\
+	    }								\
+	    if	    (k==3) out[x]=MED9(win);				\
+	    else if (k==5) out[x]=MED25(win);				\
+	    else { ISORT(win,n); out[x]=win[n/2]; }			\
+	}								\
+}
+
+DEFINE_MEDIAN_ROW(median_row_u8 ,unsigned char ,med9_u8 ,med25_u8 ,isort_u8)
+DEFINE_MEDIAN_ROW(median_row_u16,unsigned short,med9_u16,med25_u16,isort_u16)
+
+static void	median_u8(const unsigned char * RESTRICT src,
+			  unsigned char * RESTRICT dst,
+			  int width,int height,int half)
 {
-    const char* input_file;
-    const char* output_file;
-    int median_kernel_size = 1;
-    double gaussian_sigma = 0.5;
-    int result;
-    
-    /* Initialize */
-    g_start_time = clock();
-//    init_log();
-    
-    /* Validate arguments */
-    if (!validate_arguments(argc, argv)) {
-//        close_log();
-        return 1;
-    }
-    
-    /* Parse arguments */
-    input_file = argv[1];
-    output_file = argv[2];
-    
-    if (argc > 3) {
-        median_kernel_size = atoi(argv[3]);
-        if (median_kernel_size < 0 || median_kernel_size > 25) {
-//            write_log("Error: Invalid median kernel size (must be 0-25)");
-            fprintf(stderr, "Error: Invalid median kernel size (must be 0-25)\n");
-//            close_log();
-            return 1;
-        }
-    }
-    
-    if (argc > 4) {
-        gaussian_sigma = atof(argv[4]);
-        if (gaussian_sigma < 0.0 || gaussian_sigma > 100.0) {
-//            write_log("Error: Invalid gaussian sigma (must be 0.0-100.0)");
-            fprintf(stderr, "Error: Invalid gaussian sigma (must be 0.0-100.0)\n");
-//            close_log();
-            return 1;
-        }
-    }
-    
-//    write_log("Starting tif_mgf processing (High-precision mode)");
-//    write_log("Input file: %s", input_file);
-//    write_log("Output file: %s", output_file);
-//    write_log("Median kernel size: %d", median_kernel_size);
-//    write_log("Gaussian sigma: %.3f", gaussian_sigma);
-    
-    /* Process the file */
-    result = process_tiff_file(input_file, output_file, median_kernel_size, gaussian_sigma);
-    
-    if (result == 0) {
-        double elapsed = (double)(clock() - g_start_time) / CLOCKS_PER_SEC;
-//        write_log("Processing completed successfully. Total time: %.2f seconds", elapsed);
-//        printf("Processing completed successfully. Total time: %.2f seconds\n", elapsed);
-    }
-    
-//    close_log();
+	int	y;
 
-	
-	
-// append to log file
-	FILE		*flog;
-	int		i;
-	if ((flog = fopen("cmd-hst.log", "a")) == NULL) {
-		return(-1);
+#pragma omp parallel for schedule(static)
+	for (y = 0; y < height; y++)
+	    median_row_u8(src,dst,width,height,half,y);
+}
+
+static void	median_u16(const unsigned short * RESTRICT src,
+			   unsigned short * RESTRICT dst,
+			   int width,int height,int half)
+{
+	int	y;
+
+#pragma omp parallel for schedule(static)
+	for (y = 0; y < height; y++)
+	    median_row_u16(src,dst,width,height,half,y);
+}
+
+/*----------------------------------------------------------------------*/
+/* gaussian kernel */
+
+static int	calculate_kernel_size(double sigma)
+{
+	int	size;
+
+	if (sigma <= 0.0) return 0;
+	size=(int)ceil(3.0*sigma)*2+1;
+	if (size%2 == 0) size++;
+	if (size > GAUSS_KMAX) size=GAUSS_KMAX;
+	return size;
+}
+
+static void	create_gaussian_kernel_1d(double *kernel,int size,double sigma)
+{
+	int	center=size/2,i;
+	double	sum=0.0,
+		two_sigma_sq=2.0*sigma*sigma,
+		norm_factor=1.0/sqrt(2.0*3.14159265358979323846*sigma*sigma);
+
+	for (i = 0; i < size; i++) {
+	    int distance=i-center;
+
+	    kernel[i]=norm_factor*exp(-(distance*distance)/two_sigma_sq);
+	    sum+=kernel[i];
 	}
-	for (i = 0; i<argc; ++i) fprintf(flog, "%s ", argv[i]);
-	fprintf(flog, "\t");
-	fprintf(flog, "   %% median_kernel_size %d  gaussian_sigma %g\n", median_kernel_size, gaussian_sigma);
-	fclose(flog);
-  
-	
+	for (i = 0; i < size; i++) kernel[i]/=sum;
+}
+
+/* horizontal pass; each pixel sums its taps in ascending order */
+static void	gauss_h(const double * RESTRICT src,double * RESTRICT dst,
+			int width,int height,const double * RESTRICT ker,int ks)
+{
+	const int	half=ks/2;
+	int		xi0=(half<width)?half:width,
+			xi1=(width-half>xi0)?width-half:xi0,
+			y;
+
+#pragma omp parallel for schedule(static)
+	for (y = 0; y < height; y++) {
+	    const double	* RESTRICT sr=src+(size_t)y*width;
+	    double		* RESTRICT dr=dst+(size_t)y*width;
+	    int			x,i;
+	    double		s;
+
+	    for (x = 0; x < xi0; x++) {
+		s=0.0;
+		for (i = 0; i < ks; i++) {
+		    int sx=x+i-half; MIRROR(sx,width);
+		    s+=sr[sx]*ker[i];
+		}
+		dr[x]=s;
+	    }
+	    IVDEP
+	    for (x = xi0; x < xi1; x++) {
+		const double *p=sr+x-half;
+
+		s=0.0;
+		for (i = 0; i < ks; i++) s+=p[i]*ker[i];
+		dr[x]=s;
+	    }
+	    for (x = xi1; x < width; x++) {
+		s=0.0;
+		for (i = 0; i < ks; i++) {
+		    int sx=x+i-half; MIRROR(sx,width);
+		    s+=sr[sx]*ker[i];
+		}
+		dr[x]=s;
+	    }
+	}
+}
+
+/* vertical pass; row-blocked instead of column-blocked (same arithmetic) */
+static void	gauss_v(const double * RESTRICT src,double * RESTRICT dst,
+			int width,int height,const double * RESTRICT ker,int ks)
+{
+	const int	half=ks/2;
+	int		y;
+
+#pragma omp parallel for schedule(static)
+	for (y = 0; y < height; y++) {
+	    const double	*rows[GAUSS_KMAX];
+	    double		* RESTRICT dr=dst+(size_t)y*width;
+	    int			x,i,sy;
+	    double		s;
+
+	    for (i = 0; i < ks; i++) {
+		sy=y+i-half; MIRROR(sy,height);
+		rows[i]=src+(size_t)sy*width;
+	    }
+	    IVDEP
+	    for (x = 0; x < width; x++) {
+		s=0.0;
+		for (i = 0; i < ks; i++) s+=rows[i][x]*ker[i];
+		dr[x]=s;
+	    }
+	}
+}
+
+/*----------------------------------------------------------------------*/
+/* integer <-> double conversion */
+
+/* The pixel count is passed as a plain int: MSVC's /openmp implements
+   OpenMP 2.0, whose parallel-for index must be a signed int.  An 8/16-bit
+   image of more than 2G pixels cannot be handled by the rest of the
+   program either. */
+static void	to_double(const void *data,double * RESTRICT out,int n,int is_16bit)
+{
+	int	i;
+
+	if (is_16bit) {
+	    const unsigned short * RESTRICT src=(const unsigned short *)data;
+
+#pragma omp parallel for schedule(static)
+	    for (i = 0; i < n; i++) out[i]=(double)src[i];
+	} else {
+	    const unsigned char * RESTRICT src=(const unsigned char *)data;
+
+#pragma omp parallel for schedule(static)
+	    for (i = 0; i < n; i++) out[i]=(double)src[i];
+	}
+}
+
+static void	from_double(const double * RESTRICT in,void *data,int n,int is_16bit)
+{
+	int	i;
+
+	if (is_16bit) {
+	    unsigned short * RESTRICT dst=(unsigned short *)data;
+
+#pragma omp parallel for schedule(static)
+	    for (i = 0; i < n; i++) {
+		double val=in[i]+0.5;
+
+		if (val <     0.0) val=0.0;
+		if (val > 65535.0) val=65535.0;
+		dst[i]=(unsigned short)val;
+	    }
+	} else {
+	    unsigned char * RESTRICT dst=(unsigned char *)data;
+
+#pragma omp parallel for schedule(static)
+	    for (i = 0; i < n; i++) {
+		double val=in[i]+0.5;
+
+		if (val <   0.0) val=0.0;
+		if (val > 255.0) val=255.0;
+		dst[i]=(unsigned char)val;
+	    }
+	}
+}
+
+/*----------------------------------------------------------------------*/
+
+static int	apply_median(void *data,int width,int height,int kernel_size,
+			     int is_16bit)
+{
+	const size_t	npix=(size_t)width*height;
+	const int	half=kernel_size/2;
+	void		*tmp;
+
+	if (half <= 0) return 0;			/* k=1: identity */
+
+	tmp=malloc(npix*(is_16bit?sizeof(unsigned short):sizeof(unsigned char)));
+	if (tmp == NULL) {
+	    fprintf(stderr,"Error: Cannot allocate memory for median filter\n");
+	    return 1;
+	}
+	if (is_16bit)
+	    median_u16((const unsigned short *)data,(unsigned short *)tmp,
+		       width,height,half);
+	else
+	    median_u8 ((const unsigned char  *)data,(unsigned char  *)tmp,
+		       width,height,half);
+
+	memcpy(data,tmp,npix*(is_16bit?sizeof(unsigned short):sizeof(unsigned char)));
+	free(tmp);
+	return 0;
+}
+
+static int	apply_gaussian(void *data,int width,int height,double sigma,
+			       int is_16bit)
+{
+	const size_t	npix=(size_t)width*height;
+	int		ks=calculate_kernel_size(sigma);
+	double		*f,*t,ker[GAUSS_KMAX];
+
+	if (ks <= 0) return 0;
+
+	f=(double *)malloc(npix*sizeof(double));
+	t=(double *)malloc(npix*sizeof(double));
+	if (f == NULL || t == NULL) {
+	    fprintf(stderr,"Error: Cannot allocate float buffer\n");
+	    free(f); free(t);
+	    return 1;
+	}
+	create_gaussian_kernel_1d(ker,ks,sigma);
+
+	to_double(data,f,(int)npix,is_16bit);
+	gauss_h(f,t,width,height,ker,ks);
+	gauss_v(t,f,width,height,ker,ks);
+	from_double(f,data,(int)npix,is_16bit);
+
+	free(t); free(f);
+	return 0;
+}
+
+/*----------------------------------------------------------------------*/
+
+static int	process_tiff_file(const char *input_file,const char *output_file,
+				  int median_size,double sigma)
+{
+	TIFF		*in_tiff,*out_tiff;
+	uint32_t	width=0,height=0,row;
+	uint16_t	bits_per_sample=0;
+	void		*data;
+	tsize_t		scanline_size;
+	char		*desc=NULL;
+	int		is_16bit,have_desc;
+
+	if ((in_tiff=TIFFOpen(input_file,"r")) == NULL) {
+	    fprintf(stderr,"Error: Cannot open input TIFF file\n");
+	    return 1;
+	}
+	TIFFGetField(in_tiff,TIFFTAG_IMAGEWIDTH,&width);
+	TIFFGetField(in_tiff,TIFFTAG_IMAGELENGTH,&height);
+	TIFFGetField(in_tiff,TIFFTAG_BITSPERSAMPLE,&bits_per_sample);
+	have_desc=TIFFGetField(in_tiff,TIFFTAG_IMAGEDESCRIPTION,&desc);
+
+	if (bits_per_sample != 8 && bits_per_sample != 16) {
+	    fprintf(stderr,"Error: Only 8-bit and 16-bit images are supported\n");
+	    TIFFClose(in_tiff);
+	    return 1;
+	}
+	is_16bit=(bits_per_sample == 16);
+	scanline_size=TIFFScanlineSize(in_tiff);
+
+	if ((data=malloc((size_t)height*scanline_size)) == NULL) {
+	    fprintf(stderr,"Error: Cannot allocate memory\n");
+	    TIFFClose(in_tiff);
+	    return 1;
+	}
+	for (row = 0; row < height; row++)
+	    if (TIFFReadScanline(in_tiff,(char *)data+(size_t)row*scanline_size,
+				 row,0) < 0) {
+		fprintf(stderr,"Error: Cannot read scanline %u\n",row);
+		free(data); TIFFClose(in_tiff);
+		return 1;
+	    }
+
+	if (have_desc && desc != NULL) {
+	    char *copy=(char *)malloc(strlen(desc)+1);
+
+	    if (copy != NULL) { strcpy(copy,desc); desc=copy; }
+	    else have_desc=0;
+	}
+	TIFFClose(in_tiff);
+
+	if (median_size > 0 &&
+	    apply_median(data,(int)width,(int)height,median_size,is_16bit) != 0) {
+	    free(data); return 1;
+	}
+	if (sigma > 0.0 &&
+	    apply_gaussian(data,(int)width,(int)height,sigma,is_16bit) != 0) {
+	    free(data); return 1;
+	}
+
+	if ((out_tiff=TIFFOpen(output_file,"w")) == NULL) {
+	    fprintf(stderr,"Error: Cannot create output TIFF file\n");
+	    free(data); return 1;
+	}
+	TIFFSetField(out_tiff,TIFFTAG_IMAGEWIDTH,width);
+	TIFFSetField(out_tiff,TIFFTAG_IMAGELENGTH,height);
+	TIFFSetField(out_tiff,TIFFTAG_BITSPERSAMPLE,bits_per_sample);
+	TIFFSetField(out_tiff,TIFFTAG_COMPRESSION,COMPRESSION_NONE);
+	TIFFSetField(out_tiff,TIFFTAG_PHOTOMETRIC,PHOTOMETRIC_MINISBLACK);
+	TIFFSetField(out_tiff,TIFFTAG_SAMPLESPERPIXEL,1);
+	TIFFSetField(out_tiff,TIFFTAG_PLANARCONFIG,PLANARCONFIG_CONTIG);
+	TIFFSetField(out_tiff,TIFFTAG_ROWSPERSTRIP,TIFFDefaultStripSize(out_tiff,0));
+	if (have_desc) TIFFSetField(out_tiff,TIFFTAG_IMAGEDESCRIPTION,desc);
+	TIFFSetField(out_tiff,TIFFTAG_ARTIST,"tif_mgf2_libtiff");
+
+	for (row = 0; row < height; row++)
+	    if (TIFFWriteScanline(out_tiff,(char *)data+(size_t)row*scanline_size,
+				  row,0) < 0) {
+		fprintf(stderr,"Error: Cannot write scanline %u\n",row);
+		free(data); TIFFClose(out_tiff);
+		return 1;
+	    }
+	TIFFClose(out_tiff);
+	free(data);
+	if (have_desc) free(desc);
+	return 0;
+}
+
+/*----------------------------------------------------------------------*/
+
+int	main(int argc,char *argv[])
+{
+	const char	*input_file,*output_file;
+	int		median_kernel_size=1,result,i;
+	double		gaussian_sigma=0.5;
+	FILE		*flog;
+
+	if (argc < 3 || argc > 5) {
+	    fprintf(stderr,"Usage: %s <input_file> <output_file> [median_kernel_size] [gaussian_sigma]\n",argv[0]);
+	    fprintf(stderr,"  median_kernel_size: 0-%d (default: 1, 0 to skip; 3 and 5 take the fast path)\n",MEDIAN_KMAX);
+	    fprintf(stderr,"  gaussian_sigma: 0.0-100.0 (default: 0.5, 0.0 to skip)\n");
+	    return 1;
+	}
+	input_file =argv[1];
+	output_file=argv[2];
+
+	if (argc > 3) {
+	    median_kernel_size=atoi(argv[3]);
+	    if (median_kernel_size < 0 || median_kernel_size > MEDIAN_KMAX) {
+		fprintf(stderr,"Error: Invalid median kernel size (must be 0-%d)\n",MEDIAN_KMAX);
+		return 1;
+	    }
+	}
+	if (argc > 4) {
+	    gaussian_sigma=atof(argv[4]);
+	    if (gaussian_sigma < 0.0 || gaussian_sigma > 100.0) {
+		fprintf(stderr,"Error: Invalid gaussian sigma (must be 0.0-100.0)\n");
+		return 1;
+	    }
+	}
+
+	result=process_tiff_file(input_file,output_file,median_kernel_size,
+				 gaussian_sigma);
+
+	/* append to log file */
+	if ((flog=fopen("cmd-hst.log","a")) != NULL) {
+	    for (i = 0; i < argc; ++i) fprintf(flog,"%s ",argv[i]);
+	    fprintf(flog,"\t");
+	    fprintf(flog,"   %% median_kernel_size %d  gaussian_sigma %g\n",
+		    median_kernel_size,gaussian_sigma);
+	    fclose(flog);
+	}
 	return result;
-}
-
-/* Initialize logging */
-//static void init_log(void)
-//{
-//    char log_path[512];
-//    char timestamp[64];
-//    time_t now;
-//    struct tm* tm_info;
-//    char* home_dir;
-//    
-//    /* Get home directory */
-//    home_dir = getenv(HOME_ENV);
-//    if (!home_dir) {
-//        fprintf(stderr, "Warning: Cannot find home directory\n");
-//        return;
-//    }
-//    
-//    /* Create com-log directory */
-//    sprintf(log_path, "%s%scom-log", home_dir, PATH_SEPARATOR);
-//    MKDIR(log_path);
-//    
-//    /* Create log file with timestamp */
-//    time(&now);
-//    tm_info = localtime(&now);
-//    strftime(timestamp, sizeof(timestamp), "%Y%m%d_%H%M%S", tm_info);
-//    sprintf(log_path, "%s%scom-log%stif_mgf_%s.log", home_dir, PATH_SEPARATOR, PATH_SEPARATOR, timestamp);
-//    
-//    g_log_file = fopen(log_path, "w");
-//    if (!g_log_file) {
-//        fprintf(stderr, "Warning: Cannot create log file\n");
-//    }
-//}
-
-/* Close logging */
-//static void close_log(void)
-//{
-//    if (g_log_file) {
-//        fclose(g_log_file);
-//        g_log_file = NULL;
-//    }
-//}
-//
-///* Write to log file */
-//static void write_log(const char* format, ...)
-//{
-//    va_list args;
-//    char timestamp[64];
-//    time_t now;
-//    struct tm* tm_info;
-//    
-//    if (!g_log_file) return;
-//    
-//    /* Get timestamp */
-//    time(&now);
-//    tm_info = localtime(&now);
-//    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_info);
-//    
-//    /* Write timestamp and message */
-//    fprintf(g_log_file, "[%s] ", timestamp);
-//    
-//    va_start(args, format);
-//    vfprintf(g_log_file, format, args);
-//    va_end(args);
-//    
-//    fprintf(g_log_file, "\n");
-//    fflush(g_log_file);
-//}
-
-/* Validate command line arguments */
-static int validate_arguments(int argc, char* argv[])
-{
-    FILE* test_file;
-    
-    if (argc < 3 || argc > 5) {
-        fprintf(stderr, "Usage: %s <input_file> <output_file> [median_kernel_size] [gaussian_sigma]\n", argv[0]);
-        fprintf(stderr, "  median_kernel_size: 0-25 (default: 1, 0 to skip)\n");
-        fprintf(stderr, "  gaussian_sigma: 0.0-100.0 (default: 0.5, 0.0 to skip)\n");
-//        write_log("Error: Invalid number of arguments");
-        return 0;
-    }
-    
-    /* Check if input file exists */
-    test_file = fopen(argv[1], "rb");
-    if (!test_file) {
-        fprintf(stderr, "Error: Cannot open input file: %s\n", argv[1]);
-//        write_log("Error: Cannot open input file: %s", argv[1]);
-        return 0;
-    }
-    fclose(test_file);
-    
-    /* Check if output directory is writable */
-    test_file = fopen(argv[2], "wb");
-    if (!test_file) {
-        fprintf(stderr, "Error: Cannot create output file: %s\n", argv[2]);
-//        write_log("Error: Cannot create output file: %s", argv[2]);
-        return 0;
-    }
-    fclose(test_file);
-    remove(argv[2]);
-    
-    return 1;
-}
-
-/* Calculate optimal kernel size based on sigma (3-sigma rule) */
-static int calculate_kernel_size(double sigma)
-{
-    int size;
-    if (sigma <= 0.0) return 0;
-    
-    /* Kernel size should cover at least 3 standard deviations on each side */
-    size = (int)ceil(3.0 * sigma) * 2 + 1;
-    
-    /* Ensure odd size */
-    if (size % 2 == 0) size++;
-    
-    /* Limit maximum size for performance */
-    if (size > 51) size = 51;
-    
-    return size;
-}
-
-/* Create 1D Gaussian kernel with proper normalization */
-static void create_gaussian_kernel_1d(double* kernel, int size, double sigma)
-{
-    int center = size / 2;
-    double sum = 0.0;
-    double two_sigma_sq = 2.0 * sigma * sigma;
-    double norm_factor = 1.0 / sqrt(2.0 * 3.14159265358979323846 * sigma * sigma);
-    int i;
-    
-    /* Calculate kernel values */
-    for (i = 0; i < size; i++) {
-        int distance = i - center;
-        kernel[i] = norm_factor * exp(-(distance * distance) / two_sigma_sq);
-        sum += kernel[i];
-    }
-    
-    /* Normalize to ensure sum = 1.0 */
-    for (i = 0; i < size; i++) {
-        kernel[i] /= sum;
-    }
-}
-
-/* Convert data to floating point for high-precision processing */
-static double* convert_to_float(void* data, int width, int height, int is_16bit)
-{
-    double* float_data;
-    int i, total_pixels = width * height;
-    
-    float_data = (double*)malloc(total_pixels * sizeof(double));
-    if (!float_data) return NULL;
-    
-    if (is_16bit) {
-        unsigned short* src = (unsigned short*)data;
-        for (i = 0; i < total_pixels; i++) {
-            float_data[i] = (double)src[i];
-        }
-    } else {
-        unsigned char* src = (unsigned char*)data;
-        for (i = 0; i < total_pixels; i++) {
-            float_data[i] = (double)src[i];
-        }
-    }
-    
-    return float_data;
-}
-
-/* Convert floating point data back to original format */
-static void convert_from_float(double* float_data, void* data, int width, int height, int is_16bit)
-{
-    int i, total_pixels = width * height;
-    
-    if (is_16bit) {
-        unsigned short* dst = (unsigned short*)data;
-        for (i = 0; i < total_pixels; i++) {
-            double val = float_data[i] + 0.5;  /* Round */
-            if (val < 0.0) val = 0.0;
-            if (val > 65535.0) val = 65535.0;
-            dst[i] = (unsigned short)val;
-        }
-    } else {
-        unsigned char* dst = (unsigned char*)data;
-        for (i = 0; i < total_pixels; i++) {
-            double val = float_data[i] + 0.5;  /* Round */
-            if (val < 0.0) val = 0.0;
-            if (val > 255.0) val = 255.0;
-            dst[i] = (unsigned char)val;
-        }
-    }
-}
-
-/* Pixel access with mirror boundary condition.
- * One reflection is not enough when the kernel is wider than the image
- * (e.g. sigma=2 -> 13 taps on a 5-row image): the reflected index can still
- * fall outside, so it is clamped afterwards.  For every index the single
- * reflection already resolves, the clamp does nothing. */
-static double get_pixel_value_mirror(double* data, int x, int y, int width, int height)
-{
-    if (x < 0) x = -x;
-    if (x >= width) x = 2 * width - x - 2;
-    if (x < 0) x = 0;
-    if (x >= width) x = width - 1;
-    if (y < 0) y = -y;
-    if (y >= height) y = 2 * height - y - 2;
-    if (y < 0) y = 0;
-    if (y >= height) y = height - 1;
-
-    return data[y * width + x];
-}
-
-/* Pixel access with extend boundary condition */
-static double get_pixel_value_extend(double* data, int x, int y, int width, int height)
-{
-    if (x < 0) x = 0;
-    if (x >= width) x = width - 1;
-    if (y < 0) y = 0;
-    if (y >= height) y = height - 1;
-    
-    return data[y * width + x];
-}
-
-/* Pixel access with zero boundary condition */
-static double get_pixel_value_zero(double* data, int x, int y, int width, int height)
-{
-    if (x < 0 || x >= width || y < 0 || y >= height) {
-        return 0.0;
-    }
-    return data[y * width + x];
-}
-
-/* Process TIFF file */
-static int process_tiff_file(const char* input_file, const char* output_file, 
-                            int median_size, double gaussian_sigma)
-{
-    TIFF* in_tiff;
-    TIFF* out_tiff;
-    uint32_t width, height;
-    uint16_t bits_per_sample, samples_per_pixel;
-    void* data;
-    size_t scanline_size;
-    uint32_t row;
-    int is_16bit;
-    int have_desc;
-    clock_t filter_start;
-    FilterConfig config;
-
-    /* Set configuration */
-    config.edge_mode = EDGE_MIRROR;  /* Default to mirror mode like ImageJ */
-    config.use_32bit_precision = 1;   /* Always use high precision */
-    
-    /* Open input TIFF */
-    in_tiff = TIFFOpen(input_file, "r");
-    if (!in_tiff) {
-        fprintf(stderr, "Error: Cannot open input TIFF file\n");
-//        write_log("Error: Cannot open input TIFF file");
-        return 1;
-    }
-    
-    /* Get image properties */
-    TIFFGetField(in_tiff, TIFFTAG_IMAGEWIDTH, &width);
-    TIFFGetField(in_tiff, TIFFTAG_IMAGELENGTH, &height);
-    TIFFGetField(in_tiff, TIFFTAG_BITSPERSAMPLE, &bits_per_sample);
-//    TIFFGetField(in_tiff, TIFFTAG_SAMPLESPERPIXEL, &samples_per_pixel);
-    /* Keep the return value: without a description tag, desc would stay
-     * uninitialised and be handed to TIFFSetField() further down. */
-    have_desc = TIFFGetField(in_tiff, TIFFTAG_IMAGEDESCRIPTION, &desc);
-
-//    write_log("Image properties: width=%u, height=%u, bits=%u", width, height, bits_per_sample);
-    
-    /* Check if image is supported */
-    if (bits_per_sample != 8 && bits_per_sample != 16) {
-        fprintf(stderr, "Error: Only 8-bit and 16-bit images are supported\n");
-//        write_log("Error: Only 8-bit and 16-bit images are supported");
-        TIFFClose(in_tiff);
-        return 1;
-    }
-    
-    is_16bit = (bits_per_sample == 16);
-    scanline_size = TIFFScanlineSize(in_tiff);
-    
-    /* Allocate memory for the entire image */
-    data = malloc((size_t)height * scanline_size);
-    if (!data) {
-        fprintf(stderr, "Error: Cannot allocate memory\n");
-//        write_log("Error: Cannot allocate memory");
-        TIFFClose(in_tiff);
-        return 1;
-    }
-    
-    /* Read the entire image */
-//    write_log("Reading image data...");
-    for (row = 0; row < height; row++) {
-        if (TIFFReadScanline(in_tiff, (char*)data + row * scanline_size, row, 0) < 0) {
-            fprintf(stderr, "Error: Cannot read scanline %u\n", row);
-//            write_log("Error: Cannot read scanline %u", row);
-            free(data);
-            TIFFClose(in_tiff);
-            return 1;
-        }
-        
-//        if (row % 100 == 0) {
-//            write_log("Read %u/%u scanlines", row, height);
-//        }
-    }
-
-    /* desc points into the input TIFF's own directory storage, which
-     * TIFFClose() releases; copy it before closing (it is written to the
-     * output file long afterwards). */
-    if (have_desc && desc != NULL) {
-        char* desc_copy = (char*)malloc(strlen(desc) + 1);
-        if (desc_copy != NULL) {
-            strcpy(desc_copy, desc);
-            desc = desc_copy;
-        } else {
-            have_desc = 0;
-        }
-    }
-
-    TIFFClose(in_tiff);
-    
-    /* Apply median filter if kernel size > 0 */
-    if (median_size > 0) {
-        filter_start = clock();
-//        write_log("Applying median filter (kernel size: %d)...", median_size);
-        if (apply_median_filter(data, width, height, median_size, is_16bit, &config) != 0) {
-            free(data);
-            return 1;
-        }
-//        write_log("Median filter completed in %.2f seconds", (double)(clock() - filter_start) / CLOCKS_PER_SEC);
-    } else {
-//        write_log("Skipping median filter (kernel size: 0)");
-    }
-    
-    /* Apply Gaussian filter if sigma > 0 */
-    if (gaussian_sigma > 0.0) {
-        int kernel_size = calculate_kernel_size(gaussian_sigma);
-        filter_start = clock();
-//        write_log("Applying Gaussian filter (sigma: %.3f, kernel size: %d)...", gaussian_sigma, kernel_size);
-        if (apply_gaussian_filter_separable(data, width, height, gaussian_sigma, is_16bit, &config) != 0) {
-            free(data);
-            return 1;
-        }
-//        write_log("Gaussian filter completed in %.2f seconds", (double)(clock() - filter_start) / CLOCKS_PER_SEC);
-    } else {
-//        write_log("Skipping Gaussian filter (sigma: 0.0)");
-    }
-    
-    /* Open output TIFF */
-    out_tiff = TIFFOpen(output_file, "w");
-    if (!out_tiff) {
-        fprintf(stderr, "Error: Cannot create output TIFF file\n");
-//        write_log("Error: Cannot create output TIFF file");
-        free(data);
-        return 1;
-    }
-    
-    /* Set output TIFF properties (same as input) */
-    TIFFSetField(out_tiff, TIFFTAG_IMAGEWIDTH, width);
-    TIFFSetField(out_tiff, TIFFTAG_IMAGELENGTH, height);
-    TIFFSetField(out_tiff, TIFFTAG_BITSPERSAMPLE, bits_per_sample);
-    TIFFSetField(out_tiff, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
-    TIFFSetField(out_tiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
-    TIFFSetField(out_tiff, TIFFTAG_SAMPLESPERPIXEL, 1);
-	TIFFSetField(out_tiff, TIFFTAG_ROWSPERSTRIP, TIFFDefaultStripSize(out_tiff, 0));
-	TIFFSetField(out_tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
-	if (have_desc) TIFFSetField(out_tiff, TIFFTAG_IMAGEDESCRIPTION, desc);
-	TIFFSetField(out_tiff, TIFFTAG_ARTIST, "tif_mgf2_libtiff");
-
-
-    TIFFSetField(out_tiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
-    
-    /* Write the processed image */
-//    write_log("Writing output image...");
-    for (row = 0; row < height; row++) {
-        if (TIFFWriteScanline(out_tiff, (char*)data + row * scanline_size, row, 0) < 0) {
-            fprintf(stderr, "Error: Cannot write scanline %u\n", row);
-//            write_log("Error: Cannot write scanline %u", row);
-            free(data);
-            TIFFClose(out_tiff);
-            return 1;
-        }
-        
-//        if (row % 100 == 0) {
-//            write_log("Wrote %u/%u scanlines", row, height);
-//        }
-    }
-    
-    TIFFClose(out_tiff);
-    free(data);
-    if (have_desc) free(desc);
-
-//    write_log("Output file written successfully");
-    return 0;
-}
-
-/* Apply median filter with high precision */
-static int apply_median_filter(void* data, int width, int height, int kernel_size, 
-                              int is_16bit, FilterConfig* config)
-{
-    void* temp_data;
-    int x, y, i, j;
-    int half_kernel = kernel_size / 2;
-    /* The window actually gathered below is (2*half+1)^2, which is larger
-     * than kernel_size*kernel_size for an even kernel_size (k=2 gathers 9,
-     * k=4 gathers 25).  Size the buffer after the loop, not after k. */
-    int kernel_area = (2 * half_kernel + 1) * (2 * half_kernel + 1);
-    size_t data_size;
-    
-    /* Allocate temporary buffer */
-    data_size = is_16bit ? sizeof(unsigned short) : sizeof(unsigned char);
-    temp_data = malloc((size_t)width * height * data_size);
-    if (!temp_data) {
-        fprintf(stderr, "Error: Cannot allocate memory for median filter\n");
-//        write_log("Error: Cannot allocate memory for median filter");
-        return 1;
-    }
-    
-    /* Apply median filter */
-    #pragma omp parallel for private(x, i, j) schedule(dynamic)
-    for (y = 0; y < height; y++) {
-        unsigned char* window_8bit = NULL;
-        unsigned short* window_16bit = NULL;
-        int window_count;
-        
-        /* Allocate window buffer for this thread */
-        if (is_16bit) {
-            window_16bit = (unsigned short*)malloc(kernel_area * sizeof(unsigned short));
-        } else {
-            window_8bit = (unsigned char*)malloc(kernel_area * sizeof(unsigned char));
-        }
-        
-        for (x = 0; x < width; x++) {
-            window_count = 0;
-            
-            /* Collect values in the window with boundary handling */
-            for (j = -half_kernel; j <= half_kernel; j++) {
-                for (i = -half_kernel; i <= half_kernel; i++) {
-                    int nx = x + i;
-                    int ny = y + j;
-                    
-                    /* Handle boundaries based on edge mode */
-                    if (config->edge_mode == EDGE_MIRROR) {
-                        /* Mirror boundary, clamped: a single reflection can
-                         * still land outside when the window is wider than
-                         * the image (e.g. 3x3 on a 1x1 image). */
-                        if (nx < 0) nx = -nx;
-                        if (nx >= width) nx = 2 * width - nx - 2;
-                        if (nx < 0) nx = 0;
-                        if (nx >= width) nx = width - 1;
-                        if (ny < 0) ny = -ny;
-                        if (ny >= height) ny = 2 * height - ny - 2;
-                        if (ny < 0) ny = 0;
-                        if (ny >= height) ny = height - 1;
-                    } else if (config->edge_mode == EDGE_EXTEND) {
-                        /* Extend boundary */
-                        if (nx < 0) nx = 0;
-                        if (nx >= width) nx = width - 1;
-                        if (ny < 0) ny = 0;
-                        if (ny >= height) ny = height - 1;
-                    } else {
-                        /* Zero boundary */
-                        if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
-                            if (is_16bit) {
-                                window_16bit[window_count++] = 0;
-                            } else {
-                                window_8bit[window_count++] = 0;
-                            }
-                            continue;
-                        }
-                    }
-                    
-                    if (is_16bit) {
-                        window_16bit[window_count++] = ((unsigned short*)data)[ny * width + nx];
-                    } else {
-                        window_8bit[window_count++] = ((unsigned char*)data)[ny * width + nx];
-                    }
-                }
-            }
-            
-            /* Find median */
-            if (is_16bit) {
-                sort_array_16bit(window_16bit, window_count);
-                ((unsigned short*)temp_data)[y * width + x] = window_16bit[window_count / 2];
-            } else {
-                sort_array_8bit(window_8bit, window_count);
-                ((unsigned char*)temp_data)[y * width + x] = window_8bit[window_count / 2];
-            }
-        }
-        
-        /* Free window buffer */
-        if (is_16bit) {
-            free(window_16bit);
-        } else {
-            free(window_8bit);
-        }
-        
-        /* Progress logging */
-//        if (y % 50 == 0) {
-//            #pragma omp critical
-//            {
-//                write_log("Median filter progress: %d/%d rows", y, height);
-//            }
-//        }
-    }
-    
-    /* Copy result back */
-    memcpy(data, temp_data, width * height * data_size);
-    free(temp_data);
-    
-    return 0;
-}
-
-/* Apply Gaussian filter using separable implementation (like ImageJ) */
-static int apply_gaussian_filter_separable(void* data, int width, int height, 
-                                          double sigma, int is_16bit, FilterConfig* config)
-{
-    double* float_data;
-    double* temp_data;
-    double* kernel;
-    int kernel_size;
-    int half_kernel;
-    int x, y, i;
-    double sum;
-    
-    /* Calculate kernel size */
-    kernel_size = calculate_kernel_size(sigma);
-    if (kernel_size <= 0) return 0;
-    
-    half_kernel = kernel_size / 2;
-//    write_log("Gaussian kernel size calculated: %d for sigma %.3f", kernel_size, sigma);
-    
-    /* Convert to floating point for high precision */
-    float_data = convert_to_float(data, width, height, is_16bit);
-    if (!float_data) {
-        fprintf(stderr, "Error: Cannot allocate float buffer\n");
-//        write_log("Error: Cannot allocate float buffer");
-        return 1;
-    }
-    
-    /* Allocate temporary buffer */
-    temp_data = (double*)malloc((size_t)width * height * sizeof(double));
-    if (!temp_data) {
-        fprintf(stderr, "Error: Cannot allocate temp buffer\n");
-//        write_log("Error: Cannot allocate temp buffer");
-        free(float_data);
-        return 1;
-    }
-    
-    /* Create 1D Gaussian kernel */
-    kernel = (double*)malloc(kernel_size * sizeof(double));
-    if (!kernel) {
-        fprintf(stderr, "Error: Cannot allocate kernel\n");
-//        write_log("Error: Cannot allocate kernel");
-        free(float_data);
-        free(temp_data);
-        return 1;
-    }
-    
-    create_gaussian_kernel_1d(kernel, kernel_size, sigma);
-    
-    /* Log kernel values for verification */
-//    write_log("Gaussian kernel center value: %.6f", kernel[half_kernel]);
-//    write_log("Gaussian kernel sum: %.10f", 1.0);  /* Should be 1.0 after normalization */
-    
-    /* Apply horizontal pass */
-//    write_log("Applying horizontal Gaussian pass...");
-    #pragma omp parallel for private(x, i, sum) schedule(dynamic)
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++) {
-            sum = 0.0;
-            
-            for (i = 0; i < kernel_size; i++) {
-                int src_x = x + i - half_kernel;
-                double pixel_value;
-                
-                /* Get pixel value with boundary handling */
-                if (config->edge_mode == EDGE_MIRROR) {
-                    pixel_value = get_pixel_value_mirror(float_data, src_x, y, width, height);
-                } else if (config->edge_mode == EDGE_EXTEND) {
-                    pixel_value = get_pixel_value_extend(float_data, src_x, y, width, height);
-                } else {
-                    pixel_value = get_pixel_value_zero(float_data, src_x, y, width, height);
-                }
-                
-                sum += pixel_value * kernel[i];
-            }
-            
-            temp_data[y * width + x] = sum;
-        }
-        
-//        if (y % 50 == 0) {
-//            #pragma omp critical
-//            {
-//                write_log("Horizontal pass progress: %d/%d rows", y, height);
-//            }
-//        }
-    }
-    
-    /* Apply vertical pass */
-//    write_log("Applying vertical Gaussian pass...");
-    #pragma omp parallel for private(y, i, sum) schedule(dynamic)
-    for (x = 0; x < width; x++) {
-        for (y = 0; y < height; y++) {
-            sum = 0.0;
-            
-            for (i = 0; i < kernel_size; i++) {
-                int src_y = y + i - half_kernel;
-                double pixel_value;
-                
-                /* Get pixel value with boundary handling */
-                if (config->edge_mode == EDGE_MIRROR) {
-                    pixel_value = get_pixel_value_mirror(temp_data, x, src_y, width, height);
-                } else if (config->edge_mode == EDGE_EXTEND) {
-                    pixel_value = get_pixel_value_extend(temp_data, x, src_y, width, height);
-                } else {
-                    pixel_value = get_pixel_value_zero(temp_data, x, src_y, width, height);
-                }
-                
-                sum += pixel_value * kernel[i];
-            }
-            
-            float_data[y * width + x] = sum;
-        }
-        
-//        if (x % 50 == 0) {
-//            #pragma omp critical
-//            {
-//                write_log("Vertical pass progress: %d/%d columns", x, width);
-//            }
-//        }
-    }
-    
-    /* Convert back to original data type */
-    convert_from_float(float_data, data, width, height, is_16bit);
-    
-    /* Clean up */
-    free(kernel);
-    free(temp_data);
-    free(float_data);
-    
-    return 0;
-}
-
-/* Sort array for 8-bit data (using optimized quicksort for larger arrays) */
-static void sort_array_8bit(unsigned char* arr, int size)
-{
-    int i, j;
-    unsigned char temp;
-    
-    /* Use insertion sort for small arrays (efficient for small kernel sizes) */
-    if (size <= 20) {
-        for (i = 1; i < size; i++) {
-            temp = arr[i];
-            j = i - 1;
-            while (j >= 0 && arr[j] > temp) {
-                arr[j + 1] = arr[j];
-                j--;
-            }
-            arr[j + 1] = temp;
-        }
-    } else {
-        /* For larger arrays, use quicksort (not shown for brevity) */
-        /* In practice, qsort from stdlib.h could be used */
-        for (i = 0; i < size - 1; i++) {
-            for (j = 0; j < size - i - 1; j++) {
-                if (arr[j] > arr[j + 1]) {
-                    temp = arr[j];
-                    arr[j] = arr[j + 1];
-                    arr[j + 1] = temp;
-                }
-            }
-        }
-    }
-}
-
-/* Sort array for 16-bit data (using optimized quicksort for larger arrays) */
-static void sort_array_16bit(unsigned short* arr, int size)
-{
-    int i, j;
-    unsigned short temp;
-    
-    /* Use insertion sort for small arrays (efficient for small kernel sizes) */
-    if (size <= 20) {
-        for (i = 1; i < size; i++) {
-            temp = arr[i];
-            j = i - 1;
-            while (j >= 0 && arr[j] > temp) {
-                arr[j + 1] = arr[j];
-                j--;
-            }
-            arr[j + 1] = temp;
-        }
-    } else {
-        /* For larger arrays, use quicksort (not shown for brevity) */
-        /* In practice, qsort from stdlib.h could be used */
-        for (i = 0; i < size - 1; i++) {
-            for (j = 0; j < size - i - 1; j++) {
-                if (arr[j] > arr[j + 1]) {
-                    temp = arr[j];
-                    arr[j] = arr[j + 1];
-                    arr[j + 1] = temp;
-                }
-            }
-        }
-    }
 }
