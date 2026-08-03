@@ -126,7 +126,7 @@ sf_rec_t_c:
 # ---------------------------------------------------------------
 # Miscellaneous tools
 # ---------------------------------------------------------------
-misc: tif_f2i rec_crop sinog of_sinog pid stop_watch img_ave \
+misc: tif_f2i rec_crop rec_sir sinog of_sinog pid stop_watch img_ave \
       spl his_spl_K his_spl_E his_spl_tif rec_stk chk-rc set-rc \
       his2img ct_prj_f ct_sub_f ict_prj_fc ct_prj_fc \
       tif2hst rec_gf hp2DO tif_ave tif_mgf his_ave \
@@ -134,6 +134,8 @@ misc: tif_f2i rec_crop sinog of_sinog pid stop_watch img_ave \
 
 tif_f2i:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/tif_f2i tif_f2i.c rif_f.c $(TIFFLIB) $(LIBS)
+rec_sir:
+	$(CC) $(CFLAGS) -o $(EXE_DIR)/rec_sir rec_sir.c $(TIFFLIB) $(LIBS)
 rec_crop:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/rec_crop rec_crop.c rif_f.c $(TIFFLIB) $(LIBS)
 sinog:
@@ -251,7 +253,7 @@ clean:
 	$(EXE_DIR)/ofct_DO $(EXE_DIR)/otf_xy \
 	$(EXE_DIR)/p_rec_t_r $(EXE_DIR)/p_rec_t_s $(EXE_DIR)/p_rec_t_c \
 	$(EXE_DIR)/sf_rec_t_r $(EXE_DIR)/sf_rec_t_s $(EXE_DIR)/sf_rec_t_c \
-	$(EXE_DIR)/tif_f2i $(EXE_DIR)/rec_crop $(EXE_DIR)/sinog $(EXE_DIR)/of_sinog \
+	$(EXE_DIR)/tif_f2i $(EXE_DIR)/rec_crop $(EXE_DIR)/rec_sir $(EXE_DIR)/sinog $(EXE_DIR)/of_sinog \
 	$(EXE_DIR)/pid $(EXE_DIR)/stop_watch $(EXE_DIR)/img_ave \
 	$(EXE_DIR)/spl $(EXE_DIR)/his_spl_K $(EXE_DIR)/his_spl_E $(EXE_DIR)/his_spl_tif \
 	$(EXE_DIR)/rec_stk $(EXE_DIR)/chk-rc $(EXE_DIR)/set-rc $(EXE_DIR)/his2img \

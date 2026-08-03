@@ -78,6 +78,9 @@ rem normalize
 rem rec crop
 %CC2% /Ferec_crop.exe rec_crop.c rif_f.c %TIFFLIB%
 
+rem rec_sir (3D binning of 32bit float rec images)
+%CC2% /openmp /Ferec_sir.exe rec_sir.c %TIFFLIB%
+
 rem sinogram
 %CC2% /Fesinog.exe sinog.c %SIF_F%
 %CC2% /Feof_sinog.exe of_sinog.c %SIF_F%
