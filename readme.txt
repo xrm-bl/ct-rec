@@ -57,7 +57,8 @@
 
 1. 共通の考え
    a. 入力
-      基本的にimg形式。1枚再構成(ct_rec)・連続再構成(hp_tg)・オフセットCT(ofct_srec/ofct_DO)は、dark.img があれば img、無く dark.tif があれば tiff を自動判別して読み込む。
+      基本的にimg形式。1枚再構成(ct_rec)・連続再構成(hp_tg)・オフセットCT(ofct_srec/ofct_DO)は、
+      dark.img があれば img、無く dark.tif があれば tiff を自動判別して読み込む。
 
    b. 出力
       CT像は 32bit tiff での出力となる。rec?????.tif (数値は5ケタ)
@@ -108,6 +109,10 @@
       (カッピング)を作る。これを抑えるため、フィルタをかける前に投影の両端を
       端の値のままコサインで減衰させながら幅 N/2 だけ外挿する機能を、全再構成
       ソフト共通の CBP 層に設けた。逆投影の計算量は変わらない(FFT長のみ2倍)。
+      視野外にはみ出した試料による打ち切りアーティファクトを投影データの外挿で
+      抑える手法は Ohnesorge et al.(2000) 型のものである
+      (Med. Phys. 27(1), 39-46)。本実装は端値ホールド + コサイン減衰による
+      簡易版で、論文の手法をそのまま再現したものではない。
       適用するかどうかは自動判定で、シノグラム両端列の平均振幅が全体平均の
       一定比率を超えたときだけ有効になる。この比率を環境変数 PAD_THRESH で
       指定し、未設定の場合は 0.3(自動判定ON)とする。有効になったときは
@@ -329,12 +334,34 @@
       例: si_rar.exe ro_xy - +y +z +x ro_yz
       例: si_rar.exe ro_xy - +z +x +y ro_zx
 
-   k. 8bit or 16bit CT像のビニング
+   k. CT像のビニング
+      8bit or 16bit の場合:
       si_sir orgDir nameFile Bxyz newDir
       si_sir orgDir nameFile Bx By Bz newDir
 
       例: si_sir ro_xy - 2 ro_2x2x2
       例: si_sir ro_xy - 2 2 1 ro_2x2x1
+
+      32bit tiff (rec?????.tif) の場合:
+      rec_sir in out B
+
+      in: 32bit tiff 再構成画像があるディレクトリ
+      out: ビニング後の画像を出力するディレクトリ(実行前に作成すること)
+      B: ビニング数。x, y と z(スライス方向)すべてに同じ値を適用する。
+
+      B×B×B ボクセルの平均を 32bit float のまま出力する(整数への丸めはしない)。
+      出力の枚数と縦横は 1/B になる。ファイル名は先頭が入力の先頭番号と一致し、
+      以降 1 ずつ増える。例えば rec00003 から rec00011 を B=3 で処理すると
+      rec00003, rec00004, rec00005 の 3 枚になる。
+      ビニング数で割り切れない端の列・行・スライスは切り捨てる(si_sir は端も
+      残して実画素数で平均するので、この点だけ挙動が異なる)。
+      tiff タグは新しい格子に合わせて更新する。画素サイズは B 倍、回転軸の
+      位置は (RC-(B-1)/2)/B、投影数と回転角オフセットはそのまま、最小最大値は
+      結果から再計算する。
+      出力の番号が入力の番号と重なるため、入力と同じディレクトリを出力に
+      指定した場合はエラーで停止する。
+
+      例: rec_sir rec rec_b2 2
 
    l. 8bit or 16bit CT像にgaussian filter
       si_gf orgDir nameFile radius {bias} newDir

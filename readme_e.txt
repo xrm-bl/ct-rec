@@ -133,6 +133,11 @@ Uesugi
       reconstruction program extends each projection on both sides by N/2
       samples before filtering, holding the edge value under a cosine decay.
       The cost of back-projection is unchanged (only the FFT length doubles).
+      Suppressing the truncation artifact of an object that extends beyond
+      the field of view by extrapolating the projection data follows
+      Ohnesorge et al. (2000), Med. Phys. 27(1), 39-46. The implementation
+      here is a simplified variant (edge-value hold with a cosine decay), not
+      a reproduction of the method described in that paper.
       Whether the pad is applied is decided automatically: it is enabled only
       when the mean amplitude of the sinogram's outermost columns exceeds a
       given ratio of the overall mean. That ratio is the environment variable
@@ -376,12 +381,39 @@ Uesugi
       Example: si_rar.exe ro_xy - +y +z +x ro_yz
       Example: si_rar.exe ro_xy - +z +x +y ro_zx
 
-   k. Binning of 8-bit or 16-bit CT Images
+   k. Binning of CT Images
+      For 8-bit or 16-bit images:
       si_sir orgDir nameFile Bxyz newDir
       si_sir orgDir nameFile Bx By Bz newDir
 
       Example: si_sir ro_xy - 2 ro_2x2x2
       Example: si_sir ro_xy - 2 2 1 ro_2x2x1
+
+      For 32-bit TIFF (rec?????.tif):
+      rec_sir in out B
+
+      in: Directory containing 32-bit TIFF reconstructed images
+      out: Output directory for the binned images (must be created before
+           execution)
+      B: Binning factor, applied to x, y and z (the slice direction) alike
+
+      Each B x B x B block of voxels is replaced by its average and written
+      as 32-bit float (no rounding to an integer). The number of slices and
+      both in-plane dimensions become 1/B.
+      The first output file takes the number of the first input file and the
+      rest follow one by one: rec00003 through rec00011 with B=3 gives
+      rec00003, rec00004 and rec00005.
+      Columns, rows and slices that do not fill a block are dropped; this is
+      the only behavioural difference from si_sir, which keeps them and
+      divides by the number of voxels actually present.
+      The TIFF tags are updated for the new grid: the pixel size becomes B
+      times larger, the rotation axis position becomes (RC-(B-1)/2)/B, the
+      number of projections and the rotation angle offset are carried over,
+      and the min/max values are recomputed from the result.
+      Because the output numbers overlap the input numbers, giving the same
+      directory for both input and output stops with an error.
+
+      Example: rec_sir rec rec_b2 2
 
    l. Gaussian Filter for 8-bit or 16-bit CT Images
       si_gf orgDir nameFile radius {bias} newDir
