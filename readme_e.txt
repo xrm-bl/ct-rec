@@ -116,14 +116,37 @@ Uesugi
       with a default of OMP_NUM_THREADS=40. This is independent of
       CBP_THREADS (for back-projection computation) described in section 1c.
 
-   e. Missing Angle Handling
+   e. Insufficient Transmittance and Missing Angle Handling
+      When the sample is thick or dense, the transmitted signal can reach or
+      fall below the dark level. I-dark then becomes zero or negative and
+      log(I0/(I-dark)) returns +Inf or NaN, which used to abort the GPU ring
+      removal with
+
+        CUDA error sort_filter_g.cu:266: an illegal memory access ...
+        ring removal image processing failed
+
+      and, on the CPU build, silently corrupted the sort for those columns.
+
+      CT_REC_BLACK_THRESH is a PER-PIXEL floor on the signal, in counts above
+      dark (default 2). A pixel at or below it is treated as opaque and the
+      floor is used in its place, so the absorbance is capped at
+      log(I0/CT_REC_BLACK_THRESH) and can never become infinite. Only the
+      affected pixels are touched; everything above the floor is unchanged.
+      Values of 0 or below are rejected (the guard cannot be switched off).
+      The value in effect is echoed to stderr at start-up, and the number of
+      clipped pixels, the minimum signal and the maximum absorbance are
+      reported at the end.
+
       For plate-like samples, transmittance can drop drastically at certain
-      angles. In extreme cases, some processing is necessary. The "degree"
-      of this processing can be controlled.
-      Specify using the environment variable CT_REC_BLACK_THRESH (default
-      is 1 if not set).
-      When missing angles are present, change this value to 1, 10, 100,
-      1000, etc. and run ct_rec to adjust the reconstruction behavior.
+      angles (the missing-angle case). A projection whose clipped fraction
+      exceeds CT_REC_BLACK_FRAC (default 0.5) is judged black and replaced by
+      the mean of the good projections. Change CT_REC_BLACK_THRESH to 1, 10,
+      100, 1000, etc. as before to adjust how readily that happens: for a
+      uniformly attenuated line the trigger point is the same as it was.
+
+      Note that the threshold now also caps the absorbance of projections that
+      are kept, so a large value visibly flattens a dense sample. Prefer the
+      default unless you are handling a plate.
 
    f. Truncation (Cupping) Correction
       When the sample overfills the field of view (truncated data), the step

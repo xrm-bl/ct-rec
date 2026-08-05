@@ -13,6 +13,7 @@
 #include <math.h>
 #include "tiffio.h"
 #include "tifwrite.h"
+#include "blacklim.h"
 #ifdef USE_GPU
   #include "sort_filter_g.h"
   #define SORT_FILTER_RESTORE sort_filter_restore_gpu
@@ -308,17 +309,13 @@ long		ln;
 
 	double		*po;
 	double		p_sum, p_ave, ddv, dva, dvb;
-	double		black_thresh;
-	double		id_sum;
-	char		*env_bt;
+	double		black_thresh, black_frac;
+	int			nclip, nclip_max;
 	FILE		*fi;
 
-	env_bt = getenv("CT_REC_BLACK_THRESH");
-	if (env_bt != NULL){
-		black_thresh = atof(env_bt);
-	} else {
-		black_thresh = 1.0;
-	}
+	black_thresh = BlackThresh();
+	black_frac   = BlackFrac();
+	nclip_max    = (int)(black_frac * (double)N);
 
 // initialize po and pp 
 	po = (double *)malloc(N*NST*sizeof(double));
@@ -379,21 +376,23 @@ long		ln;
 			for (jx = 0; jx < N; ++jx){
 				I0[jx]    = a[jx] * shottime[k] + b[jx];
 			}
-			/* black check: average of (I[jx]-dark[jx]) over all pixels */
-			id_sum = 0.0;
+			/* Per-pixel floor: a pixel whose signal is at or below
+			   black_thresh is treated as opaque, so no +Inf/NaN can
+			   enter the sinogram.  nclip counts how many needed it. */
+			nclip = 0;
 			for (jx = 0; jx < N; ++jx){
-				id_sum += (double)(I[jx] - dark[jx]);
+				*(po+nshot*N+jx)= BlackLog((double)(I0[jx]),
+					(double)(I[jx]-dark[jx]), black_thresh, &nclip);
 			}
-			if (id_sum / (double)N < black_thresh){
+			/* black (missing-angle) projection: most of the line is
+			   below the floor, so there is nothing to reconstruct from */
+			if (nclip > nclip_max){
 				printf("Warning \t");
-				printf("  %d\t black \t avg=%.2f (thresh=%.2f)\n",
-					k, id_sum/(double)N, black_thresh);
+				printf("  %d\t black \t clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
+					k, nclip, (int)N, 100.0*(double)nclip/(double)N,
+					black_thresh);
 				ilp=1;
-			}
-			for (jx = 0; jx < N; ++jx){
-				*(po+nshot*N+jx)= log((double)(I0[jx])/(double)(I[jx]-dark[jx]));
-			}
-			if(ilp==1){
+				BlackCountProjection();
 				for(jx=0;jx<N;++jx){
 					*(po+nshot*N+jx)=0.0;
 				}
@@ -485,6 +484,9 @@ long		ln;
 	free(po);
 //	free(pp);
 //	fclose(fi);
+
+	BlackReport();
+
 	return (0);
 }
 

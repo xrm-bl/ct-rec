@@ -9,6 +9,7 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include "blacklim.h"
 #include "sif_f.h"
 
 
@@ -245,8 +246,13 @@ long		ln;
 
 	double		*po, *poa;
 	double		p_sum,p_ave;
+	double		black_thresh, black_frac;
+	int			nclip, nclip_max;
 	FILE		*fi;
 
+	black_thresh = BlackThresh();
+	black_frac   = BlackFrac();
+	nclip_max    = (int)(black_frac * (double)N);
 
 // p initialization
 	po = (double *)malloc(N*NST*sizeof(double));
@@ -292,22 +298,24 @@ long		ln;
 				return(-1);
 			}
 			*(ilp+nshot)=0;
+			/* Per-pixel floor (CT_REC_BLACK_THRESH).  This used to be a
+			   hardwired "any pixel below 50 counts discards the whole
+			   projection", which throws away every projection of a dense
+			   sample and still let log(x/0) through.  Now the pixel is
+			   clamped and only a mostly-clipped line is discarded. */
+			nclip = 0;
 			for (jx = 0; jx < N; ++jx){
 				I0[jx]    = a[jx] * shottime[k] + b[jx];
-				if ((I[jx]-dark[jx]) < 50){
-					if(*(ilp+nshot)==0){
-						printf("Warning \t");
-//						printf("  jx = %d, I0 = %f, I = %d, dark = %d, ln =%d \n", jx, I0[jx], I[jx], dark[jx], ln);
-//						printf("  II01 = %d, II02 = %d\n", II01[jx], II02[jx]);
-//						printf("  t1   = %f, t2   = %f \n", t1, t2);
-//						printf("  a = %f,  b = %f\n", a[jx], b[jx]);
-						printf("  %d\t black\n", k);
-						*(ilp+nshot)=1;
-					}
-				}
-				*(po+N*nshot+jx)= log((double)(I0[jx])/(double)(I[jx]-dark[jx]));
+				*(po+N*nshot+jx)= BlackLog((double)(I0[jx]),
+					(double)(I[jx]-dark[jx]), black_thresh, &nclip);
 			}
-			if(*(ilp+nshot)==1){
+			if (nclip > nclip_max){
+				printf("Warning \t");
+				printf("  %d\t black \t clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
+					k, nclip, (int)N, 100.0*(double)nclip/(double)N,
+					black_thresh);
+				*(ilp+nshot)=1;
+				BlackCountProjection();
 				for(jx=0;jx<N;++jx){
 					*(po+N*nshot+jx)=0.0;
 				}
@@ -317,8 +325,12 @@ long		ln;
 // roupe for correction
 				p_sum = 0.0;
 				p_ave = 0.0;
+				/* air reference: outermost 10 px at each end of the line.
+				   N-jx would reach po[N*nshot+N], the first pixel of the
+				   next (still unwritten) projection - and one element
+				   past the buffer for the last one. */
 				for (jx=0; jx<10; ++jx){
-					p_sum = p_sum + *(po+N*nshot+jx) + *(po+N*nshot+N-jx);
+					p_sum = p_sum + *(po+N*nshot+jx) + *(po+N*nshot+N-1-jx);
 				}
 				p_ave = p_sum / (10.-0.) / 2.;
 				TA=0.0;
@@ -381,6 +393,8 @@ long		ln;
 	}
 //		(void)printf("\n%d\n",ln);
 
+	BlackReport();
+
 	snprintf(fn, sizeof(fn),"s%05ld.tif", ln);
 	StoreImageFile_Float(fn,N,NST,fom,SIF_F_desc);
 
@@ -434,8 +448,10 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 		p000=(double *)malloc(N*sizeof(double));
 		p180=(double *)malloc(N*sizeof(double));
 		for(j=0;j<N;++j){
-			*(p000+j)=log((double)(cent_2[j]-dark[j]) / (double)(cent_1[j]-dark[j]));
-			*(p180+j)=log((double)(cent_4[j]-dark[j]) / (double)(cent_3[j]-dark[j]));
+			*(p000+j)=-BlackLog((double)(cent_1[j]-dark[j]),
+				    (double)(cent_2[j]-dark[j]), BlackThresh(), NULL);
+			*(p180+j)=-BlackLog((double)(cent_3[j]-dark[j]),
+				    (double)(cent_4[j]-dark[j]), BlackThresh(), NULL);
 		}
 		
 		N1=N-1;

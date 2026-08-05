@@ -9,6 +9,7 @@
 #endif
 #include "tiffio.h"  // TIFFライブラリをインクルード
 #include "rtf.h"
+#include "blacklim.h"
 
 #define EPS 1e-9  /* for time interval */
 
@@ -140,6 +141,10 @@ void InitReadHiPic(char *dir, HiPic *hp)
                   ((env = getenv("RHP_Q")) != NULL && *env != '\0' &&
                    (*env | 32) >= 'a' && (*env | 32) <= 'z') ? *env | 32 : 'q');
     
+	/* read, validate and echo the thresholds once, up front */
+	(void)BlackThresh();
+	(void)BlackFrac();
+
     hp->Nq = 0;
     
     if ((Dir = opendir(dir)) == NULL) Error("", dir, "directory not open.");
@@ -276,15 +281,15 @@ void ReadHiPic(HiPic *hp, int t)
     int i, y, x;
     WORD *D, *I1, *I2, *T;
     double r1, r2, I_D, T_D;
-    double td_sum, black_thresh;
-    char *env_bt;
+    double black_thresh, black_frac;
+    int nclip;
     
     if (t < 0 || t >= hp->Nt) {
         (void)sprintf(str, "%d", t); Error("", str, "bad sequence number.");
     }
 
-    env_bt = getenv("CT_REC_BLACK_THRESH");
-    black_thresh = (env_bt != NULL) ? atof(env_bt) : 1.0;
+    black_thresh = BlackThresh();
+    black_frac   = BlackFrac();
 
     ol = hp->OL + t;
     ReadTiff(hp->dir, hp->q_img[ol->q], hp->Nx, hp->Ny, (WORD *)*(hp->T));
@@ -298,21 +303,30 @@ void ReadHiPic(HiPic *hp, int t)
     T = (WORD *)*(hp->T) + (size_t)hp->Ny * hp->Nx;
     r1 = 1.0 - (r2 = (ol->c - OL[i].c) / (OL[i + 1].c - OL[i].c));
     
-    td_sum = 0.0;
+    nclip = 0;
     for (y = hp->Ny - 1; y >= 0; y--)
     for (x = hp->Nx - 1; x >= 0; x--) {
         --D; --I1; --I2; --T;
         T_D = (double)*T - (double)*D;
         I_D = r1 * (double)*I1 + r2 * (double)*I2 - (double)*D;
-        hp->T[y][x] = (I_D > 0.0 && T_D > 0.0) ? T_D / I_D : ERROR_VALUE;
-        td_sum += T_D;
+        /* per-pixel floor (CT_REC_BLACK_THRESH): an opaque pixel must
+           read as strongly absorbing.  ERROR_VALUE is 0, which the
+           consumers turn into absorbance 0 = fully transmitting. */
+        if (!(T_D >= black_thresh)) { T_D = black_thresh; ++nclip; }
+        /* !(x >= t): also catches NaN from the I0 interpolation */
+        if (!(I_D >= black_thresh)) I_D = black_thresh;
+        hp->T[y][x] = T_D / I_D;
     }
 
-    /* black check: average of (T-dark) over all pixels (matches rhp.c) */
-    if (td_sum / (double)(hp->Nx * hp->Ny) < black_thresh){
+    /* black frame: most of it sits below the floor, so there is nothing to
+       reconstruct from (matches rhp.c).  The old test used the frame average,
+       which has a hard floor of (1-coverage)*signal and never reaches the
+       threshold while open-beam margins remain in the field of view. */
+    if ((double)nclip > black_frac*(double)hp->Nx*(double)hp->Ny){
         (void)fprintf(stderr,
-            "Warning\t black\t t=%d avg=%.2f (thresh=%.2f)\n",
-            t, td_sum/(double)(hp->Nx*hp->Ny), black_thresh);
+            "Warning\t black\t t=%d clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
+            t, nclip, hp->Nx*hp->Ny,
+            100.0*(double)nclip/((double)hp->Nx*(double)hp->Ny), black_thresh);
         for (y = 0; y < hp->Ny; y++)
         for (x = 0; x < hp->Nx; x++)
             hp->T[y][x] = ERROR_VALUE;

@@ -9,6 +9,7 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include "blacklim.h"
 //#include "sif_f.h"
 #include "tiffio.h"
 #include "tifwrite.h"
@@ -234,6 +235,7 @@ int read_log(char *dirin)
 int StoreProjection(char *dirin, char *dirout)
 {
 	int			i, j, k, jx, jy, nshot, *ilp, iplc, x, y;
+	int			nclip;
 	double		t1, t2;
 	Header		h;
 	char		path[2048];
@@ -299,14 +301,15 @@ int StoreProjection(char *dirin, char *dirout)
 			
 //			printf("%d\n",k);
 			*(ilp+nshot)=0;
+			nclip = 0;
 			for(jx=0;jx<Nx*Ny;++jx){
 				*(I0+jx)=*(I0sum+jx)/(double)(II0[j+1] - (II0[j] + 1));
-				if ((*(I+jx)) > 1){
-					*(po+jx)=log((double)*(I0+jx)/(double)(*(I+jx)));
-				}else{
-					*(ilp+nshot)=1;
-				}
+				/* per-pixel floor (CT_REC_BLACK_THRESH); the old else
+				   branch left po[jx] holding the previous projection */
+				*(po+jx)=BlackLog((double)*(I0+jx),
+					(double)(*(I+jx)), BlackThresh(), &nclip);
 			}
+			if (nclip > 0) *(ilp+nshot)=1;
 
 // roupe for correction
 			if(*(ilp+nshot)==0){

@@ -13,6 +13,7 @@
 #include "sif_f.h"
 #include <stdint.h>
 #include "tiffio.h"
+#include "blacklim.h"
 
 /*----------------------------------------------------------------------*/
 /* Ring removal backend selection (compile time).                        */
@@ -313,17 +314,13 @@ long		ln;
 
 	double		*poa;
 	double		p_sum,p_ave;
-	double		black_thresh;
-	double		id_sum;
-	char		*env_bt;
+	double		black_thresh, black_frac;
+	int			nclip, nclip_max;
 	FILE		*fi;
 
-	env_bt = getenv("CT_REC_BLACK_THRESH");
-	if (env_bt != NULL){
-		black_thresh = atof(env_bt);
-	} else {
-		black_thresh = 1.0;
-	}
+	black_thresh = BlackThresh();
+	black_frac   = BlackFrac();
+	nclip_max    = (int)(black_frac * (double)N);
 
 	TA1 =0.0;
 	TA2 =0.0;
@@ -370,21 +367,23 @@ long		ln;
 			for (jx = 0; jx < N; ++jx){
 				I0[jx]    = a[jx] * shottime[k] + b[jx];
 			}
-			/* black check: average of (I[jx]-dark[jx]) over all pixels */
-			id_sum = 0.0;
+			/* Per-pixel floor: a pixel whose signal is at or below
+			   black_thresh is treated as opaque, so no +Inf/NaN can
+			   enter the sinogram.  nclip counts how many needed it. */
+			nclip = 0;
 			for (jx = 0; jx < N; ++jx){
-				id_sum += (double)(I[jx] - dark[jx]);
+				*(po+N*nshot+jx)= BlackLog((double)(I0[jx]),
+					(double)(I[jx]-dark[jx]), black_thresh, &nclip);
 			}
-			if (id_sum / (double)N < black_thresh){
+			/* black (missing-angle) projection: most of the line is
+			   below the floor, so there is nothing to reconstruct from */
+			if (nclip > nclip_max){
 				printf("Warning \t");
-				printf("  %d\t black \t avg=%.2f (thresh=%.2f)\n",
-					k, id_sum/(double)N, black_thresh);
+				printf("  %d\t black \t clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
+					k, nclip, (int)N, 100.0*(double)nclip/(double)N,
+					black_thresh);
 				*(ilp+nshot)=1;
-			}
-			for (jx = 0; jx < N; ++jx){
-				*(po+N*nshot+jx)= log((double)(I0[jx])/(double)(I[jx]-dark[jx]));
-			}
-			if(*(ilp+nshot)==1){
+				BlackCountProjection();
 				for(jx=0;jx<N;++jx){
 					*(po+N*nshot+jx)=0.0;
 				}
@@ -394,8 +393,12 @@ long		ln;
 			if(*(ilp+nshot)==0){
 				p_sum = 0.0;
 				p_ave = 0.0;
+				/* air reference: outermost 10 px at each end of the line.
+				   N-jx would reach po[N*nshot+N], the first pixel of the
+				   next (still unwritten) projection - and one element
+				   past the buffer for the last one. */
 				for (jx=0; jx<10; ++jx){
-					p_sum = p_sum + *(po+N*nshot+jx) + *(po+N*nshot+N-jx);
+					p_sum = p_sum + *(po+N*nshot+jx) + *(po+N*nshot+N-1-jx);
 				}
 				p_ave = p_sum / (10.-0.) / 2.;
 				TA=0.0;
@@ -415,6 +418,13 @@ long		ln;
 
 
 // correcion for black projection
+	if (iplc == 0){
+		fprintf(stderr,
+			"every projection was judged black: no good projection is left "
+			"to build the replacement from.\n"
+			"Lower CT_REC_BLACK_THRESH or raise CT_REC_BLACK_FRAC.\n");
+		return (1);
+	}
 	for(k=0;k<M;++k){
 		if(*(ilp+k)==1){
 //			printf("%d\t%d\n",k,*(ilp+k) );
@@ -424,6 +434,7 @@ long		ln;
 		}
 	}
 
+	BlackReport();
 
 	return (0);
 }
@@ -435,6 +446,7 @@ int		i;
 long	j, dx, dx0, N1;
 double	mm1, mx1, mm2, mx2;
 double	*p000, *p180, rsum, rd, rmsd0, rmsd;
+double	bt;
 float	center;
 Header	h;
 
@@ -472,9 +484,17 @@ unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
 // calculate center with RMSD
 		p000=(double *)malloc(N*sizeof(double));
 		p180=(double *)malloc(N*sizeof(double));
+		/* Same per-pixel floor as the sinogram: a NaN here would make the
+		   RMSD NaN and the centre search meaningless.  cent_1/cent_3 are
+		   the I0 frames and cent_2/cent_4 the transmitted ones, so the
+		   floor has to protect the transmitted signal - hence
+		   log(T/I0) is evaluated as -log(I0/T). */
+		bt = BlackThresh();
 		for(j=0;j<N;++j){
-			*(p000+j)=log((double)(cent_2[j]-dark[j]) / (double)(cent_1[j]-dark[j]));
-			*(p180+j)=log((double)(cent_4[j]-dark[j]) / (double)(cent_3[j]-dark[j]));
+			*(p000+j)=-BlackLog((double)(cent_1[j]-dark[j]),
+					    (double)(cent_2[j]-dark[j]), bt, NULL);
+			*(p180+j)=-BlackLog((double)(cent_3[j]-dark[j]),
+					    (double)(cent_4[j]-dark[j]), bt, NULL);
 		}
 		
 		N1=N-1;

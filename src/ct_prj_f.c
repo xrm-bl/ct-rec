@@ -9,6 +9,7 @@
 #include <math.h>
 #include <string.h>
 #include <time.h>
+#include "blacklim.h"
 //#include "sif_f.h"
 #include "tiffio.h"
 #include "tifwrite.h"
@@ -235,6 +236,7 @@ int read_log(char *dirin)
 int StoreProjection(char *dirin, char *dirout)
 {
 	int			i, j, k, jx, jy, nshot, *ilp, iplc, x, y;
+	int			nclip;
 	double		t1, t2;
 	double		*a, *b;
 	double		DI1, DI2, DI3, DI4, DI5; 
@@ -354,9 +356,12 @@ int StoreProjection(char *dirin, char *dirout)
 			
 //			printf("%d\n",k);
 			*(ilp+nshot)=0;
+			nclip = 0;
 			for(jx=0;jx<Nx*Ny;++jx){
 				*(I0+jx)=(*(a+jx) * shottime[k] + *(b+jx));
-				if ((*(I+jx)-*(dark+jx)) > 10){
+				/* per-pixel floor (CT_REC_BLACK_THRESH): an opaque
+				   pixel now reads log(I0/floor) instead of 0, which
+				   claimed full transmission */
 //					if(*(ilp+nshot)==0){
 //						printf("Warning \t");
 //						printf("  jx = %d, I0 = %f, I = %d, dark = %d, ln =%d \n", jx, I0[jx], I[jx], dark[jx], ln);
@@ -366,10 +371,8 @@ int StoreProjection(char *dirin, char *dirout)
 //						printf("  %d\t black\n", k);
 //						*(ilp+nshot)=1;
 //					}
-					*(po+jx)=log((double)*(I0+jx)/(double)(*(I+jx)-*(dark+jx)));
-				}else{
-					*(po+jx)=0.0;
-				}
+				*(po+jx)=BlackLog((double)*(I0+jx),
+					(double)(*(I+jx)-*(dark+jx)), BlackThresh(), &nclip);
 			}
 
 //			if(*(ilp+nshot)==1){

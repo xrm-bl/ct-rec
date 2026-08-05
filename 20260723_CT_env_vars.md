@@ -27,7 +27,8 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-07-27 版**（
 
 | 変数 | 用途 | 既定 | 使用ファイル (src/) | 備考 |
 |---|---|---|---|---|
-| `CT_REC_BLACK_THRESH` | 黒(ダーク)投影判定しきい値。平均信号 (T−dark) がこれ未満の投影を黒とみなし補正 | 1.0 | ct_rec.c ct_rec_c.c ofct_rec.c otf_rec.c tf_rec.c rhp.c rhp_c.c rtf.c | rhp_c.c は ReadHiPic / ReadHiPicBand の両方で参照(共通リーダ経由で hp_tg / ofct_srec / ofct_DO にも効く) |
+| `CT_REC_BLACK_THRESH` | **画素ごと**の信号下限 [dark を超えたカウント数]。これ以下の画素は不透明とみなし、この値で床止めして対数変換する | **2.0** | blacklim.h ct_rec.c ct_rec_c.c ofct_rec.c otf_rec.c tf_rec.c sinog.c of_sinog.c ct_prj_f.c ct_prj_f_c.c ict_prj_fc.c rhp.c rhp_c.c rtf.c | **2026-08 に意味を変更**(旧: ラインの平均信号がこれ未満の投影を黒とみなす)。単位は従来と同じなので readme の 1/10/100/1000 のはしごはそのまま使える。床止めにより `log(I0/(I−dark))` が +Inf / NaN になり得なくなる(→GPUリング除去のクラッシュ根絶)。投影値の頭打ちは `log(I0/しきい値)`。**0以下は不正値として拒否**し既定に戻す(無効化はできない)。有効値は起動時に stderr へエコー。rhp_c.c は ReadHiPic / ReadHiPicBand の両方で参照(共通リーダ経由で hp_tg / ofct_srec / ofct_DO にも効く) |
+| `CT_REC_BLACK_FRAC` | 黒(missing angle)投影の判定。`CT_REC_BLACK_THRESH` で床止めされた画素の割合がこれを超えた投影を黒とみなし、良い投影の平均で置き換える | 0.5 | 同上 | **2026-08 新設**。旧来の「平均信号 < しきい値」を置き換える。一様に減衰したライン(板状試料の edge-on)では両判定が同じ透過率で発火するため板状試料の挙動は不変。視野に素抜けの余白が残る場合、平均には (1−被覆率)×信号 のハードフロアがあり旧判定は原理的に発火できなかった。有効域 0 < v ≤ 1、範囲外は既定維持 |
 | `OFCT_DO_SMOOTH` | ofct_DO(_g) の SSD 計算前ガウシアン平滑化 σ | 1.0（**既定で有効**） | ofct_DO.c ofct_DO.cu | **0 で無効化**。分離型2次元等方ガウシアン(水平→垂直2パス) |
 | `PAD_THRESH` | **全再構成ソフト共通**(CBP層)の打ち切り(カッピング)補正しきい値(**比率**) | **0.3(既定ON・自動判定)** ※未設定時。既定値は `cbp.h` の `PAD_THRESH_DEFAULT` | cbp_thread.c cbp_thread_int.c cbp_thread_nai.c cbp_thread_avx.c cbp.cu | シノグラム端列の平均振幅が全体平均の この比率を超えたら(=試料が視野をはみ出していたら)フィルタ入力を端値ホールド+コサイン減衰で幅0.5N外挿(逆投影コスト不変、FFT長のみ2倍)。視野内試料は端≈0で自動的に無適用。ct_rec/hp_tg/ofct_rec/ofct_srec/p_rec/sf_rec/tf_rec/rec2rec すべてに有効。**`PAD_THRESH=0`(以下)で強制OFF**(旧既定と完全一致)。rec2rec入力(再構成円で端が減衰)は 0.1〜0.2 推奨。既定値変更は `cbp.h` の1定義、または `-DPAD_THRESH_DEFAULT=…` |
 
@@ -68,6 +69,25 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-07-27 版**（
 | `THREADS` | ofct_DO の既定が 8 → **40**(3本とも40に統一) |
 | `OMP_NUM_THREADS` | 未設定時の実挙動は「OpenMP既定」ではなく **40** と判明(記載修正) |
 | `CT_REC_BLACK_THRESH` | 参照ファイルが拡大: ct_rec_c.c / ofct_rec.c / rhp_c.c / rtf.c を追記 |
+
+## 2026-08-06 の変更 (低透過率ガード)
+
+| 変数 | 変更内容 |
+|---|---|
+| `CT_REC_BLACK_THRESH` | **意味を「ラインの平均」から「画素ごとの床」へ変更、既定 1.0 → 2.0**。単位(dark を超えたカウント数)は不変。新しい共通ヘッダ `src/blacklim.h` に実装を集約し、参照ファイルを 13 本に統一 |
+| `CT_REC_BLACK_FRAC` | **新設**(既定 0.5)。黒(missing angle)投影の判定を、床止めされた画素の割合で行う |
+
+背景: 試料が厚い/高密度で `I − dark` が 0 以下になると `log(I0/(I−dark))` が +Inf / NaN を返し、
+GPU リング除去 (`sort_filter_g.cu`) の列ソートが詰め物の番兵 (index −1) を実ランクへ押し込むため
+`perm[]` に 4294967295 が入り、`median_scatter` が確保領域の遥か外へ書いて
+`CUDA error sort_filter_g.cu:266: an illegal memory access was encountered` /
+`ring removal image processing failed` で停止していた。CPU/OpenMP 版は停止しない代わりに
+当該列のソート結果が黙って壊れていた。画素ごとの床止めにより両方が構造的に解消する。
+
+旧判定が機能しなかった理由: 判定量がラインの**平均**で、危険を決めるのは**最小値**(1画素でも 0 以下なら
+クラッシュ)だったため。さらに視野に素抜けの余白が残ると平均には (1−被覆率)×信号 のハードフロアが生じ、
+被覆率 60% 程度では中心の透過率を 0 にしても既定 1.0 では発火しない。両端 10 画素を空気基準に使う
+処理(`p_ave`)がそもそも余白の存在を前提としているため、このフロアは設計上必ず存在する。
 | `RHP_O/D/Q` | rhp_c.c(現行リーダ)を追記 |
 
 調査方法: `grep -rnoE 'getenv\("[A-Z_0-9]+"\)' src/*.c src/*.cu src/*.h` で横断し、各既定値をソースで確認。
