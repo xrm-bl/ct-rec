@@ -3,11 +3,40 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.08.06  ver. 2.4
 2026.07.30  ver. 2.3
 2026.07.02  ver. 2.2
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+[ver 2.4 changes]
+  - Added a per-pixel guard against insufficient transmittance. When a thick
+    or dense sample drives the transmitted signal to (or below) the dark
+    level, log(I0/(I-dark)) returned +Inf/NaN and the GPU ring removal
+    aborted with
+      CUDA error sort_filter_g.cu:266: an illegal memory access was encountered
+    (the CPU build silently corrupted the sort of those columns instead).
+    Fixed at the source.
+  - The meaning of the environment variable CT_REC_BLACK_THRESH changed from
+    "black-projection test on the line average" to "per-pixel signal floor"
+    (default 1 -> 2). The unit (counts above dark) is unchanged. Pixels at or
+    below the floor are clamped, capping the absorbance at
+    log(I0/CT_REC_BLACK_THRESH), so Inf/NaN can no longer occur. Pixels above
+    the floor are untouched.
+  - The black-projection (missing-angle) decision is now made by the new
+    variable CT_REC_BLACK_FRAC (fraction of clipped pixels, default 0.5).
+    Plate-like samples trigger at the same transmittance as before. If an
+    ultra-dense sample covering nearly the whole field of view loses too many
+    projections, raise it to about 0.8. See 1e for details.
+  - Both variables are validated (bad values fall back to the default) and
+    echoed to stderr at start-up; a summary (clipped pixels, minimum signal,
+    maximum absorbance) is printed at the end of the run.
+  - Also fixed on the way: an off-by-one in the air-reference lookup (it read
+    uninitialised memory, so reconstruction values change slightly), a
+    division by zero when every projection is judged black, and the
+    unguarded log in the rotation-centre search. See also the technical note
+    20260806_low_transmission_guard.md.
 
 [ver 2.3 changes]
   - Added a truncation (cupping) correction to the CBP layer shared by every
