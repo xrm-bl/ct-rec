@@ -266,7 +266,7 @@
        ofct_DO_g はビュー対ごとの MSD を GPU で計算する（ホスト側処理は同一で結果も一致）。
 
        いずれも MSD の計算前にガウシアン平滑化をかけている。環境変数
-       OFCT_DO_SMOOTH で σ を指定し、未設定の場合は 1.0。0 を指定すると平滑化しない。
+       OFCT_DO_SMOOTH で σ を指定し、未設定の場合は 10.0。0 を指定すると平滑化しない。
 
    b. 再構成
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec

@@ -206,7 +206,7 @@ int	main(int argc,char **argv)
 	for (y=0; y<Oy; y++)   S[y]=Sflat+(size_t)y*Ox;
 
 	    /* (A) Gaussian kernel for pre-MSD smoothing (env OFCT_DO_SMOOTH=sigma, 0=off) */
-	sig = ((env=getenv("OFCT_DO_SMOOTH"))!=NULL) ? atof(env) : 2.0;
+	sig = ((env=getenv("OFCT_DO_SMOOTH"))!=NULL) ? atof(env) : 10.0;
 	if (sig>0.0) {
 	    r=(int)ceil(3.0*sig);
 	    if ((ker=(double *)malloc(sizeof(double)*(2*r+1)))==NULL ||

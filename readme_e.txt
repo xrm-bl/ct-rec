@@ -320,7 +320,7 @@ Uesugi
       processing is identical, so the estimate matches the CPU version).
       Both versions apply a gaussian smoothing before the MSD computation.
       Its sigma is set by the environment variable OFCT_DO_SMOOTH (default
-      1.0); specifying 0 disables the smoothing.
+      10.0); specifying 0 disables the smoothing.
 
    b. Reconstruction
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
