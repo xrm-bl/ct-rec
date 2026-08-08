@@ -138,7 +138,7 @@ void	InitReadHiPic(char *dir,HiPic *hp)
 		      ((env=getenv("RHP_Q"))!=NULL && *env!='\0' &&
 		       (*env|32)>='a' && (*env|32)<='z')?*env|32:'q');
 
-	/* read, validate and echo the thresholds once, up front */
+	/* read and validate the thresholds once, up front */
 	(void)BlackThresh();
 	(void)BlackFrac();
 
@@ -321,6 +321,7 @@ void	ReadHiPic(HiPic *hp,int t)
 	        "Warning\t black\t t=%d clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
 	        t, nclip, hp->Nx*hp->Ny,
 	        100.0*(double)nclip/((double)hp->Nx*(double)hp->Ny), black_thresh);
+	    BlackCountProjection();
 	    for (y=0; y<hp->Ny; y++)
 	    for (x=0; x<hp->Nx; x++)
 	        hp->T[y][x]=ERROR_VALUE;

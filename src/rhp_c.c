@@ -456,6 +456,7 @@ void	ReadHiPic(HiPic *hp,int t)
 	        "Warning\t black\t t=%d clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
 	        t, nclip, hp->Nx*hp->Ny,
 	        100.0*(double)nclip/((double)hp->Nx*(double)hp->Ny), black_thresh);
+	    BlackCountProjection();
 	    for (y=0; y<hp->Ny; y++)
 	    for (x=0; x<hp->Nx; x++)
 	        hp->T[y][x]=ERROR_VALUE;
@@ -513,6 +514,7 @@ void	ReadHiPicBand(HiPic *hp,int t,int y1,int y2,FOM **dst,
 	        "Warning\t black\t t=%d clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
 	        t, nclip, hp->Nx*hp->Ny,
 	        100.0*(double)nclip/((double)hp->Nx*(double)hp->Ny), black_thresh);
+	    BlackCountProjection();
 	    for (y=y1; y<=y2; y++)
 	    for (x=0; x<hp->Nx; x++)
 	        dst[y-y1][x]=ERROR_VALUE;

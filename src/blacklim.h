@@ -33,8 +33,11 @@
 /* line (a plate seen edge-on) the two criteria fire at the same         */
 /* transmission, so plate-like samples keep behaving as before.          */
 /*                                                                      */
-/* Both variables are read once per process, validated, and echoed so    */
-/* that an operator can see which value actually took effect.            */
+/* Both variables are read once per process and validated.  A normal run */
+/* prints nothing: the values in effect are echoed only when BOTH        */
+/* thresholds have been exceeded (a projection was judged black), and    */
+/* the end-of-run summary appears only when at least one pixel actually  */
+/* hit the floor.                                                        */
 /*----------------------------------------------------------------------*/
 
 #ifndef BLACKLIM_H
@@ -78,9 +81,6 @@ static double BlackThresh(void)
 			    "using %.4g\n", e, blackThresh);
 		}
 	}
-	(void)fprintf(stderr,
-	    "CT_REC_BLACK_THRESH = %.4g counts above dark (per-pixel floor, "
-	    "max absorbance = log(I0/%.4g))\n", blackThresh, blackThresh);
 	return blackThresh;
 }
 
@@ -104,8 +104,6 @@ static double BlackFrac(void)
 			    e, blackFrac);
 		}
 	}
-	(void)fprintf(stderr,
-	    "CT_REC_BLACK_FRAC   = %.4g of the line\n", blackFrac);
 	return blackFrac;
 }
 
@@ -146,18 +144,28 @@ static double BlackLog(double num, double den, double flr, int *nclip)
 }
 
 /*----------------------------------------------------------------------*/
-/* Counts one projection that was judged black.                          */
+/* Counts one projection that was judged black.  The first one triggers  */
+/* the threshold echo: both limits were exceeded, so the values that did */
+/* it become worth showing.  Quiet runs stay quiet.                      */
 static void BlackCountProjection(void)
 {
+	if (blackProj == 0L) {
+		(void)fprintf(stderr,
+		    "CT_REC_BLACK_THRESH = %.4g counts above dark (per-pixel floor, "
+		    "max absorbance = log(I0/%.4g))\n", BlackThresh(), BlackThresh());
+		(void)fprintf(stderr,
+		    "CT_REC_BLACK_FRAC   = %.4g of the line\n", BlackFrac());
+	}
 	++blackProj;
 }
 
 /*----------------------------------------------------------------------*/
 /* One-line summary; call once the sinogram is complete.  Turns what used */
-/* to be a CUDA crash into a readable data-quality statement.            */
+/* to be a CUDA crash into a readable data-quality statement.  Prints    */
+/* nothing when no pixel hit the floor.                                  */
 static void BlackReport(void)
 {
-	if (blackSeen == 0L) return;
+	if (blackSeen == 0L || blackClipped == 0L) return;
 
 	(void)fprintf(stderr,
 	    "low-transmission guard: clipped %ld / %ld pixel(s) (%.3f%%), "

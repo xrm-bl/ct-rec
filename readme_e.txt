@@ -29,9 +29,10 @@ Uesugi
     Plate-like samples trigger at the same transmittance as before. If an
     ultra-dense sample covering nearly the whole field of view loses too many
     projections, raise it to about 0.8. See 1e for details.
-  - Both variables are validated (bad values fall back to the default) and
-    echoed to stderr at start-up; a summary (clipped pixels, minimum signal,
-    maximum absorbance) is printed at the end of the run.
+  - Both variables are validated (bad values fall back to the default).
+    A normal run prints nothing; the values in effect are shown only when a
+    projection is judged black, and the end-of-run summary (clipped pixels,
+    minimum signal, maximum absorbance) only when pixels were clipped.
   - Also fixed on the way: an off-by-one in the air-reference lookup (it read
     uninitialised memory, so reconstruction values change slightly), a
     division by zero when every projection is judged black, and the
@@ -162,9 +163,10 @@ Uesugi
       log(I0/CT_REC_BLACK_THRESH) and can never become infinite. Only the
       affected pixels are touched; everything above the floor is unchanged.
       Values of 0 or below are rejected (the guard cannot be switched off).
-      The value in effect is echoed to stderr at start-up, and the number of
-      clipped pixels, the minimum signal and the maximum absorbance are
-      reported at the end.
+      A normal run prints nothing. The values in effect are echoed to stderr
+      only when a projection is judged black (both thresholds exceeded), and
+      the end-of-run summary (clipped pixels, minimum signal, maximum
+      absorbance) appears only when at least one pixel hit the floor.
 
       For plate-like samples, transmittance can drop drastically at certain
       angles (the missing-angle case). A projection whose clipped fraction
