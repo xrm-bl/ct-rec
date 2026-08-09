@@ -3,6 +3,10 @@
 CT reconstruction and processing suite for the SPring-8 synchrotron radiation
 CT systems (parallel-beam absorption CT). Based on Nakano's software.
 
+**Download: [latest release](https://github.com/xrm-bl/ct-rec/releases/latest)**
+— a zip of the complete tree (sources, documentation, prebuilt Windows x64
+binaries, ImageJ plugins).
+
 Raw projections (Hamamatsu HiPic `.img` or 16-bit TIFF) are normalized with
 dark and I0 frames, ring artifacts are removed by a sorting-based filter
 (Vo et al., Opt. Express 26, 2018), and slices are reconstructed by filtered
