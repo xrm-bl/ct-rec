@@ -69,6 +69,8 @@ libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/g
 | [20260723_CT_env_vars.md](20260723_CT_env_vars.md) | all environment variables with defaults |
 | [20260504_filter_readme.md](20260504_filter_readme.md) | filter tools |
 | [20260806_low_transmission_guard.md](20260806_low_transmission_guard.md) | technical note: low-transmission guard |
+| [20260815_corrections.md](20260815_corrections.md) | the three corrections applied on top of plain CBP, with references (Japanese) |
+| [20260815_corrections_EN.md](20260815_corrections_EN.md) | same, English |
 | [imagej-plugins/readme.txt](imagej-plugins/readme.txt) | ImageJ plugin build/install |
 
 Bug reports and requests: contact the author (Uesugi).
