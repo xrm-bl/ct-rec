@@ -15,7 +15,7 @@ projection)である。すなわち dark と I0 による規格化 → 対数変
 
 **実装**: [src/sort_filter_omp.c](src/sort_filter_omp.c)(CPU/OpenMP)、
 [src/sort_filter_g.cu](src/sort_filter_g.cu)(GPU)。全再構成プログラムでシノグラム
-構築直後に適用。環境変数 `KERNEL_SIZE`(既定 5、0 で無効)。
+構築直後に適用。環境変数 `KERNEL_SIZE`(既定 5、0 で無効、際立った構造がない場合は 11-17程度が推奨値)。
 
 **原理**: シノグラムを列(検出器チャンネル)ごとに投影角方向で値の大きさ順にソート
 し、ソート後の像に対して横方向(チャンネル方向)へメディアンフィルタをかけ、記録して

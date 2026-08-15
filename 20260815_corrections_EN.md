@@ -17,7 +17,8 @@ principle and references are given below.
 **Implementation**: [src/sort_filter_omp.c](src/sort_filter_omp.c) (CPU/OpenMP),
 [src/sort_filter_g.cu](src/sort_filter_g.cu) (GPU). Applied in every
 reconstruction program immediately after the sinogram is built. Environment
-variable `KERNEL_SIZE` (default 5; 0 disables it).
+variable `KERNEL_SIZE` (default 5; 0 disables it; around 11-17 is recommended
+when the sample has no prominent structure).
 
 **Principle**: each column of the sinogram (one detector channel) is sorted by
 intensity along the projection-angle direction; a median filter is then applied
