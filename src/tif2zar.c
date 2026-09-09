@@ -743,6 +743,18 @@ int main(int argc, char **argv)
 		if (!(cli_max > cli_min)) die("--max must be greater than --min%s", "");
 	}
 
+	{	/* Fiji / MoBIE / napari pick their reader by the suffix */
+		size_t	zl = strlen(zardir);
+
+		if (zl < 5 ||
+		    (strcmp(zardir + zl - 5, ".zarr") != 0 &&
+		     strcmp(zardir + zl - 5, ".ZARR") != 0))
+			fprintf(stderr,
+			    "tif2zar: warning: the output name '%s' does not end in "
+			    "'.zarr'; Fiji/MoBIE detect the format by that suffix and "
+			    "will try to open the folder as something else\n", zardir);
+	}
+
 	scan_series();
 
 	{	/* first slice: geometry, pixel type, metadata */
