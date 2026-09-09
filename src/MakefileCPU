@@ -164,8 +164,11 @@ set-rc:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/set-rc set-rc.c $(LIBS)
 his2img:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/his2img his2img.c $(LIBS)
+# ct_prj_f_cp.c: img/tif auto-detect + optional Paganin phase retrieval.
+# The Paganin filter uses a built-in radix-2 FFT (no external library);
+# -fopenmp parallelises it (thread count: PAGANIN_THREADS, default = CPUs).
 ct_prj_f:
-	$(CC) $(CFLAGS) -o $(EXE_DIR)/ct_prj_f ct_prj_f_c.c $(TIFFLIB) $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/ct_prj_f ct_prj_f_cp.c $(TIFFLIB) $(LIBS)
 ct_sub_f:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/ct_sub_f ct_sub_f.c $(TIFFLIB) $(LIBS)
 ict_prj_fc:

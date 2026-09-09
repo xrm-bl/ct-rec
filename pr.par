@@ -1,0 +1,24 @@
+7.605
+3.02947251E-06
+1000.0
+0.1
+0.054
+
+###
+Required parameters
+1: absorption coefficient (cm-1)
+2: refractive index (real part)
+3: distance from source to sample (cm)
+4: distance from sample to detector (cm)
+5: effective pixel size (um)
+
+examples
+
+// hair C2446, H5165, N736, O1264, S89, density=1.3g/cm3
+// energy 9.8keV
+#define MU		7.605				/* absorption coefficient (cm-1)*/
+#define DELTA	3.02947251E-06		/* refractive index (real part)*/
+#define R1		1000.0					/* distance from source to sample (cm) */
+#define R2		0.1					/* distance from sample to detector (cm) */
+#define P_SIZE	0.054			/* effective pixel size (cm) */
+

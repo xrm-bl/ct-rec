@@ -3,12 +3,34 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.09.09  ver. 2.5
 2026.08.06  ver. 2.4
 2026.07.30  ver. 2.3
 2026.07.02  ver. 2.2
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+[ver 2.5 changes]
+  - The projection-image generator ct_prj_f gained optional Paganin
+    single-distance phase retrieval (parallel beam).  It is active only
+    when a parameter file pr.par is given as the third argument (see 6h);
+    without it the behaviour and the results are unchanged.
+  - P_SIZE in pr.par (the effective pixel size) is in MICROMETRES.  The
+    old mkpms/mkpmbg chain took it in cm, so reusing an old file is a
+    4-decade mistake; values below 1 nm are rejected as suspected
+    cm-unit files.
+  - Boundaries are mirror-padded (width = 10 x the kernel decay length
+    rc = sqrt(R2 d/mu), at least 32 pixels).  Verified on synthetic data
+    to agree with the legacy mkpms + mkpmbg + pm_sino chain after its
+    background subtraction (difference ~4e-7, the 32-bit float
+    quantisation level).  Details: 20260909_paganin_phase_retrieval.md
+    (Japanese).
+  - The FFT is built in (radix-2, single precision, real-packed, OpenMP
+    parallel), no external library.  About 0.1 s per 2048 x 2048
+    projection on 16 threads.  Thread count: environment variable
+    PAGANIN_THREADS (default: the number of logical CPUs, independent
+    of OMP_NUM_THREADS).
 
 [ver 2.4 changes]
   - Added a per-pixel guard against insufficient transmittance. When a thick
@@ -417,8 +439,30 @@ Uesugi
       Cropping is possible by specifying the arguments in parentheses.
 
    h. Generate Projection Images from 180-degree Scan
-      ct_prj_f HiPic prj
+      ct_prj_f HiPic prj {pr.par}
       Input format auto-detected: dark.img -> img, otherwise dark.tif -> tif.
+      Output is prj/p%05d.tif (32-bit float).
+
+      With a third argument pr.par, Paganin single-distance phase
+      retrieval (Paganin et al., J. Microsc. 206, 33-40, 2002, Eq. 10,
+      parallel beam) is applied to every projection and the output value
+      is mu*t = -ln(T').  Without it the program does plain absorption
+      as before.
+      pr.par holds five numbers, one per line (# or // starts a comment):
+        MU      linear attenuation coefficient  [cm^-1]  > 0
+        DELTA   refractive index decrement      [-]      > 0
+        R1      source-sample distance          [cm]     > 0 (unused)
+        R2      sample-detector distance        [cm]     >= 0
+        P_SIZE  effective pixel size            [um]     > 0
+      NOTE: P_SIZE is in micrometres.  Do not reuse pr.par files from
+      the old mkpms/mkpmbg chain, which took it in cm; a 4-decade unit
+      mistake over- or under-smooths drastically.  Extreme values stop
+      with an error at start-up, but not every mistake can be caught, so
+      check that the rc printed at start-up (smoothing radius in pixels)
+      is physically reasonable - normally a few pixels.
+      The low-transmission guard (1e) applies to the filtered
+      transmission as well.  Thread count: environment variable
+      PAGANIN_THREADS (default: the number of logical CPUs).
 
    i. Histogram from 32-bit TIFF
       tif2hst rec (x1 y1 x2 y2)
@@ -575,4 +619,3 @@ Uesugi
       truncation correction of 1f, lower PAD_THRESH to about 0.1-0.2.
 
       Example: rec2rec_g_c rec rec2 1800
-

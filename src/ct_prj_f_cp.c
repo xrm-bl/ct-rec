@@ -1,7 +1,8 @@
-// program ct_sino
-// 
-// Required files are q???.img, dark.img.
-// output file "s????.sin"
+// program ct_prj_f_cp
+//   ct_prj_f_c (HiPic .img / 16-bit .tif auto-detect) + optional Paganin
+//   phase retrieval (3rd argument = pr.par, see paganin.h)
+// Required files are q???.img|tif, dark.img|tif, output.log.
+// output files "prj/p%05d.tif" (32-bit float)
 
 /*----------------------------------------------------------------------*/
 #include <stdio.h>
@@ -14,6 +15,7 @@
 #include "tiffio.h"
 #include "tifwrite.h"
 #include <stdint.h>
+#include "paganin.h"		// ct_prj_f_cp: Paganin phase retrieval (Paganin et al. 2002, Eq. 10)
 
 /*----------------------------------------------------------------------*/
 #ifndef M_PI
@@ -40,7 +42,8 @@ typedef struct HiPic_Header Header;
 /*----------------------------------------------------------------------*/
 
 // main data for read transmitted images (data[y][x]) 772
-unsigned short	*data, *dark, *II01, *II02, *I;
+unsigned short	*data, *dark, *I;
+double	*II01, *II02;			// I0 frames (dark not yet subtracted)
 double	*I0;
 
 // image profile from 'output.log'
@@ -55,6 +58,10 @@ unsigned short	N, n_total;
 
 unsigned short Nx,Ny;
 int useTiff = 0;   /* 0 = HiPic .img, 1 = 16-bit TIFF .tif (auto-detected) */
+
+// Paganin phase retrieval: enabled when a 3rd argument (pr.par) is given
+int		usePaganin = 0;
+Paganin		pg;
 
 
 void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
@@ -73,7 +80,7 @@ void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char 
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
-	TIFFSetField(image, TIFFTAG_ARTIST, "ct_prj");
+	TIFFSetField(image, TIFFTAG_ARTIST, usePaganin ? "ct_prj paganin" : "ct_prj");
 //	TIFFSetField(image, TIFFTAG_MINSAMPLEVALUE, mmmin );
 //	TIFFSetField(image, TIFFTAG_MAXSAMPLEVALUE, mmmax );
 
@@ -285,7 +292,7 @@ int read_log(char *dirin)
 
 int StoreProjection(char *dirin, char *dirout)
 {
-	int			i, j, k, jx, nshot, *ilp, iplc, x, y;
+	int			i, j, k, jx, jy, nshot, *ilp, iplc, x, y;
 	int			nclip;
 	double		t1, t2;
 	double		*a, *b;
@@ -301,6 +308,8 @@ int StoreProjection(char *dirin, char *dirout)
 	float		*data32;
 	double		mmmin, mmmax, XXX;
 	char		*comm = NULL;
+	double		*T = NULL;		// transmission frame for Paganin
+	double		flr = BlackThresh();
 
 //		printf("1\n");
 	srand((unsigned int)time(NULL));
@@ -313,6 +322,13 @@ int StoreProjection(char *dirin, char *dirout)
 	if ((data32 = (float*)malloc(sizeof(float)*Nx*Ny)) == NULL) {
 		printf("cannot allocate memory for input 32bit TIFF image\n");
 		exit(1);
+	}
+
+	if(usePaganin){
+		if((T = (double *)malloc((size_t)Nx*Ny*sizeof(double))) == NULL){
+			printf("cannot allocate memory for transmission frame\n");
+			exit(1);
+		}
 	}
 
 	ilp=(int *)malloc(NST*sizeof(int));
@@ -333,8 +349,10 @@ int StoreProjection(char *dirin, char *dirout)
 			printf("something wrong -- return value is %d(II01)", i);
 			return(-1);
 		}
+// I0 frame as measured (no smoothing: the reconstruction programs use
+// the raw I0, the 5-point filter was only meant for the axis finder)
 		for(i=0;i<Nx*Ny;++i){
-			*(II01+i)=*(data+i);
+			*(II01+i)=(double)*(data+i);
 		}
 		free(data);
 		
@@ -345,8 +363,10 @@ int StoreProjection(char *dirin, char *dirout)
 			printf("something wrong -- return value is %d(II02)", i);
 			return(-1);
 		}
+// I0 frame as measured (no smoothing: the reconstruction programs use
+// the raw I0, the 5-point filter was only meant for the axis finder)
 		for(i=0;i<Nx*Ny;++i){
-			*(II02+i)=*(data+i);
+			*(II02+i)=(double)*(data+i);
 		}
 		free(data);
 
@@ -356,8 +376,8 @@ int StoreProjection(char *dirin, char *dirout)
 
 // 1 layer(ln)
 		for (jx=0;jx<Nx*Ny;++jx){
-			I01     = (double)(*(II01+jx)-*(dark+jx));
-			I02     = (double)(*(II02+jx)-*(dark+jx));
+			I01     = *(II01+jx) - (double)*(dark+jx);
+			I02     = *(II02+jx) - (double)*(dark+jx);
 			*(a+jx) = (double)(((double)(I02   - I01))    / (t2 - t1));
 			*(b+jx) = (double)(((double)I01*t2 - (double)I02*t1) / (t2 - t1));
 		}
@@ -380,6 +400,24 @@ int StoreProjection(char *dirin, char *dirout)
 			nclip = 0;
 			for(jx=0;jx<Nx*Ny;++jx){
 				*(I0+jx)=(*(a+jx) * shottime[k] + *(b+jx));
+			}
+			if(usePaganin){
+				/* T = (I-dark)/I0, Paganin filter, then the same
+				   floor as the absorption path applied to the
+				   filtered intensity T'*I0 (counts above dark) */
+				for(jx=0;jx<Nx*Ny;++jx){
+					double i0 = *(I0+jx);
+					if(!(i0 >= flr)) i0 = flr;	/* mirrors BlackLog num clamp */
+					*(T+jx) = (double)(*(I+jx)-*(dark+jx)) / i0;
+				}
+				PaganinFilter(&pg, T);
+				for(jx=0;jx<Nx*Ny;++jx){
+					*(po+jx)=BlackLog((double)*(I0+jx),
+						*(T+jx) * (double)*(I0+jx), flr, &nclip);
+				}
+			}
+			else
+			for(jx=0;jx<Nx*Ny;++jx){
 				/* per-pixel floor (CT_REC_BLACK_THRESH): an opaque
 				   pixel now reads log(I0/floor) instead of 0, which
 				   claimed full transmission */
@@ -393,7 +431,7 @@ int StoreProjection(char *dirin, char *dirout)
 //						*(ilp+nshot)=1;
 //					}
 				*(po+jx)=BlackLog((double)*(I0+jx),
-					(double)(*(I+jx)-*(dark+jx)), BlackThresh(), &nclip);
+					(double)(*(I+jx)-*(dark+jx)), flr, &nclip);
 			}
 
 //			if(*(ilp+nshot)==1){
@@ -434,7 +472,7 @@ int StoreProjection(char *dirin, char *dirout)
 		} // end of k loop
 	} // end of j loop
 	printf("\n");
-	free(a);free(b);free(po);free(data32);
+	free(a);free(b);free(po);free(data32);free(T);
 	return (0);
 }
 
@@ -460,11 +498,20 @@ char	**argv;
 	char		darkfile[1024];
 
 // parameter setting
-	if (argc!=3){
-//		fprintf(stderr, "parameter was wrong!!!\n");
-		fprintf(stderr, "usage : %s HiPic/ prj/\n", argv[0]);
-//		fprintf(stderr, "default head=q, dark=dark.img\n");
+	if (argc!=3 && argc!=4){
+		fprintf(stderr, "usage : %s HiPic/ prj/ [pr.par]\n", argv[0]);
+		fprintf(stderr, "  pr.par given -> Paganin phase retrieval (parallel beam)\n");
+		fprintf(stderr, "  pr.par: MU[1/cm] DELTA R1[cm] R2[cm] P_SIZE[um], one per line\n");
 		return(1);
+	}
+
+// Paganin parameters (3rd argument): must exist and be valid
+	if (argc==4){
+		if (PaganinReadPar(argv[3], &pg) != 0){
+			fprintf(stderr, "Paganin parameter file '%s' is missing or invalid; stop.\n", argv[3]);
+			return(1);
+		}
+		usePaganin = 1;
 	}
 
 // read shot log file
@@ -501,11 +548,18 @@ char	**argv;
 	free(data);
 //	fprintf(stderr, "Nx, Ny= %d %d \n", Nx,Ny);
 
-	II01 = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
-	II02 = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
+	II01 = (double *) malloc((size_t)Nx*Ny*sizeof(double));
+	II02 = (double *) malloc((size_t)Nx*Ny*sizeof(double));
 	I    = (unsigned short *) malloc((size_t)Nx*Ny*sizeof(unsigned short));
 	I0   = (double *) malloc((size_t)Nx*Ny*sizeof(double));
 	fprintf(stderr, "Nx, Ny= %d %d \n", Nx,Ny);
+
+	if(usePaganin){
+		if(PaganinInit(&pg, Nx, Ny) != 0){
+			fprintf(stderr, "Paganin initialization failed; stop.\n");
+			return(1);
+		}
+	}
 
 	if((i=StoreProjection(argv[1], argv[2])) !=0){
 		printf("something wrong in StoreProjection (%d)\n",i);
@@ -514,6 +568,8 @@ char	**argv;
 	fprintf(stderr, "fin\n");
 
 	free(II01); free(II02);free(I);free(I0);
+	if(usePaganin) PaganinFree(&pg);
+	BlackReport();
 
 		// append to log file
 	FILE		*f;

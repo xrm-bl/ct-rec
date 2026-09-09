@@ -26,7 +26,7 @@ for /f "usebackq tokens=1,2,3,4,5,6 delims=	 " %%a in (`type "%LOGFILE%" ^& echo
         ) else (
             pushd "!DIR!"
             mkdir rec ro_xy ro_zx 2>nul
-            tf_tg_g_c raw 5.64 !COL2! 0 rec
+            hp_tg_g_c raw 5.64 !COL2! 0 rec
             tif_f2i 8 rec ro_xy -0.2 2.0
             si_rar.exe ro_xy - +x +z +y ro_zx
             popd

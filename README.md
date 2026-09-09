@@ -27,7 +27,7 @@ his/tif split -> axis search -> reconstruction (ring removal + FBP) -> 32bit tif
 | Reconstruction from p-images | `p_rec_G_F`, `sf_rec_t_F` | |
 | Offset CT (360°, half-beam) | `ofct_DO(_g)`, `ofct_rec_G_F`, `ofct_srec_G_F` | axis finder + reconstruction |
 | Re-projection / re-reconstruction | `rec2rec_F`, `rec2rec_g_F` | |
-| Sinogram / projection tools | `sinog`, `of_sinog`, `ct_prj_f`, `ict_prj_fc` | |
+| Sinogram / projection tools | `sinog`, `of_sinog`, `ct_prj_f`, `ict_prj_fc` | `ct_prj_f`: optional Paganin phase retrieval (pr.par) |
 | 8/16-bit normalization | `tif_f2i` | min/max recorded in TIFF tags |
 | 2D/3D filters for 32-bit volumes | `tif_mgf(_g)`, `tif_mdf(_g)`, `tif_gsf(_g)`, `tif_blf(_g)`, `tif_adf_g`, `tif_nlm_g`, `tif_tvd_g`, `tif_wvd_g`, `tif_bm4d_g`, `rec_gf` | median, gaussian, bilateral, anisotropic diffusion, NLM, TV, wavelet, BM4D |
 | Acquisition-data utilities | `his_spl_*`, `act_spl(2)`, `his2img`, `his2tif6`, `*_ave` | split / convert / average |
@@ -64,11 +64,14 @@ libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/g
 
 | File | Content |
 |---|---|
-| [readme.txt](readme.txt) | full manual, Japanese (current: ver 2.4) |
+| [20260827_install_windows.md](20260827_install_windows.md) | install on Windows and run the first reconstruction (Japanese) |
+| [20260827_install_windows_EN.md](20260827_install_windows_EN.md) | same, English |
+| [readme.txt](readme.txt) | full manual, Japanese (current: ver 2.5) |
 | [readme_e.txt](readme_e.txt) | full manual, English |
 | [20260723_CT_env_vars.md](20260723_CT_env_vars.md) | all environment variables with defaults |
 | [20260504_filter_readme.md](20260504_filter_readme.md) | filter tools |
 | [20260806_low_transmission_guard.md](20260806_low_transmission_guard.md) | technical note: low-transmission guard |
+| [20260909_paganin_phase_retrieval.md](20260909_paganin_phase_retrieval.md) | technical note: Paganin phase retrieval in `ct_prj_f` (Japanese) |
 | [20260815_corrections.md](20260815_corrections.md) | the three corrections applied on top of plain CBP, with references (Japanese) |
 | [20260815_corrections_EN.md](20260815_corrections_EN.md) | same, English |
 | [imagej-plugins/readme.txt](imagej-plugins/readme.txt) | ImageJ plugin build/install |

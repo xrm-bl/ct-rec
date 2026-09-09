@@ -108,8 +108,10 @@ rem rec_stk
 rem his2img
 %CC2% /Fehis2img.exe his2img.c
 
-rem ct_prj_f
-%CC2% /Fect_prj_f.exe ct_prj_f_c.c %TIFFLIB%
+rem ct_prj_f (ct_prj_f_cp.c: img/tif auto-detect + optional Paganin phase retrieval)
+rem   built-in radix-2 FFT, no external library; /openmp parallelises it
+rem   (thread count: PAGANIN_THREADS, default = online CPUs)
+%CC2% /openmp /Fect_prj_f.exe ct_prj_f_cp.c %TIFFLIB%
 
 rem ct_sub_f
 %CC2% /Fect_sub_f.exe ct_sub_f.c %TIFFLIB%

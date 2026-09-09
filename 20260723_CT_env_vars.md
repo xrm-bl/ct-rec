@@ -1,6 +1,6 @@
 # CT再構成ソフトウェア 環境変数一覧
 
-xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-07-27 版**（初版 2026-07-23、随時更新）
+xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-09-09 版**（初版 2026-07-23、随時更新）
 （`20260620_CT_env_vars_EN/J.pdf` を置き換える更新版。差分は末尾参照）
 
 ---
@@ -13,6 +13,7 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-07-27 版**（
 | `HPTG_READ_THREADS` | hp_tg / ofct_srec の投影**並列読み込み**スレッド数 | 16 | hp_tg_ku.c ofct_srec.c | 2026-07 新設。InfiniBand等のディスクアレイは並列読みで帯域が出る。投影数超は自動クランプ |
 | `THREADS` | 回転軸探索の比較スレッド数 | 40 | oct_xy.c otf_xy.c ofct_DO.c | 3本とも既定40。0以下は `bad number of THREADS` |
 | `OMP_NUM_THREADS` | リング除去ソートフィルタの並列数 | 40 | sort_filter_omp.c sort_filter_g.cu | `get_num_threads_from_env()` が読む。**未設定時はOpenMP既定ではなく40を返す**。0以下は無効→40 |
+| `PAGANIN_THREADS` | ct_prj_f の Paganin 位相回復(内蔵 FFT)のスレッド数 | **論理CPU数** | paganin.h | 2026-09 新設(ver 2.5)。`OMP_NUM_THREADS` とは独立。OpenMP ビルドでのみ有効。0 以下・非数は既定にフォールバック |
 | `ACT_SPL_JOBS` | act_spl / act_spl2 (Linux) の背景ジョブ同時実行数 | 8 | act_spl.c act_spl2.c | 2026-07 新設。Linuxで gf_sd / tif_mgf を fork+exec 背景実行する際の上限(Windows は従来どおり `start /b`)。終了前に全ジョブを待ち合わせる |
 
 ※ GPUソートは内部 `SORT_THREADS=256`、GPUフィルタは `BLOCK_SIZE_X/Y/Z=8/8/4` の固定値(環境変数ではない)。
@@ -63,6 +64,7 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-07-27 版**（
 | `CBP_THREADS` | 既定 8 → **論理コア数−1(下限1)**。対象に cbp_thread_avx.c(新設・選択制)追加 |
 | `HPTG_READ_THREADS` | **新設**(既定16)。hp_tg / ofct_srec の投影並列読み込み |
 | `ACT_SPL_JOBS` | **新設**(既定8)。act_spl / act_spl2 の Linux 背景ジョブ上限 |
+| `PAGANIN_THREADS` | **新設**(ver 2.5、既定=論理CPU数)。ct_prj_f の Paganin 位相回復のスレッド数 |
 | `OFCT_DO_SMOOTH` | **新設**(既定1.0、0で無効)。ofct_DO(_g) の前処理平滑化 |
 | `PAD_THRESH` | **新設**(既定0.3=ON自動判定、`cbp.h` の `PAD_THRESH_DEFAULT`)。CBP層共通の打ち切り(カッピング)補正。全再構成ソフトに有効。`PAD_THRESH=0` で強制OFF |
 | `HPTG_MEM_FRACTION` | 既定 0.8 → **0.9**(ofct_srec, p_rec)。hp_tg のみ **0.95** |

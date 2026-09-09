@@ -24,7 +24,7 @@ rem     move output.log raw
 rem     move conv.bat raw
     cd raw
     call conv.bat
-    tf_rec_g_r 70
+    ct_rec_g_r 70
     pid rec00070.tif >> ..\..\center.log
     copy rec00070.tif ..\..\rc-check\!num!.tif
     
