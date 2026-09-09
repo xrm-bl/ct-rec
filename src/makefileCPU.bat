@@ -128,6 +128,10 @@ rem %CC2% /openmp /arch:AVX2 /Fetf_prj_f.exe rif_fast.c tf_prj_f.c %TIFFLIB%
 rem tif2hst
 %CC2% /Fetif2hst.exe tif2hst.c %TIFFLIB%
 
+rem tif2zar (numbered TIFF series -> OME-Zarr v0.4 for Fiji/BigDataViewer)
+rem   blosc + codecs from vcpkg x64-windows-static (see 20260717_LIBTIFF-MIGRATION.md)
+%CC2% /openmp /Fetif2zar.exe tif2zar.c libblosc.lib lz4.lib snappy.lib zstd.lib %TIFFLIB%
+
 rem 3D gaussian filter
 %CCX% /Ferec_gf.exe fft.c rec_gf.c rif_f.c %TIFFLIB%
 

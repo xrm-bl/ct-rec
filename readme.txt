@@ -24,6 +24,9 @@
   ・FFT は自前の radix-2(単精度・実数パック・OpenMP 並列)で外部ライブラリ
     不要。2048x2048 の投影 1 枚あたり約 0.1 秒(16 スレッド)。スレッド数は
     環境変数 PAGANIN_THREADS(既定は論理 CPU 数、OMP_NUM_THREADS とは独立)。
+  ・TIFF連番 → OME-Zarr 変換 tif2zar を新設(6s)。再構成済みボリュームを
+    Fiji + BigDataViewer/MoBIE 向けの多重解像度・blosc-zstd 圧縮形式へ
+    1 パスで変換する。詳細は 20260909_tif2zar.md。
 
 【ver 2.4 の変更点】
   ・透過率不足への画素単位ガードを導入。試料が厚い/高密度で透過信号が dark
@@ -540,3 +543,20 @@
       例: rec2rec_g_c rec rec2 1800
 
       
+
+   s. TIFF連番 → OME-Zarr 変換
+      tif2zar tifDir out.zarr {--chunk N} {--pixel P} {--min A --max B}
+                              {--levels L} {--codec C} {--clevel N}
+
+      再構成済みボリューム(uint16 / 32bit float の連番 tiff)を OME-Zarr
+      v0.4(多重解像度ピラミッド + blosc-zstd 圧縮)へ変換する。Fiji の
+      Plugins → BigDataViewer → N5 Viewer 等で file:///D:/... 形式の URI
+      を与えて開く(C:\ の直接入力は Fiji 側の既知の不具合で落ちる)。
+      float32 入力はタグの min/max から全体レンジを決めて uint16 に量子化
+      する。rec 直変換では外れ値にレンジが引きずられるため、tif_f2i と
+      同じ規格化値を --min/--max で与えることを推奨。連番の欠番はエラー
+      停止(欠損ファイル名を列挙)。スレッド数は環境変数 TIF2ZAR_THREADS
+      (既定は論理 CPU 数)。詳細・実測性能・出力仕様は 20260909_tif2zar.md
+      を参照。
+
+      例: tif2zar rec rec.zarr --min -0.5 --max 3.0

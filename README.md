@@ -32,6 +32,7 @@ his/tif split -> axis search -> reconstruction (ring removal + FBP) -> 32bit tif
 | 2D/3D filters for 32-bit volumes | `tif_mgf(_g)`, `tif_mdf(_g)`, `tif_gsf(_g)`, `tif_blf(_g)`, `tif_adf_g`, `tif_nlm_g`, `tif_tvd_g`, `tif_wvd_g`, `tif_bm4d_g`, `rec_gf` | median, gaussian, bilateral, anisotropic diffusion, NLM, TV, wavelet, BM4D |
 | Acquisition-data utilities | `his_spl_*`, `act_spl(2)`, `his2img`, `his2tif6`, `*_ave` | split / convert / average |
 | Volume utilities | `rec_crop`, `rec_sir` (3D binning), `rec_stk`, `tif2hst` | |
+| OME-Zarr export | `tif2zar` | multiscale pyramid + blosc-zstd for Fiji/BigDataViewer/MoBIE |
 | ImageJ plugins | `imagej-plugins/SP8CT_Plugins.jar` | HIS/IMG opener, 2D/3D filters, stack crop, cylinder unwrap |
 
 Suffix convention: `G` = `g` (GPU/CUDA) or `t` (CPU/OpenMP); `F` = FBP filter,
@@ -72,6 +73,7 @@ libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/g
 | [20260504_filter_readme.md](20260504_filter_readme.md) | filter tools |
 | [20260806_low_transmission_guard.md](20260806_low_transmission_guard.md) | technical note: low-transmission guard |
 | [20260909_paganin_phase_retrieval.md](20260909_paganin_phase_retrieval.md) | technical note: Paganin phase retrieval in `ct_prj_f` (Japanese) |
+| [20260909_tif2zar.md](20260909_tif2zar.md) | `tif2zar`: TIFF series to OME-Zarr converter (Japanese) |
 | [20260815_corrections.md](20260815_corrections.md) | the three corrections applied on top of plain CBP, with references (Japanese) |
 | [20260815_corrections_EN.md](20260815_corrections_EN.md) | same, English |
 | [imagej-plugins/readme.txt](imagej-plugins/readme.txt) | ImageJ plugin build/install |

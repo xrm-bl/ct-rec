@@ -129,7 +129,7 @@ sf_rec_t_c:
 misc: tif_f2i rec_crop rec_sir sinog of_sinog pid stop_watch img_ave \
       spl his_spl_K his_spl_E his_spl_tif rec_stk chk-rc set-rc \
       his2img ct_prj_f ct_sub_f ict_prj_fc ct_prj_fc \
-      tif2hst rec_gf hp2DO tif_ave tif_mgf his_ave \
+      tif2hst tif2zar rec_gf hp2DO tif_ave tif_mgf his_ave \
       q3_ave q4_ave act_spl act_spl2 gf_sd gf_fd his2tif6 ofsfa
 
 tif_f2i:
@@ -179,6 +179,11 @@ ct_prj_fc:
 # 	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/tf_prj_f rif_fast.c tf_prj_f.c $(TIFFLIB) $(LIBS)
 tif2hst:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/tif2hst tif2hst.c $(TIFFLIB) $(LIBS)
+# numbered TIFF series -> OME-Zarr v0.4 for Fiji/BigDataViewer.
+# Needs c-blosc (with lz4/snappy/zstd/zlib); link it statically on shared
+# systems: -l:libblosc.a etc.
+tif2zar:
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tif2zar tif2zar.c -lblosc -lzstd -llz4 -lsnappy -lz $(TIFFLIB) $(LIBS)
 rec_gf:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/rec_gf fft.c rec_gf.c rif_f.c $(TIFFLIB) $(LIBS)
 hp2DO:
@@ -261,7 +266,7 @@ clean:
 	$(EXE_DIR)/spl $(EXE_DIR)/his_spl_K $(EXE_DIR)/his_spl_E $(EXE_DIR)/his_spl_tif \
 	$(EXE_DIR)/rec_stk $(EXE_DIR)/chk-rc $(EXE_DIR)/set-rc $(EXE_DIR)/his2img \
 	$(EXE_DIR)/ct_prj_f $(EXE_DIR)/ct_sub_f $(EXE_DIR)/ict_prj_fc $(EXE_DIR)/ct_prj_fc \
-	$(EXE_DIR)/tf_prj_f $(EXE_DIR)/tif2hst $(EXE_DIR)/rec_gf \
+	$(EXE_DIR)/tf_prj_f $(EXE_DIR)/tif2hst $(EXE_DIR)/tif2zar $(EXE_DIR)/rec_gf \
 	$(EXE_DIR)/hp2DO $(EXE_DIR)/tif_ave $(EXE_DIR)/tif_mgf \
 	$(EXE_DIR)/his_ave $(EXE_DIR)/q3_ave $(EXE_DIR)/q4_ave \
 	$(EXE_DIR)/act_spl $(EXE_DIR)/act_spl2 $(EXE_DIR)/gf_sd $(EXE_DIR)/gf_fd \

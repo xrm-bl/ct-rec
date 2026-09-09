@@ -31,6 +31,10 @@ Uesugi
     projection on 16 threads.  Thread count: environment variable
     PAGANIN_THREADS (default: the number of logical CPUs, independent
     of OMP_NUM_THREADS).
+  - New tif2zar: numbered-TIFF to OME-Zarr converter (6s).  Turns a
+    reconstructed volume into the multiscale, blosc-zstd-compressed
+    format for Fiji + BigDataViewer/MoBIE in one streaming pass.
+    Details: 20260909_tif2zar.md (Japanese).
 
 [ver 2.4 changes]
   - Added a per-pixel guard against insufficient transmittance. When a thick
@@ -619,3 +623,21 @@ Uesugi
       truncation correction of 1f, lower PAD_THRESH to about 0.1-0.2.
 
       Example: rec2rec_g_c rec rec2 1800
+
+   s. Numbered TIFF to OME-Zarr Conversion
+      tif2zar tifDir out.zarr {--chunk N} {--pixel P} {--min A --max B}
+                              {--levels L} {--codec C} {--clevel N}
+
+      Converts a reconstructed volume (numbered uint16 / 32-bit float
+      TIFFs) to OME-Zarr v0.4 (multiscale pyramid + blosc-zstd).  Open it
+      in Fiji via Plugins -> BigDataViewer -> N5 Viewer with a
+      file:///D:/... URI (typing a bare C:\ path trips a known Fiji bug).
+      float32 input is quantised to uint16 using the global range taken
+      from the per-slice description tags; for rec data that range is
+      dominated by outliers, so passing the same normalisation values as
+      tif_f2i via --min/--max is recommended.  Gaps in the series stop
+      with an error listing every missing file.  Thread count: the
+      environment variable TIF2ZAR_THREADS (default: logical CPUs).
+      Details and measured performance: 20260909_tif2zar.md (Japanese).
+
+      example: tif2zar rec rec.zarr --min -0.5 --max 3.0
