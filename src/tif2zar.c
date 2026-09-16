@@ -61,10 +61,15 @@
 #ifdef WINDOWS
 #include "msdirent.h"
 #include <direct.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>		/* GetDiskFreeSpaceEx */
 #define MKDIR(p)	_mkdir(p)
 #else
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/types.h>
 #define MKDIR(p)	mkdir(p, 0755)
 #endif
@@ -128,11 +133,41 @@ static void die(const char *fmt, const char *arg)
 }
 
 /*----------------------------------------------------------------------*/
+/* like die(), but appends the OS reason (disk full, permissions, ...)   */
+static void die_errno(const char *fmt, const char *arg)
+{
+	int	e = errno;
+
+	fprintf(stderr, "tif2zar: ");
+	fprintf(stderr, fmt, arg);
+	fprintf(stderr, ": %s\n", strerror(e));
+	exit(1);
+}
+
+/*----------------------------------------------------------------------*/
+/* free bytes on the volume holding path (0 = unknown) */
+static double free_bytes(const char *path)
+{
+#ifdef WINDOWS
+	ULARGE_INTEGER	avail;
+
+	if (GetDiskFreeSpaceExA(path, &avail, NULL, NULL))
+		return (double)avail.QuadPart;
+#else
+	struct statvfs	sv;
+
+	if (statvfs(path, &sv) == 0)
+		return (double)sv.f_bavail * (double)sv.f_frsize;
+#endif
+	return 0.0;
+}
+
+/*----------------------------------------------------------------------*/
 /* mkdir that tolerates "already exists" */
 static void mkdir_ok(const char *path)
 {
 	if (MKDIR(path) != 0 && errno != EEXIST)
-		die("cannot create directory %s", path);
+		die_errno("cannot create directory %s", path);
 }
 
 /*----------------------------------------------------------------------*/
@@ -367,7 +402,7 @@ static void jesc(const char *s, char *out, size_t len)
 }
 
 /*----------------------------------------------------------------------*/
-static void write_root_json(void)
+static void write_root_json(double wstart, double wend)
 {
 	char	path[NAME_LEN + 32], esc[4096];
 	FILE	*f;
@@ -423,7 +458,7 @@ static void write_root_json(void)
 	    "        \"input_type\": \"%s\",\n"
 	    "        \"pixel_size_um\": %.9g,\n"
 	    "        \"pixel_size_from\": \"%s\",\n",
-	    (double)g_lo, (double)(g_hi > g_lo ? g_hi : g_lo + 1),
+	    wstart, wend,
 	    is_float ? "float32" : "uint16",
 	    pixel_um, pixel_from == 2 ? "cli" : pixel_from == 1 ? "tag" : "default");
 	if (have_phys)
@@ -602,9 +637,9 @@ static void flush_band(int l)
 				snprintf(cpath, sizeof(cpath), "%s/%d/0/0/%d/%d/%d",
 				    zardir, l, L->zc, jyc, jxc);
 				if ((cf = fopen(cpath, "wb")) == NULL)
-					die("cannot write %s", cpath);
+					die_errno("cannot write %s", cpath);
 				if (fwrite(out, 1, outn, cf) != outn)
-					die("short write to %s", cpath);
+					die_errno("short write to %s", cpath);
 				fclose(cf);
 #ifdef _OPENMP
 #pragma omp atomic
@@ -794,8 +829,34 @@ int main(int argc, char **argv)
 	    nlev, nlev == 1 ? "" : "s",
 	    lv[nlev-1].X, lv[nlev-1].Y, lv[nlev-1].Z);
 
+	{	/* worst-case output size (uncompressed bound) vs free space */
+		double	worst = 0.0, freeb;
+		char	parent[NAME_LEN];
+		size_t	pl;
+
+		for (l = 0; l < nlev; ++l)
+			worst += (double)((lv[l].Z + chunk - 1) / chunk)
+			       * (double)((lv[l].Y + chunk - 1) / chunk)
+			       * (double)((lv[l].X + chunk - 1) / chunk)
+			       * (double)chunk * chunk * chunk * sizeof(uint16_t);
+		snprintf(parent, sizeof(parent), "%s", zardir);
+		for (pl = strlen(parent); pl > 0 && parent[pl-1] != '/' &&
+		    parent[pl-1] != '\\'; --pl) ;
+		if (pl == 0) strcpy(parent, ".");
+		else parent[pl] = '\0';
+		freeb = free_bytes(parent);
+		fprintf(stderr, "tif2zar: output worst case %.1f GB (uncompressed "
+		    "bound), %.1f GB free on the target\n",
+		    worst / 1073741824.0, freeb / 1073741824.0);
+		if (freeb > 0.0 && freeb < worst)
+			fprintf(stderr, "tif2zar: warning: the target volume may be "
+			    "too small; blosc usually shrinks the output (~2x on "
+			    "real CT data), but running out of space aborts the "
+			    "conversion\n");
+	}
+
 	if (MKDIR(zardir) != 0)
-		die("cannot create %s (must not already exist)", zardir);
+		die_errno("cannot create the output directory %s", zardir);
 	/* .zattrs is written at the end: the omero display window needs the
 	   actual data range, known only after the pass */
 	for (l = 0; l < nlev; ++l) {
@@ -810,6 +871,8 @@ int main(int argc, char **argv)
 		snprintf(path, sizeof(path), "%s/%d/0/0", zardir, l); mkdir_ok(path);
 		write_zarray(l);
 	}
+	write_root_json(0.0, 65535.0);	/* provisional; rewritten with the
+					   actual data range at the end */
 #ifdef _OPENMP
 	{
 		const char	*e = getenv("TIF2ZAR_THREADS");
@@ -855,7 +918,8 @@ int main(int argc, char **argv)
 	}
 	for (l = 1; l < nlev; ++l)	/* cascade the partial bands */
 		flush_band(l);
-	write_root_json();		/* omero window = actual data range */
+	write_root_json((double)g_lo,
+	    (double)(g_hi > g_lo ? g_hi : g_lo + 1));	/* actual data range */
 
 	fprintf(stderr, "\ntif2zar: done (%ld chunk files in %d levels, %d thread%s)\n",
 	    n_chunkfiles, nlev, nthr, nthr == 1 ? "" : "s");
