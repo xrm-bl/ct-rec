@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "tiffio.h"
 
 #define MA(cnt,ptr)	malloc((cnt)*sizeof(*(ptr)))
@@ -46,7 +47,15 @@ void Read32TiffFile(char* rname, int iHead)
 //	TIFFGetField(image, TIFFTAG_SAMPLESPERPIXEL, &spp);
 //	TIFFGetField(image, TIFFTAG_ROWSPERSTRIP, &rps);
 //	TIFFGetField(image, TIFFTAG_PLANARCONFIG, &pc);
-	TIFFGetField(image, TIFFTAG_IMAGEDESCRIPTION, &desc);
+	{	/* TIFFGetField returns libtiff's internal buffer, which dies
+		   with TIFFClose(); keep a private copy (the stale pointer
+		   was parsed after the close) */
+		char	*tmp = NULL;
+
+		TIFFGetField(image, TIFFTAG_IMAGEDESCRIPTION, &tmp);
+		if (desc != NULL) free(desc);
+		desc = (tmp != NULL) ? strdup(tmp) : NULL;
+	}
 
 	if(iHead==1){
 		TIFFClose(image);
@@ -106,9 +115,12 @@ int	main(int argc, char *argv[])
 					l_dst = i;
 				}
 				Read32TiffFile(fh,1);
-				sscanf(desc, "%lf\t%lf\t%ld\t%lf\t%lf\t%lf", &dmd, &dmd, &dml, &dmd, &dmmin, &dmmax);
-				if (d_min>dmmin) d_min = dmmin;
-				if (d_max<dmmax) d_max = dmmax;
+				if (desc != NULL &&
+				    sscanf(desc, "%lf\t%lf\t%ld\t%lf\t%lf\t%lf",
+				    &dmd, &dmd, &dml, &dmd, &dmmin, &dmmax) == 6) {
+					if (d_min>dmmin) d_min = dmmin;
+					if (d_max<dmmax) d_max = dmmax;
+				}
 				fprintf(stderr, "%s\r", fh);
 			}
 		}
@@ -137,6 +149,9 @@ int	main(int argc, char *argv[])
 		fputs("usage : tif2hst rec/ (x1 y1 x2 y2)\n", stderr);
 		return 1;
 	}
+
+	if (!(d_max >= d_min))
+		Error("no usable min/max in the image descriptions");
 
 	printf("%ld\t%ld\t%lf\t%lf\n", l_sta, l_dst, d_min, d_max);
 

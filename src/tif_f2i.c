@@ -177,12 +177,14 @@ int	main(int argc, char *argv[])
 				if (desc != NULL) { free(desc); desc = NULL; }
 				if (ReadImageFile_Float(fh,&Nx,&Ny,NULL,&desc))
 	    			(void)fprintf(stderr, "%s : containing non-float pixel values (warning).\n", fh);
-				if (desc != NULL)
-				sscanf(desc, "%lf\t%lf\t%ld\t%lf\t%lf\t%lf", &dmd, &dmd, &dml, &dmd, &dmmin, &dmmax);
+				if (desc != NULL &&
+				    sscanf(desc, "%lf\t%lf\t%ld\t%lf\t%lf\t%lf",
+				    &dmd, &dmd, &dml, &dmd, &dmmin, &dmmax) == 6) {
+					if (d_min>dmmin) d_min = dmmin;
+					if (d_max<dmmax) d_max = dmmax;
+				}
 				if (Nx_min>Nx) Nx_min = Nx;
 				if (Ny_min>Ny) Ny_min = Ny;
-				if (d_min>dmmin) d_min = dmmin;
-				if (d_max<dmmax) d_max = dmmax;
 				fprintf(stderr, "%s\r", fh);
 			}
 		}
@@ -215,6 +217,9 @@ int	main(int argc, char *argv[])
 	}
 
 	dBPS = atoi(argv[1]);
+
+	if (!(d_max > d_min))
+		Error("no usable min/max (image descriptions or arguments)");
 
 	printf("%ld\t%ld\t%d\t%lf\t%lf\n", l_sta, l_dst, dBPS, d_min, d_max);
 	//	printf("%lf\t%lf\n", div, base);

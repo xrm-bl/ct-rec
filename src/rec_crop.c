@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "tiffio.h"
 #include "tifwrite.h"
 #include "rif_f.h"
@@ -72,7 +73,15 @@ void Read32TiffFile(char* rname, int iHead)
 //	TIFFGetField(image, TIFFTAG_SAMPLESPERPIXEL, &spp);
 //	TIFFGetField(image, TIFFTAG_ROWSPERSTRIP, &rps);
 //	TIFFGetField(image, TIFFTAG_PLANARCONFIG, &pc);
-	TIFFGetField(image, TIFFTAG_IMAGEDESCRIPTION, &desc);
+	{	/* TIFFGetField returns libtiff's internal buffer, which dies
+		   with TIFFClose(); keep a private copy (the stale pointer
+		   corrupted the output tag) */
+		char	*tmp = NULL;
+
+		TIFFGetField(image, TIFFTAG_IMAGEDESCRIPTION, &tmp);
+		if (desc != NULL) free(desc);
+		desc = (tmp != NULL) ? strdup(tmp) : NULL;
+	}
 
 	if(iHead==1){
 		TIFFClose(image);
@@ -132,6 +141,7 @@ int	main(int argc, char *argv[])
 					l_dst = i;
 				}
 //				Read32TiffFile(fh,1);
+				if (desc != NULL) { free(desc); desc = NULL; }
 				if (ReadImageFile_Float(fh,&Nx,&Ny,NULL,&desc))
 	    			(void)fprintf(stderr, "%s : containing non-float pixel values (warning).\n", fh);
 //				sscanf(desc, "%f\t%f\t%d\t%f\t%lf\t%lf", &dmd, &dmd, &dml, &dmd, &dmmin, &dmmax);
@@ -185,7 +195,8 @@ int	main(int argc, char *argv[])
 		}
 
 		sprintf(fo, "%s/rec%05ld.tif", argv[2], i);
-		Store32TiffFile(fo, cNx, cNy, 32, dataout, desc);
+		Store32TiffFile(fo, cNx, cNy, 32, dataout,
+		    (desc != NULL) ? desc : "");
 
 		fprintf(stderr, "%s\r", fo);
 
