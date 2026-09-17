@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "tiffio.h"
 #include "tifwrite.h"
 #include "rif_f.h"
@@ -92,7 +93,15 @@ void Read32TiffFile(char* rname, int iHead)
 //	TIFFGetField(image, TIFFTAG_SAMPLESPERPIXEL, &spp);
 //	TIFFGetField(image, TIFFTAG_ROWSPERSTRIP, &rps);
 //	TIFFGetField(image, TIFFTAG_PLANARCONFIG, &pc);
-	TIFFGetField(image, TIFFTAG_IMAGEDESCRIPTION, &desc);
+	{	/* TIFFGetField returns libtiff's internal buffer, which dies
+		   with TIFFClose(); keep a private copy (the stale pointer
+		   corrupted the output tag on Linux) */
+		char	*tmp = NULL;
+
+		TIFFGetField(image, TIFFTAG_IMAGEDESCRIPTION, &tmp);
+		if (desc != NULL) free(desc);
+		desc = (tmp != NULL) ? strdup(tmp) : NULL;
+	}
 
 	if(iHead==1){
 		TIFFClose(image);
@@ -165,8 +174,10 @@ int	main(int argc, char *argv[])
 					l_dst = i;
 				}
 //				Read32TiffFile(fh,1);
+				if (desc != NULL) { free(desc); desc = NULL; }
 				if (ReadImageFile_Float(fh,&Nx,&Ny,NULL,&desc))
 	    			(void)fprintf(stderr, "%s : containing non-float pixel values (warning).\n", fh);
+				if (desc != NULL)
 				sscanf(desc, "%lf\t%lf\t%ld\t%lf\t%lf\t%lf", &dmd, &dmd, &dml, &dmd, &dmmin, &dmmax);
 				if (Nx_min>Nx) Nx_min = Nx;
 				if (Ny_min>Ny) Ny_min = Ny;
@@ -261,7 +272,8 @@ int	main(int argc, char *argv[])
 		}
 
 		//		printf("%s\n",desc);
-		sprintf(wdesc, "%s\t%lf\t%lf", desc, d_min, d_max);
+		snprintf(wdesc, sizeof(wdesc), "%s\t%lf\t%lf",
+		    (desc != NULL) ? desc : "", d_min, d_max);
 //		fprintf(stderr, "%s\t%lf\t%lf\n", desc, d_min, d_max);
 		//		printf("%s\t%d\t%d\t%d\t",fo,cNx,cNy,dBPS);
 		//		printf("%s\n",desc,div,base);
