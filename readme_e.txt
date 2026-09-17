@@ -395,6 +395,13 @@ Uesugi
     for normalization.
     The min/max values used for normalization are appended to the end of
     the TIFF tags.
+    When the slices differ in size (offset CT changes the reconstructed
+    size with the rotation-centre position), all slices are aligned to
+    the largest one: smaller slices are centred and the outside is
+    filled with pixel value 0 (for an odd size difference the left/top
+    padding is one pixel smaller).  The number of aligned slices is
+    reported at the end.  The crop coordinates x1..y2 refer to this
+    largest frame.
 
 5. Applying Gaussian Filter to 32-bit TIFF Images
     rec_gf rec radius out

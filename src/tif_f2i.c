@@ -133,7 +133,8 @@ void Read32TiffFile(char* rname, int iHead)
 
 int	main(int argc, char *argv[])
 {
-	int		dBPS, x1, y1, x2, y2, x, y, x0, y0, cNx, cNy, Nx_min, Ny_min;
+	int		dBPS, x1, y1, x2, y2, x, y, x0, y0, cNx, cNy, Nx_max, Ny_max;
+	int		ox, oy, sx, sy, align_n;
 	long	i, j, dml;
 	long	l_sta, l_dst;
 	double	d_min, d_max, ccc, dmd, dmmin, dmmax;
@@ -153,8 +154,8 @@ int	main(int argc, char *argv[])
 		l_dst = -1;
 		d_min = 10000.;
 		d_max = -10000.;
-		Nx_min=100000;
-		Ny_min=100000;
+		Nx_max=0;
+		Ny_max=0;
 		int s_layer = 0;
 		int e_layer = 99999;
 		if (argc == 8) {
@@ -183,8 +184,8 @@ int	main(int argc, char *argv[])
 					if (d_min>dmmin) d_min = dmmin;
 					if (d_max<dmmax) d_max = dmmax;
 				}
-				if (Nx_min>Nx) Nx_min = Nx;
-				if (Ny_min>Ny) Ny_min = Ny;
+				if (Nx_max<(int)Nx) Nx_max = Nx;
+				if (Ny_max<(int)Ny) Ny_max = Ny;
 				fprintf(stderr, "%s\r", fh);
 			}
 		}
@@ -193,8 +194,10 @@ int	main(int argc, char *argv[])
 		//	fprintf(stderr,"%d\t%d\t%lf\t%lf\n", l_sta, l_dst, d_min, d_max);
 		x1 = 0;
 		y1 = 0;
-		x2 = Nx_min-1;
-		y2 = Ny_min-1;
+		x2 = Nx_max-1;	/* slices smaller than the largest one are
+				   centre-aligned and zero-padded (offset CT
+				   changes the reconstructed size per scan) */
+		y2 = Ny_max-1;
 		if (argc == 6 || argc == 8) {
 			d_min = atof(argv[4]);
 			d_max = atof(argv[5]);
@@ -216,6 +219,7 @@ int	main(int argc, char *argv[])
 		exit(1);
 	}
 
+	align_n = 0;
 	dBPS = atoi(argv[1]);
 
 	if (!(d_max > d_min))
@@ -251,12 +255,21 @@ int	main(int argc, char *argv[])
 //		if (ReadImageFile_Float(fh,&Nx,&Ny,&F,&desc))
 //	  			(void)fprintf(stderr, "%s : containing non-float pixel values (warning).\n", fh);
 
+		/* centre this slice in the Nx_max x Ny_max frame */
+		ox = (Nx_max - (int)Nx) / 2;
+		oy = (Ny_max - (int)Ny) / 2;
+		if (ox != 0 || oy != 0) ++align_n;
+
 		j=0;
 		if(dBPS==8){
 			for (m = y1; m <= y2; m++) {
+				sy = m - oy;
 				for (n = x1; n <= x2; n++) {
-					val = (long)(div*((*(data32 + m*Nx + n)) - base));
-//					val = (long)(div*((F[m][n]) - base));
+					sx = n - ox;
+					if (sy < 0 || sy >= (int)Ny || sx < 0 || sx >= (int)Nx)
+						val = 0;	/* zero padding */
+					else
+					val = (long)(div*((*(data32 + sy*Nx + sx)) - base));
 					if (val<1)    val = 0;
 					if (val>255) val = 255;
 					*(data8 + j) = (unsigned char)(val);
@@ -265,9 +278,13 @@ int	main(int argc, char *argv[])
 			}
 		}else{
 			for (m = y1; m <= y2; m++) {
+				sy = m - oy;
 				for (n = x1; n <= x2; n++) {
-					val = (long)(div*((*(data32 + m*Nx + n)) - base));
-//					val = (long)(div*((F[m][n]) - base));
+					sx = n - ox;
+					if (sy < 0 || sy >= (int)Ny || sx < 0 || sx >= (int)Nx)
+						val = 0;	/* zero padding */
+					else
+					val = (long)(div*((*(data32 + sy*Nx + sx)) - base));
 					if (val<1)    val = 0;
 					if (val>65535) val = 65535;
 					*(data16 + j) = (unsigned short)(val);
@@ -299,6 +316,9 @@ int	main(int argc, char *argv[])
 //	    for (j=Ny-1; j>=0; j--) free(F[j]); free(F);
 
 	}
+	if (align_n > 0)
+		fprintf(stderr, "\ntif_f2i: %d slice(s) were smaller than %d x %d and were "
+		    "centre-aligned with zero padding\n", align_n, Nx_max, Ny_max);
 	printf("\nfinish.\n");
 
 
