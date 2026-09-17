@@ -643,7 +643,9 @@ Uesugi
       from the per-slice description tags; for rec data that range is
       dominated by outliers, so passing the same normalisation values as
       tif_f2i via --min/--max is recommended.  Gaps in the series stop
-      with an error listing every missing file.  Thread count: the
+      with an error listing every missing file.  Slices of different
+      sizes (offset CT) are centred in the largest frame and zero-padded
+      (same rule as tif_f2i, section 4).  Thread count: the
       environment variable TIF2ZAR_THREADS (default: logical CPUs).
       Details and measured performance: 20260909_tif2zar.md (Japanese).
 

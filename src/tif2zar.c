@@ -5,7 +5,10 @@
  *
  *     tifDir    directory holding one numbered grayscale TIFF series
  *               (uint16 or float32, e.g. rec00000.tif ...); all slices the
- *               same size and depth
+ *               same pixel depth.  Sizes may differ (offset CT): every
+ *               slice is centred in the largest frame found and the
+ *               outside is zero-padded (odd difference: left/top pad is
+ *               one pixel smaller)
  *     out.zarr  output directory (created; must not already exist)
  *     --chunk   isotropic chunk edge, default 128 (must be even)
  *     --pixel   pixel size override [um]; default: ImageDescription, else 1.0
@@ -328,8 +331,8 @@ static TIFF *open_slice(int iz, int first)
 		if (TIFFGetField(tif, TIFFTAG_IMAGEDESCRIPTION, &desc) == 1)
 			parse_desc0(desc);
 	} else {
-		if (w != NX || h != NY)
-			die("slice size differs from the first slice: %s", path);
+		if (w > NX || h > NY)
+			die("slice is larger than the scanned maximum: %s", path);
 		if (( is_float && !(bps == 32 && fmt == SAMPLEFORMAT_IEEEFP)) ||
 		    (!is_float && !(bps == 16 && fmt != SAMPLEFORMAT_IEEEFP)))
 			die("pixel type differs from the first slice: %s", path);
@@ -339,48 +342,73 @@ static TIFF *open_slice(int iz, int first)
 
 /*----------------------------------------------------------------------*/
 /* float32 prepass: ImageDescription min/max of every slice, no pixels.  */
-static void prepass_range(void)
+static void prepass_scan(void)
 {
+	static uint16_t	sw[MAX_SLICES], sh[MAX_SLICES];
 	char	path[NAME_LEN + 64];
-	int	iz, bad = 0;
+	int	iz, bad = 0, want_range, n_align = 0;
+	uint32_t	w, h, wmax = 0, hmax = 0;
 	double	mn, mx;
 
-	if (have_cli_range) {
+	want_range = is_float && !have_cli_range;
+	if (is_float && have_cli_range) {
 		phys_min = cli_min;
 		phys_max = cli_max;
 		have_phys = 1;
 		fprintf(stderr, "tif2zar: quantisation range %g .. %g (from --min/--max)\n",
 		    phys_min, phys_max);
-		return;
 	}
-	phys_min =  1.0e300;
-	phys_max = -1.0e300;
+	if (want_range) {
+		phys_min =  1.0e300;
+		phys_max = -1.0e300;
+	}
 	for (iz = 0; iz < nZ; ++iz) {
 		TIFF	*tif;
 		char	*desc = NULL;
 
 		slice_path(path, sizeof(path), iz);
 		if ((tif = TIFFOpen(path, "r")) == NULL) die("cannot open %s", path);
-		if (TIFFGetField(tif, TIFFTAG_IMAGEDESCRIPTION, &desc) != 1 ||
-		    desc_minmax(desc, &mn, &mx) != 0) {
-			if (++bad <= 10)
-				fprintf(stderr, "tif2zar: no min/max in the "
-				    "ImageDescription of %s\n", path);
-		} else {
-			if (mn < phys_min) phys_min = mn;
-			if (mx > phys_max) phys_max = mx;
+		TIFFGetField(tif, TIFFTAG_IMAGEWIDTH,  &w);
+		TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
+		sw[iz] = (uint16_t)w;
+		sh[iz] = (uint16_t)h;
+		if (w > wmax) wmax = w;
+		if (h > hmax) hmax = h;
+		if (want_range) {
+			if (TIFFGetField(tif, TIFFTAG_IMAGEDESCRIPTION, &desc) != 1 ||
+			    desc_minmax(desc, &mn, &mx) != 0) {
+				if (++bad <= 10)
+					fprintf(stderr, "tif2zar: no min/max in the "
+					    "ImageDescription of %s\n", path);
+			} else {
+				if (mn < phys_min) phys_min = mn;
+				if (mx > phys_max) phys_max = mx;
+			}
 		}
 		TIFFClose(tif);
 	}
-	if (bad > 0)
-		die("float32 input needs min/max in every slice's description; "
-		    "give --min and --max to continue%s", "");
-	if (!(phys_max > phys_min))
-		die("degenerate range: all slices have min == max; "
-		    "give --min and --max%s", "");
-	have_phys = 1;
-	fprintf(stderr, "tif2zar: quantisation range %g .. %g (from %d descriptions)\n",
-	    phys_min, phys_max, nZ);
+	if (want_range) {
+		if (bad > 0)
+			die("float32 input needs min/max in every slice's description; "
+			    "give --min and --max to continue%s", "");
+		if (!(phys_max > phys_min))
+			die("degenerate range: all slices have min == max; "
+			    "give --min and --max%s", "");
+		have_phys = 1;
+		fprintf(stderr, "tif2zar: quantisation range %g .. %g (from %d descriptions)\n",
+		    phys_min, phys_max, nZ);
+	}
+
+	/* align everything to the largest frame (offset CT changes the
+	   reconstructed size per scan): smaller slices are centred and
+	   zero-padded by read_slice() */
+	for (iz = 0; iz < nZ; ++iz)
+		if (sw[iz] != (uint16_t)wmax || sh[iz] != (uint16_t)hmax) ++n_align;
+	NX = wmax;
+	NY = hmax;
+	if (n_align > 0)
+		fprintf(stderr, "tif2zar: %d slice(s) smaller than %u x %u will be "
+		    "centre-aligned with zero padding\n", n_align, NX, NY);
 }
 
 /*----------------------------------------------------------------------*/
@@ -509,19 +537,31 @@ static void read_slice(int iz, uint16_t *dst, float *frow)
 {
 	TIFF	*tif = open_slice(iz, 0);
 	char	path[NAME_LEN + 64];
-	int	y, x;
+	uint32_t	w = 0, h = 0;
+	int	y, x, ox, oy;
 	long	lnan = 0, llo = 0, lhi = 0;
 
-	for (y = 0; y < (int)NY; ++y) {
+	/* centre a smaller slice in the NX x NY frame, zero padding around
+	   (offset CT changes the reconstructed size per scan); for an odd
+	   difference the left/top padding is one pixel smaller */
+	TIFFGetField(tif, TIFFTAG_IMAGEWIDTH,  &w);
+	TIFFGetField(tif, TIFFTAG_IMAGELENGTH, &h);
+	ox = ((int)NX - (int)w) / 2;
+	oy = ((int)NY - (int)h) / 2;
+	if (ox != 0 || oy != 0)
+		memset(dst, 0, (size_t)NX * NY * sizeof(uint16_t));
+
+	for (y = 0; y < (int)h; ++y) {
 		if (!is_float) {
-			if (TIFFReadScanline(tif, dst + (size_t)y * NX, y, 0) < 0)
+			if (TIFFReadScanline(tif,
+			    dst + (size_t)(y + oy) * NX + ox, y, 0) < 0)
 				goto readerr;
 		} else {
 			double	sc = 65535.0 / (phys_max - phys_min);
 
 			if (TIFFReadScanline(tif, frow, y, 0) < 0)
 				goto readerr;
-			for (x = 0; x < (int)NX; ++x) {
+			for (x = 0; x < (int)w; ++x) {
 				double	v = frow[x];
 				double	q;
 
@@ -536,7 +576,7 @@ static void read_slice(int iz, uint16_t *dst, float *frow)
 					if (q < 0.0)     q = 0.0;
 					if (q > 65535.0) q = 65535.0;
 				}
-				dst[(size_t)y * NX + x] = (uint16_t)q;
+				dst[(size_t)(y + oy) * NX + ox + x] = (uint16_t)q;
 			}
 		}
 	}
@@ -799,8 +839,8 @@ int main(int argc, char **argv)
 	if (pixel_from == 0)
 		fprintf(stderr, "tif2zar: warning: no pixel size in the "
 		    "ImageDescription; using 1.0 um (override with --pixel)\n");
-	if (is_float)
-		prepass_range();	/* metadata-only pass; sets phys_min/max */
+	prepass_scan();		/* dims of every slice (align to the largest
+				   frame) + float32 quantisation range */
 
 	/* pyramid geometry */
 	lv[0].X = (int)NX; lv[0].Y = (int)NY; lv[0].Z = nZ;
