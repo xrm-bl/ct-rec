@@ -260,25 +260,59 @@ EXTERN Float	**InitCBP(int n,int m)
 	sof2_L1=sizeof(float2)*(size_t)L1;
 	sof_N=sizeof(float)*(size_t)N;
 
-	CUDA_SAFE_CALL(cudaMallocHost((void **)&gpf,sof_L2));
-
-	CUDA_SAFE_CALL(cudaMalloc((void **)&G ,sof2_L1));
-#ifdef	WAI
-	CUDA_SAFE_CALL(cudaMalloc((void **)&PQ,sof2_L1*(size_t)M
-					      *(size_t)NAI(M,(double)(N-1)/2.0)
-		      )		 );
-#else
-	CUDA_SAFE_CALL(cudaMalloc((void **)&PQ,sof2_L1*(size_t)M));
-#endif
-	CUDA_SAFE_CALL(cudaMalloc((void **)&F, sof_N*(size_t)N));
-
-	/* 投影角表 SC[m]=(cosθ_m,sinθ_m) 用バッファ。角度オーバーサンプリング
-	 * (WAI) を使う場合は MO=M*O まで増えるので PQ と同じ最大数で確保する。 */
+	/* 投影角表 SC[m]=(cosθ_m,sinθ_m) の最大本数。角度オーバーサンプリング
+	 * (WAI) を使う場合は MO=M*O まで増えるので PQ もこの本数で確保する。 */
 #ifdef	WAI
 	MOmax=(size_t)M*(size_t)NAI(M,(double)(N-1)/2.0);
 #else
 	MOmax=(size_t)M;
 #endif
+
+	/* チャンク分割バッチFFTの1チャンク本数(プラン作成は後段) */
+	batch=(int)(CUFFT_LIMIT/(size_t)L2);
+	if (batch<1) batch=1;
+	if (batch>M) batch=M;
+	tail=M%batch;
+
+	/* ---- GPUメモリの事前見積もり ----
+	   デバイス側の総需要(G+PQ+F+SC+cuFFTワークスペース)を確保前に
+	   空き容量と比べ、不足見込みなら警告する。最近の Windows ドライバは
+	   VRAM が尽きてもエラーを出さずシステム RAM へ退避する(大幅に遅く
+	   なるだけ)ため、この警告が不足を知る唯一の手掛かりになる。
+	   Linux では超過分の cudaMalloc が "out of memory" で停止する。 */
+	{
+	    size_t	need,ws,freeB,totalB;
+
+	    need=sof2_L1			/* G  */
+		+sof2_L1*MOmax			/* PQ */
+		+sof_N*(size_t)N		/* F  */
+		+sizeof(float2)*MOmax;		/* SC */
+	    if (cufftEstimate1d(L2,CUFFT_R2C,batch,&ws)==CUFFT_SUCCESS)
+		need+=ws;
+	    if (cufftEstimate1d(L2,CUFFT_C2R,batch,&ws)==CUFFT_SUCCESS)
+		need+=ws;
+	    if (tail) {
+		if (cufftEstimate1d(L2,CUFFT_R2C,tail,&ws)==CUFFT_SUCCESS)
+		    need+=ws;
+		if (cufftEstimate1d(L2,CUFFT_C2R,tail,&ws)==CUFFT_SUCCESS)
+		    need+=ws;
+	    }
+	    if (cudaMemGetInfo(&freeB,&totalB)==cudaSuccess && need>freeB)
+		(void)fprintf(stderr,
+		    "cbp.cu: GPU buffers need ~%.0f MiB but only %.0f MiB is "
+		    "free (total %.0f MiB).\n"
+		    "        On Windows the driver may silently fall back to "
+		    "system RAM (very slow);\n"
+		    "        on Linux the allocations will fail.\n",
+		    (double)need/1048576.0,(double)freeB/1048576.0,
+		    (double)totalB/1048576.0);
+	}
+
+	CUDA_SAFE_CALL(cudaMallocHost((void **)&gpf,sof_L2));
+
+	CUDA_SAFE_CALL(cudaMalloc((void **)&G ,sof2_L1));
+	CUDA_SAFE_CALL(cudaMalloc((void **)&PQ,sof2_L1*MOmax));
+	CUDA_SAFE_CALL(cudaMalloc((void **)&F, sof_N*(size_t)N));
 	CUDA_SAFE_CALL(cudaMalloc((void **)&SC,sizeof(float2)*MOmax));
 	CUDA_SAFE_CALL(cudaMallocHost((void **)&scf,sizeof(float2)*MOmax));
 
@@ -295,10 +329,6 @@ EXTERN Float	**InitCBP(int n,int m)
 	   ここでは常にバッチ実行とし、CUFFT_LIMIT は1チャンクの
 	   最大要素数(=cuFFTワークスペースの上限)として使う。 */
 	CUFFT_SAFE_CALL(cufftDestroy(R2C));
-	batch=(int)(CUFFT_LIMIT/(size_t)L2);
-	if (batch<1) batch=1;
-	if (batch>M) batch=M;
-	tail=M%batch;
 	CUFFT_SAFE_CALL(cufftPlan1d(&R2C,L2,CUFFT_R2C,batch));
 	CUFFT_SAFE_CALL(cufftPlan1d(&C2R,L2,CUFFT_C2R,batch));
 	if (tail) {
