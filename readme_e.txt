@@ -3,6 +3,7 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.09.22  ver. 2.6
 2026.09.09  ver. 2.5
 2026.08.06  ver. 2.4
 2026.07.30  ver. 2.3
@@ -10,6 +11,24 @@ Uesugi
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+[ver 2.6 changes]
+  - New reconstruction programs for the automatic CT system:
+    act_rec_g_r (180-degree scan) and ofact_rec_g_r (offset CT), see 2e
+    and 3d.  The normalization range (LACmin/LACmax) is given on the
+    command line, so the 32-bit float TIFF stage is skipped entirely:
+    each slice is written directly as 8-bit (ro*.tif) and 16-bit
+    (rh*.tif) at the same time.  The quantisation and the 8-field
+    ImageDescription are identical to tif_f2i; the output is verified
+    byte-identical to the legacy "reconstruction (32bit) -> tif_f2i"
+    chain.  All six arguments are mandatory.
+  - All GPU tools: clearer messages on GPU memory exhaustion.  The
+    free/total GPU memory and a hint are appended, and cuFFT errors now
+    show the error-code name.  The reconstruction (cbp) layer estimates
+    its total device demand before allocating and warns when it exceeds
+    the free memory (on Windows the driver silently falls back to
+    system RAM instead of failing, so this warning is the only visible
+    sign of the shortage).
 
 [ver 2.5 changes]
   - The projection-image generator ct_prj_f gained optional Paganin
@@ -228,8 +247,8 @@ Uesugi
       zero, so the pad is automatically not applied. Setting PAD_THRESH=0
       (or negative) forces it OFF, giving results identical to the previous
       version.
-      This applies to ct_rec / hp_tg / p_rec / ofct_rec / ofct_srec / sf_rec /
-      rec2rec alike. Note that the input of rec2rec is already attenuated at
+      This applies to ct_rec / act_rec / hp_tg / p_rec / ofct_rec /
+      ofact_rec / ofct_srec / sf_rec / rec2rec alike. Note that the input of rec2rec is already attenuated at
       the edges by the reconstruction circle, so a smaller value of about
       0.1-0.2 is appropriate there.
 
@@ -328,6 +347,30 @@ Uesugi
 
       *) As with hp_tg, run one directory above the HiPic directory.
 
+   e. Single Slice Reconstruction for the Automatic CT System
+      (direct 8/16-bit output)
+      act_rec_g_r layer center pixel_size offsetangle LACmin LACmax
+
+      layer: Layer (height) to reconstruct
+      center: Rotation axis position (pixels)
+      pixel size: Pixel size (um)
+      offsetangle: Rotation axis origin offset
+      LACmin / LACmax: Normalization range (same meaning as in tif_f2i,
+                       see section 4)
+
+      For the automatic CT system, where the normalization range is fixed
+      before execution.  The 32-bit TIFF stage is skipped: the slice is
+      written directly to the current directory as ro%05d.tif (8-bit) and
+      rh%05d.tif (16-bit) at the same time (no rec*.tif is produced).
+      All six arguments are mandatory; the program stops with an error
+      otherwise.  The quantisation and the 8-field ImageDescription are
+      identical to tif_f2i, so the output is byte-identical to the legacy
+      "ct_rec (32bit) -> tif_f2i" chain.  The reconstruction itself (ring
+      removal, truncation pad, CBP) is the same as ct_rec.
+
+      *) Run in the directory containing q????.img or q????.tif files
+         (auto-detected from dark.img / dark.tif).
+
 3. 360-degree Scan (Offset CT): Standard Absorption CT Reconstruction
    a. Rotation Axis Position Estimation
       ofct_DO   raw {stride}          (CPU)
@@ -376,6 +419,16 @@ Uesugi
       offset angle: Rotation axis origin offset. Defaults to 0.0 if omitted.
 
       *) Run in the directory containing q????.img or q????.tif files (auto-detected from dark.img / dark.tif).
+
+   d. Single Slice Reconstruction for the Automatic CT System
+      (offset CT, direct 8/16-bit output)
+      ofact_rec_g_r layer offset pixel_size offsetangle LACmin LACmax
+
+      Offset-CT version of act_rec (2e); offset has the same meaning as
+      center in ofct_rec.  All six arguments are mandatory.  The output
+      is only ro%05d.tif / rh%05d.tif in the current directory (no
+      rec*.tif), byte-identical to the legacy "ofct_rec (32bit) ->
+      tif_f2i" chain.
 
 
 4. Normalization of 32-bit TIFF Images

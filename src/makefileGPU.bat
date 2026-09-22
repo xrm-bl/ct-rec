@@ -90,6 +90,11 @@ rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_s.exe  otf_rec.c error.c sort_filter_g.
 rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_c.exe  otf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /Feofct_rec_g_c.exe ofct_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
+rem automatic-CT reconstruction (fixed LAC range, direct 8/16bit output, no 32bit tiff)
+%NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
+%CC2% /openmp /DUSE_GPU /Feact_rec_g_r.exe act_rec_c.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofact_rec_g_r.exe ofact_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
 rem %CC2% /openmp /DUSE_GPU /Feoftf_srec_g_r.exe ofct_srec.c error.c rtf.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj

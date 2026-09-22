@@ -2,6 +2,7 @@
 
 上杉
 
+2026.09.22  ver. 2.6
 2026.09.09  ver. 2.5
 2026.08.06  ver. 2.4
 2026.07.30  ver. 2.3
@@ -9,6 +10,18 @@
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+【ver 2.6 の変更点】
+  ・自動CT装置用の再構成 act_rec_g_r(180deg)/ ofact_rec_g_r(オフセットCT)
+    を新設(2e / 3d)。規格化定数(LACmin/LACmax)を引数で与え、32bit tiff を
+    経由せずに 8bit(ro*.tif)と 16bit(rh*.tif)を同時に直接出力する。
+    量子化・タグ(8欄)は tif_f2i と同一規格で、従来の「再構成(32bit)→
+    tif_f2i」の結果とバイト単位で一致することを検証済み。引数は6個すべて必須。
+  ・GPU 版全ツール: GPUメモリ不足時のエラーメッセージを改良。空き/総容量と
+    対処ヒントを表示し、cuFFT はエラーコード名も表示する。再構成(cbp 層)は
+    確保前に必要量を見積もり、不足見込みなら警告する(Windows のドライバは
+    VRAM 不足時にエラーを出さずシステムRAMへ退避して大幅に遅くなるだけの
+    ため、この警告が唯一の手掛かりになる)。
 
 【ver 2.5 の変更点】
   ・投影像生成 ct_prj_f に Paganin 位相回復(単一距離・平行ビーム)をオプション
@@ -180,7 +193,8 @@
       と表示する。視野内に収まっている試料は端の値がほぼ0のため、自動的に
       無適用となる。PAD_THRESH=0(以下)を指定すると強制的にOFFで、以前の版と
       完全に同一の結果になる。
-      ct_rec / hp_tg / p_rec / ofct_rec / ofct_srec / sf_rec / rec2rec の
+      ct_rec / act_rec / hp_tg / p_rec / ofct_rec / ofact_rec / ofct_srec /
+      sf_rec / rec2rec の
       すべてに効く。ただし rec2rec の入力は再構成円の外で端が減衰しているので、
       この場合は 0.1-0.2 程度の小さい値が適当。
 
@@ -268,6 +282,26 @@
 
       *) hp_tg と同じく、HiPic ディレクトリの一つ上で実行する。
 
+   e. 自動CT用の1枚再構成(8/16bit 直接出力)
+      act_rec_g_r layer center pixel_size offsetangle LACmin LACmax
+
+      layer: 再構成するレイヤー(高さ)
+      center: 回転軸の位置(pixel)
+      pixel size: 画素サイズ(um)
+      offsetangle: 回転軸の原点オフセット
+      LACmin / LACmax: 規格化範囲(tif_f2i と同じ意味。4章参照)
+
+      自動CT装置用。規格化定数が実行前に決まっているため、32bit tiff を
+      経由せず、カレントディレクトリに ro%05d.tif(8bit)と rh%05d.tif
+      (16bit)を同時に直接出力する(rec*.tif は出力しない)。引数は6個
+      すべて必須で、不足時はエラー停止する。量子化と ImageDescription
+      (8欄)は tif_f2i と同一規格のため、従来の「ct_rec(32bit)→
+      tif_f2i」の結果とバイト単位で一致する。再構成処理自体(リング除去・
+      カッピング補正・CBP)は ct_rec と同一。
+
+      *) q????.img もしくは q????.tif があるディレクトリで実行する。
+         (dark.img / dark.tif で自動判別)
+
 3. 360deg scan (offset CT)。標準的な吸収の画像再構成
    a. 回転軸位置の推定
        ofct_DO   raw {stride}          (CPU)
@@ -315,6 +349,15 @@
       
       *) q????.img もしくは q????.tif があるディレクトリで実行する。(dark.img / dark.tif で自動判別)
    
+
+
+   d. 自動CT用の1枚再構成(オフセットCT、8/16bit 直接出力)
+      ofact_rec_g_r layer offset pixel_size offsetangle LACmin LACmax
+
+      2e の act_rec のオフセットCT版(offset は ofct_rec の center と同じ
+      意味)。引数は6個すべて必須。出力はカレントディレクトリの
+      ro%05d.tif / rh%05d.tif のみで、rec*.tif は出力しない。従来の
+      「ofct_rec(32bit)→ tif_f2i」の結果とバイト単位で一致する。
 
 
 4. 32bit tiff 画像の規格化
