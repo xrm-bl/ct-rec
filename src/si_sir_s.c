@@ -1,4 +1,8 @@
-
+/*
+ * 2026-09-24: reads now also go through libtiff - build with
+ * rif_tiff.c instead of rif_fast.c/rsi.c (writes used libtiff
+ * already). (Claude Fable 5)
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include "cell.h"

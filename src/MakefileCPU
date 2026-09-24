@@ -189,7 +189,7 @@ rec_gf:
 hp2DO:
 	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/hp2DO hp2DO.c $(TIFFLIB) $(LIBS)
 tif_ave:
-	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/tif_ave tif_ave.c rif_fast.c $(TIFFLIB) $(LIBS)
+	$(CC) $(CFLAGS) $(AVXF) -o $(EXE_DIR)/tif_ave tif_ave.c rif_tiff.c $(TIFFLIB) $(LIBS)
 # tif_mgf is built with $(MGFFLAGS) on top of $(CFLAGS): -O3 -march=native
 # is what lets gcc vectorise the median sorting networks across neighbouring
 # pixels (pminub/pmaxub for 8bit, pminuw/pmaxuw for 16bit).
@@ -209,9 +209,9 @@ act_spl:
 act_spl2:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/act_spl2 act_spl2.c $(LIBS)
 gf_sd:
-	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/gf_sd error.c rif_fast.c sif_fast.c gf_sd.c $(LIBS)
+	$(CC) $(CFLAGS) $(AVXF) -o $(EXE_DIR)/gf_sd error.c rif_tiff.c sif_tiff.c gf_sd.c $(TIFFLIB) $(LIBS)
 gf_fd:
-	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/gf_fd error.c fft.c rif_fast.c sif_fast.c gf_fd.c $(LIBS)
+	$(CC) $(CFLAGS) $(AVXF) -o $(EXE_DIR)/gf_fd error.c fft.c rif_tiff.c sif_tiff.c gf_fd.c $(TIFFLIB) $(LIBS)
 his2tif6:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/his2tif6 his2tif6.c $(TIFFLIB) $(LIBS)
 ofsfa:
@@ -223,15 +223,15 @@ ofsfa:
 si_tools: si_rar si_sir_a si_sir_s si_sir si_gf
 
 si_rar:
-	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/si_rar error.c rif_fast.c csi.c rsi.c sif_fast.c si_rar.c $(LIBS)
+	$(CC) $(CFLAGS) $(AVXF) -o $(EXE_DIR)/si_rar error.c rif_tiff.c csi.c sif_tiff.c si_rar.c $(TIFFLIB) $(LIBS)
 si_sir_a:
-	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/si_sir_a error.c rif_fast.c csi.c rsi.c si_sir_a.c $(TIFFLIB) $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/si_sir_a error.c rif_tiff.c csi.c si_sir_a.c $(TIFFLIB) $(LIBS)
 si_sir_s:
-	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/si_sir_s error.c rif_fast.c csi.c rsi.c si_sir_s.c $(TIFFLIB) $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/si_sir_s error.c rif_tiff.c csi.c si_sir_s.c $(TIFFLIB) $(LIBS)
 si_sir:
-	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/si_sir error.c rif_fast.c csi.c rsi.c sif_fast.c si_sir_pipe.c $(LIBS)
+	$(CC) $(CFLAGS) $(AVXF) -o $(EXE_DIR)/si_sir error.c rif_tiff.c csi.c sif_tiff.c si_sir.c $(TIFFLIB) $(LIBS)
 si_gf:
-	$(CC) $(CFLAGS) $(OMPF) $(AVXF) -o $(EXE_DIR)/si_gf error.c fft.c csi.c rif_fast.c sif_fast.c si_gf.c $(LIBS)
+	$(CC) $(CFLAGS) $(AVXF) -o $(EXE_DIR)/si_gf error.c fft.c csi.c rif_tiff.c sif_tiff.c si_gf.c $(TIFFLIB) $(LIBS)
 
 # ---------------------------------------------------------------
 # Filters made by ClaudeAI

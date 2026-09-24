@@ -139,25 +139,25 @@ rem 3D Rectangle rotation
 rem si_rar.exe ro - +y +z +x ro_yz
 rem si_rar.exe ro - +z +x +y ro_zx
 rem %CC2% error.c rif.c csi.c rsi.c sif.c si_rar.c /Fesi_rar.exe
-%CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c sif_fast.c si_rar.c /Fesi_rar.exe
+%CC2% /arch:AVX2 error.c rif_tiff.c csi.c sif_tiff.c si_rar.c %TIFFLIB% /Fesi_rar.exe
 
 rem 3D binning
 rem si_sir ro - 2 ro_2x2x2
 rem %CC2% error.c rif.c csi.c rsi.c sif.c si_sir.c /Fesi_sir.exe
-%CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c si_sir_a.c %TIFFLIB% /Fesi_sir_a.exe
-%CC2%/openmp /arch:AVX2  error.c rif_fast.c csi.c rsi.c si_sir_s.c %TIFFLIB% /Fesi_sir_s.exe
+%CC2% /openmp /arch:AVX2 error.c rif_tiff.c csi.c si_sir_a.c %TIFFLIB% /Fesi_sir_a.exe
+%CC2% /openmp /arch:AVX2 error.c rif_tiff.c csi.c si_sir_s.c %TIFFLIB% /Fesi_sir_s.exe
 rem %CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c sif_fast.c si_sir_fast.c /Fe:si_sir_fast.exe
-%CC2% /openmp /arch:AVX2 error.c rif_fast.c csi.c rsi.c sif_fast.c si_sir_pipe.c /Fe:si_sir.exe
+%CC2% /arch:AVX2 error.c rif_tiff.c csi.c sif_tiff.c si_sir.c %TIFFLIB% /Fe:si_sir.exe
 
 rem 3D gaussian filter for 8 or 16bit tiff
 rem   si_gf  orgDir  nameFile  radius  {bias}  newDir
-%CC2% /openmp /arch:AVX2  error.c fft.c csi.c rif_fast.c sif_fast.c si_gf.c /Fesi_gf.exe
+%CC2% /arch:AVX2 error.c fft.c csi.c rif_tiff.c sif_tiff.c si_gf.c %TIFFLIB% /Fesi_gf.exe
 
 rem hp2DO (unified: auto-detects img/tif from first argument)
 %CC2% /openmp /Fehp2DO.exe hp2DO.c %TIFFLIB%
 
 rem tif_ave
-%CC2% /openmp /arch:AVX2 /Fetif_ave.exe tif_ave.c rif_fast.c %TIFFLIB%
+%CC2% /arch:AVX2 /Fetif_ave.exe tif_ave.c rif_tiff.c %TIFFLIB%
 
 rem tif_mgf
 %CC2% /openmp /Fetif_mgf.exe tif_mgf.c %TIFFLIB%
@@ -175,8 +175,8 @@ rem act_spl
 %CC2% /Feact_spl2.exe act_spl2.c
 
 rem gf_sd fd
-%CC2% /openmp /arch:AVX2 /Fegf_sd.exe error.c rif_fast.c sif_fast.c gf_sd.c
-%CC2% /openmp /arch:AVX2 /Fegf_fd.exe error.c fft.c rif_fast.c sif_fast.c gf_fd.c
+%CC2% /arch:AVX2 /Fegf_sd.exe error.c rif_tiff.c sif_tiff.c gf_sd.c %TIFFLIB%
+%CC2% /arch:AVX2 /Fegf_fd.exe error.c fft.c rif_tiff.c sif_tiff.c gf_fd.c %TIFFLIB%
 
 rem his2tif6
 %CC2% /Fehis2tif6.exe his2tif6.c %TIFFLIB%
