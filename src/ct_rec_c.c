@@ -742,6 +742,11 @@ char	**argv;
 
 	free(po);	free(rec_temp);
 
+	// release CBP resources (GPU build: device/pinned memory and cuFFT
+	// plans; CPU build: thread pool buffers). P and f point into these
+	// buffers, so this must stay after their last use.
+	TermCBP();
+
 	// append to log file
 	FILE		*ff;
 	if((ff = fopen("../cmd-hst.log","a")) == NULL){

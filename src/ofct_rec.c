@@ -687,7 +687,12 @@ char	**argv;
 	printf("%s\t%f\t%f\t%d\t%f\t%f\t%f\t%f\t%f\n",fout, f_size, f_center, NNST, theta0, (float)data_min, (float)data_max, (float)t1, (float)t2);
 	
 	free(pp); free(rec_temp); free(frec);
-	
+
+	// release CBP resources (GPU build: device/pinned memory and cuFFT
+	// plans; CPU build: thread pool buffers). P and f point into these
+	// buffers, so this must stay after their last use.
+	TermCBP();
+
 	// append to log file
 	FILE		*ff;
 	if((ff = fopen("../cmd-hst.log","a")) == NULL){

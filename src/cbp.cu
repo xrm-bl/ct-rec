@@ -1,4 +1,5 @@
 ﻿
+#include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <cufft.h>
@@ -164,6 +165,42 @@ static float		*gpf,*F;
 static float2		*G,*PQ,*SC,*scf;	/* SC:角度表(device) scf:host転送用 */
 static cufftHandle	R2C,C2R,R2Ct,C2Rt;	/* 本体チャンク用と端数用のFFTプラン */
 
+/* ---- pinned ホストメモリ確保 (通常メモリへのフォールバック付き) ----
+   cudaMallocHost はノード全体のロック可能ページが尽きると失敗する
+   (同時ジョブ多数のとき "out of memory" ではなく "invalid argument"
+   として現れることがある)。pinned は一括転送を速くするだけなので、
+   失敗したら malloc に切り替えて続行する。フラグは TermCBP がどちらの
+   解放関数を使うべきかの記録。NULL を返すのは malloc も失敗したとき。 */
+static int	pinned_p,pinned_f,pinned_gpf,pinned_scf;
+
+static void	*HostAlloc(size_t size,int *pinned,const char *name)
+{
+	void		*ptr;
+	cudaError_t	err;
+
+	if ((err=cudaMallocHost(&ptr,size))==cudaSuccess) {
+	    *pinned=1; return ptr;
+	}
+	(void)cudaGetLastError();	/* 非stickyエラーをクリア */
+
+	(void)fprintf(stderr,
+	    "cbp.cu: cudaMallocHost(%s, %.0f MiB) failed (%s); falling back "
+	    "to pageable memory (host<->device transfers will be slower).\n",
+	    name,(double)size/1048576.0,cudaGetErrorString(err));
+
+	*pinned=0;
+	return malloc(size);
+}
+
+static void	HostFree(void *ptr,int pinned)
+{
+	if (pinned) {
+	    CUDA_SAFE_CALL(cudaFreeHost(ptr));
+	}
+	else
+	    free(ptr);
+}
+
 /* ---- Truncation (cupping) pad, controlled by env var PAD_THRESH ----
    When PAD_THRESH (a plain ratio) > 0 and the mean amplitude of the
    sinogram's outermost columns exceeds PAD_THRESH times the overall
@@ -247,11 +284,12 @@ EXTERN Float	**InitCBP(int n,int m)
 	    (f =ALLOC(Float *,(size_t)N))==NULL) return NULL;
 
 	/* 投影・再構成像のホスト側バッファは pinned にして、
-	   PrepareCBP/EndCBP の一括転送をフル帯域で行う */
-	CUDA_SAFE_CALL(cudaMallocHost((void **)p,
-				      sizeof(Float)*(size_t)M*(size_t)N));
-	CUDA_SAFE_CALL(cudaMallocHost((void **)f,
-				      sizeof(Float)*(size_t)N*(size_t)N));
+	   PrepareCBP/EndCBP の一括転送をフル帯域で行う
+	   (pinned が確保できなければ通常メモリで続行) */
+	if ((*p=(Float *)HostAlloc(sizeof(Float)*(size_t)M*(size_t)N,
+				   &pinned_p,"p"))==NULL ||
+	    (*f=(Float *)HostAlloc(sizeof(Float)*(size_t)N*(size_t)N,
+				   &pinned_f,"f"))==NULL) return NULL;
 
 	for (m=1; m<M; m++) p[m]=p[m-1]+N;
 	for (n=1; n<N; n++) f[n]=f[n-1]+N;
@@ -308,13 +346,15 @@ EXTERN Float	**InitCBP(int n,int m)
 		    (double)totalB/1048576.0);
 	}
 
-	CUDA_SAFE_CALL(cudaMallocHost((void **)&gpf,sof_L2));
+	if ((gpf=(float *)HostAlloc(sof_L2,&pinned_gpf,"gpf"))==NULL)
+	    return NULL;
 
 	CUDA_SAFE_CALL(cudaMalloc((void **)&G ,sof2_L1));
 	CUDA_SAFE_CALL(cudaMalloc((void **)&PQ,sof2_L1*MOmax));
 	CUDA_SAFE_CALL(cudaMalloc((void **)&F, sof_N*(size_t)N));
 	CUDA_SAFE_CALL(cudaMalloc((void **)&SC,sizeof(float2)*MOmax));
-	CUDA_SAFE_CALL(cudaMallocHost((void **)&scf,sizeof(float2)*MOmax));
+	if ((scf=(float2 *)HostAlloc(sizeof(float2)*MOmax,
+				     &pinned_scf,"scf"))==NULL) return NULL;
 
 	for (n=0; n<L2; n++) gpf[n]=Filter(n-L);
 
@@ -491,9 +531,9 @@ EXTERN void	TermCBP()
 	CUDA_SAFE_CALL(cudaFree(G));
 	CUDA_SAFE_CALL(cudaFree(SC));
 
-	CUDA_SAFE_CALL(cudaFreeHost(scf));
-	CUDA_SAFE_CALL(cudaFreeHost(gpf));
+	HostFree(scf,pinned_scf);
+	HostFree(gpf,pinned_gpf);
 
-	CUDA_SAFE_CALL(cudaFreeHost(*f)); free(f);
-	CUDA_SAFE_CALL(cudaFreeHost(*p)); free(p);
+	HostFree(*f,pinned_f); free(f);
+	HostFree(*p,pinned_p); free(p);
 }
