@@ -15,7 +15,7 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-09-09 版**（
 | `OMP_NUM_THREADS` | リング除去ソートフィルタの並列数 | 40 | sort_filter_omp.c sort_filter_g.cu | `get_num_threads_from_env()` が読む。**未設定時はOpenMP既定ではなく40を返す**。0以下は無効→40 |
 | `PAGANIN_THREADS` | ct_prj_f の Paganin 位相回復(内蔵 FFT)のスレッド数 | **論理CPU数** | paganin.h | 2026-09 新設(ver 2.5)。`OMP_NUM_THREADS` とは独立。OpenMP ビルドでのみ有効。0 以下・非数は既定にフォールバック |
 | `TIF2ZAR_THREADS` | tif2zar(TIFF→OME-Zarr 変換)のスレッド数 | **論理CPU数** | tif2zar.c | 2026-09 新設(ver 2.5)。読み込み・圧縮・書き出し・ピラミッドの OpenMP 並列数 |
-| `ACT_SPL_JOBS` | act_spl / act_spl2 (Linux) の背景ジョブ同時実行数 | 8 | act_spl.c act_spl2.c | 2026-07 新設。Linuxで gf_sd / tif_mgf を fork+exec 背景実行する際の上限(Windows は従来どおり `start /b`)。終了前に全ジョブを待ち合わせる |
+| `ACT_SPL_JOBS` | act_spl / act_spl2 (Linux) の背景ジョブ同時実行数 | 16 | act_spl.c act_spl2.c | 2026-07 新設。Linuxで gf_sd / tif_mgf を fork+exec 背景実行する際の上限(Windows は従来どおり `start /b`)。終了前に全ジョブを待ち合わせる |
 
 ※ GPUソートは内部 `SORT_THREADS=256`、GPUフィルタは `BLOCK_SIZE_X/Y/Z=8/8/4` の固定値(環境変数ではない)。
 
@@ -64,7 +64,7 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-09-09 版**（
 |---|---|
 | `CBP_THREADS` | 既定 8 → **論理コア数−1(下限1)**。対象に cbp_thread_avx.c(新設・選択制)追加 |
 | `HPTG_READ_THREADS` | **新設**(既定16)。hp_tg / ofct_srec の投影並列読み込み |
-| `ACT_SPL_JOBS` | **新設**(既定8)。act_spl / act_spl2 の Linux 背景ジョブ上限 |
+| `ACT_SPL_JOBS` | **新設**(既定16)。act_spl / act_spl2 の Linux 背景ジョブ上限 |
 | `PAGANIN_THREADS` | **新設**(ver 2.5、既定=論理CPU数)。ct_prj_f の Paganin 位相回復のスレッド数 |
 | `TIF2ZAR_THREADS` | **新設**(ver 2.5、既定=論理CPU数)。tif2zar のスレッド数 |
 | `OFCT_DO_SMOOTH` | **新設**(既定1.0、0で無効)。ofct_DO(_g) の前処理平滑化 |

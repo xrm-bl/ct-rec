@@ -2,6 +2,7 @@
 
 上杉
 
+2026.10.06  ver. 2.7
 2026.09.22  ver. 2.6
 2026.09.09  ver. 2.5
 2026.08.06  ver. 2.4
@@ -10,6 +11,16 @@
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+【ver 2.7 の変更点】
+  ・act_spl2 / act_spl(Linux): 背景フィルタジョブの同時実行数上限(環境変数
+    ACT_SPL_JOBS)の既定値を 8 から 16 に変更。上限の動作自体は検証済み
+    (既定 16、ACT_SPL_JOBS=3 で 3)。効いていないように見える場合は、バイナリ
+    が 2026-07-23 より古いか、tif_mgf / gf_sd が PATH にないことが原因。
+    Windows は従来どおり start /b で無制限。
+  ・Windows 版バイナリ(CPU 版ツール)を再ビルド。
+  ・GPU 版 ct_rec のメモリ使用量と並列実行数の見積もりメモ
+    20260919_ct_rec_gpu_memory.md を追加。
 
 【ver 2.6 の変更点】
   ・自動CT装置用の再構成 act_rec_g_r(180deg)/ ofact_rec_g_r(オフセットCT)
@@ -569,7 +580,7 @@
       どちらも実行ディレクトリの conv.bat と output.log を各 raw/ にコピーし、
       conv.bat 中の img を tif に書き換える。実行後 cmd-hst.log に記録が残る。
       フィルタは Windows では start /b、Linux では fork+exec で背景実行する。
-      Linux での同時実行数は環境変数 ACT_SPL_JOBS(既定8)で制限し、終了前に
+      Linux での同時実行数は環境変数 ACT_SPL_JOBS(既定16)で制限し、終了前に
       全ジョブの完了を待ち合わせる。
 
       例: act_spl2 7501 8 3 1

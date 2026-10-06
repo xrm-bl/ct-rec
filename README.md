@@ -68,13 +68,14 @@ libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/g
 |---|---|
 | [20260827_install_windows.md](20260827_install_windows.md) | install on Windows and run the first reconstruction (Japanese) |
 | [20260827_install_windows_EN.md](20260827_install_windows_EN.md) | same, English |
-| [readme.txt](readme.txt) | full manual, Japanese (current: ver 2.6) |
+| [readme.txt](readme.txt) | full manual, Japanese (current: ver 2.7) |
 | [readme_e.txt](readme_e.txt) | full manual, English |
 | [20260723_CT_env_vars.md](20260723_CT_env_vars.md) | all environment variables with defaults |
 | [20260504_filter_readme.md](20260504_filter_readme.md) | filter tools |
 | [20260806_low_transmission_guard.md](20260806_low_transmission_guard.md) | technical note: low-transmission guard |
 | [20260909_paganin_phase_retrieval.md](20260909_paganin_phase_retrieval.md) | technical note: Paganin phase retrieval in `ct_prj_f` (Japanese) |
 | [20260909_tif2zar.md](20260909_tif2zar.md) | `tif2zar`: TIFF series to OME-Zarr converter (Japanese) |
+| [20260919_ct_rec_gpu_memory.md](20260919_ct_rec_gpu_memory.md) | technical note: GPU memory usage of `ct_rec_g_*` and how many instances fit on one GPU (Japanese) |
 | [20260815_corrections.md](20260815_corrections.md) | the three corrections applied on top of plain CBP, with references (Japanese) |
 | [20260815_corrections_EN.md](20260815_corrections_EN.md) | same, English |
 | [imagej-plugins/readme.txt](imagej-plugins/readme.txt) | ImageJ plugin build/install |

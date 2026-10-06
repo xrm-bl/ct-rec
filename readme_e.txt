@@ -3,6 +3,7 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.10.06  ver. 2.7
 2026.09.22  ver. 2.6
 2026.09.09  ver. 2.5
 2026.08.06  ver. 2.4
@@ -11,6 +12,17 @@ Uesugi
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+[ver 2.7 changes]
+  - act_spl2 / act_spl (Linux): the default upper limit of concurrent
+    background filter jobs (environment variable ACT_SPL_JOBS) is raised
+    from 8 to 16.  The limit itself is verified to work (16 by default,
+    3 with ACT_SPL_JOBS=3); if it seems ineffective, the binary predates
+    2026-07-23 or tif_mgf / gf_sd is not on the PATH.  Windows is
+    unchanged (start /b, no limit).
+  - Windows binaries (CPU tools) rebuilt.
+  - New note 20260919_ct_rec_gpu_memory.md: GPU memory usage of ct_rec_g_*
+    and an estimate of how many instances fit on one GPU.
 
 [ver 2.6 changes]
   - New reconstruction programs for the automatic CT system:
@@ -660,7 +672,7 @@ Uesugi
       cmd-hst.log when finished.
       The filters are run in the background: with start /b on Windows and with
       fork+exec on Linux. On Linux the number of concurrent jobs is limited by
-      the environment variable ACT_SPL_JOBS (default 8), and all jobs are
+      the environment variable ACT_SPL_JOBS (default 16), and all jobs are
       waited for before the program exits.
 
       Example: act_spl2 7501 8 3 1

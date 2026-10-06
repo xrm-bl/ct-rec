@@ -14,7 +14,7 @@
 /* 背景ジョブ実行(上限付き): Windows 側の "start /b" に相当。
    Linux では system() が完了までブロックするため tif_mgf が逐次実行に
    なっていた。fork+exec で背景実行し、同時実行数を ACT_SPL_JOBS
-   (既定 8) で制限、終了前に wait_bg() で全ジョブを待ち合わせる。 */
+   (既定 16) で制限、終了前に wait_bg() で全ジョブを待ち合わせる。 */
 
 static int	bg_njobs=0, bg_maxjobs=0;
 
@@ -24,7 +24,7 @@ static void	run_bg(const char *cmd)
 
 	if (bg_maxjobs<=0) {
 	    char *e=getenv("ACT_SPL_JOBS");
-	    bg_maxjobs=(e!=NULL && atoi(e)>0)?atoi(e):8;
+	    bg_maxjobs=(e!=NULL && atoi(e)>0)?atoi(e):16;
 	}
 	while (bg_njobs>=bg_maxjobs) {
 	    if (wait(NULL)>0) bg_njobs--;
@@ -180,7 +180,7 @@ char	**argv;
 			snprintf(command, sizeof(command), "start /b tif_mgf a%06ld.tif %03d\\raw\\a%0*d.tif %d %f", k,j,wd,l,mk,gk);
 			if (system(command) == -1) {printf("command error at tif %d\n",k); }
 			#else
-			/* Windows の "start /b" と同様に背景実行 (上限 ACT_SPL_JOBS, 既定8) */
+			/* Windows の "start /b" と同様に背景実行 (上限 ACT_SPL_JOBS, 既定16) */
 			snprintf(command, sizeof(command), "tif_mgf a%06ld.tif %03d/raw/a%0*d.tif %d %f", k,j,wd,l,mk,gk);
 			run_bg(command);
 			#endif
