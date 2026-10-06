@@ -192,6 +192,62 @@ extern "C" int get_num_threads_from_env(void)
 }
 
 /*----------------------------------------------------------------------*/
+/* Persistent device buffers.                                            */
+/* The old code did cudaMalloc x4 / cudaFree x4 on every call; hp_tg      */
+/* calls this once per slice, so the buffers are now allocated on first   */
+/* use and kept (grown on demand).  d_image doubles as the result buffer: */
+/* the sort has consumed it before median_scatter writes.  Peak device    */
+/* memory is unchanged (3 * Nx * Ny * 4 bytes); it simply stays allocated */
+/* until sort_filter_gpu_release() or process exit.                       */
+static float        *g_d_image = NULL;   /* input, then result */
+static float        *g_d_sval  = NULL;
+static unsigned int *g_d_perm  = NULL;
+static size_t        g_cap     = 0;      /* capacity in elements */
+
+extern "C" void sort_filter_gpu_release(void)
+{
+    if (g_d_image) cudaFree(g_d_image);
+    if (g_d_sval)  cudaFree(g_d_sval);
+    if (g_d_perm)  cudaFree(g_d_perm);
+    g_d_image = NULL; g_d_sval = NULL; g_d_perm = NULL;
+    g_cap = 0;
+}
+
+static int sf_gpu_reserve(size_t total)
+{
+    if (total <= g_cap) return 0;
+    sort_filter_gpu_release();
+    CUDA_CHECK(cudaMalloc((void **)&g_d_image, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc((void **)&g_d_sval,  total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc((void **)&g_d_perm,  total * sizeof(unsigned int)));
+    g_cap = total;
+    return 0;
+}
+
+/*----------------------------------------------------------------------*/
+/* Pinned host memory with pageable fallback (see sort_filter_g.h).      */
+extern "C" void *sort_filter_gpu_host_alloc(size_t bytes, int *pinned)
+{
+    void *p = NULL;
+    cudaError_t err = cudaMallocHost(&p, bytes);
+
+    if (err == cudaSuccess) { *pinned = 1; return p; }
+    (void)cudaGetLastError();           /* clear the non-sticky error */
+    fprintf(stderr,
+        "sort_filter_g.cu: cudaMallocHost(%.0f MiB) failed (%s); falling back "
+        "to pageable memory (host<->device transfers will be slower).\n",
+        (double)bytes / 1048576.0, cudaGetErrorString(err));
+    *pinned = 0;
+    return malloc(bytes);
+}
+
+extern "C" void sort_filter_gpu_host_free(void *ptr, int pinned)
+{
+    if (ptr == NULL) return;
+    if (pinned) cudaFreeHost(ptr); else free(ptr);
+}
+
+/*----------------------------------------------------------------------*/
 /* Main GPU processing function.  Same signature as the OpenMP version;  */
 /* num_threads is accepted for compatibility but unused on the GPU.      */
 extern "C" int sort_filter_restore_gpu(float *image_data, float *result_data,
@@ -203,7 +259,8 @@ extern "C" int sort_filter_restore_gpu(float *image_data, float *result_data,
     size_t total = (size_t)Nx * (size_t)Ny;
 
     if (kernel_size < 2) {
-        memcpy(result_data, image_data, total * sizeof(float));
+        if (result_data != image_data)      /* in-place call: nothing to do */
+            memcpy(result_data, image_data, total * sizeof(float));
         return 0;
     }
     if (kernel_size % 2 == 0) {
@@ -236,38 +293,26 @@ extern "C" int sort_filter_restore_gpu(float *image_data, float *result_data,
             cudaFuncAttributeMaxDynamicSharedMemorySize, (int)shbytes));
     }
 
-    float        *d_image = NULL, *d_result = NULL, *d_sval = NULL;
-    unsigned int *d_perm  = NULL;
+    if (sf_gpu_reserve(total)) return 1;
 
-    CUDA_CHECK(cudaMalloc((void **)&d_image,  total * sizeof(float)));
-    CUDA_CHECK(cudaMalloc((void **)&d_sval,   total * sizeof(float)));
-    CUDA_CHECK(cudaMalloc((void **)&d_perm,   total * sizeof(unsigned int)));
-
-    CUDA_CHECK(cudaMemcpy(d_image, image_data, total * sizeof(float),
+    CUDA_CHECK(cudaMemcpy(g_d_image, image_data, total * sizeof(float),
                           cudaMemcpyHostToDevice));
 
     /* 1) sort every column (one block per column) */
     sort_columns_bitonic<<<Nx, SORT_THREADS, shbytes>>>(
-        d_image, d_sval, d_perm, Nx, Ny, pad);
+        g_d_image, g_d_sval, g_d_perm, Nx, Ny, pad);
     CUDA_CHECK(cudaGetLastError());
 
-    CUDA_CHECK(cudaFree(d_image));
-    d_image = NULL;
-
-    /* 2) median filter + scatter back to original positions */
-    CUDA_CHECK(cudaMalloc((void **)&d_result, total * sizeof(float)));
-
+    /* 2) median filter + scatter back to original positions.
+          g_d_image has been fully consumed by the sort, so it receives
+          the result (stream order guarantees the sort finished first). */
     int block = 256;
     int grid  = (int)((total + block - 1) / block);
-    median_scatter<<<grid, block>>>(d_sval, d_perm, d_result, Nx, Ny, kernel_size);
+    median_scatter<<<grid, block>>>(g_d_sval, g_d_perm, g_d_image, Nx, Ny, kernel_size);
     CUDA_CHECK(cudaGetLastError());
 
-    CUDA_CHECK(cudaMemcpy(result_data, d_result, total * sizeof(float),
+    CUDA_CHECK(cudaMemcpy(result_data, g_d_image, total * sizeof(float),
                           cudaMemcpyDeviceToHost));
-
-    CUDA_CHECK(cudaFree(d_sval));
-    CUDA_CHECK(cudaFree(d_perm));
-    CUDA_CHECK(cudaFree(d_result));
 
     return 0;
 }

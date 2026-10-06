@@ -37,6 +37,22 @@ Uesugi
     unchanged (start /b, no limit).
   - New note 20260919_ct_rec_gpu_memory.md: GPU memory usage of ct_rec_g_*
     and an estimate of how many instances fit on one GPU.
+  - hp_tg / ofct_srec: less per-slice overhead, same results.  Every slice
+    used to malloc/free about 1.4 GB of work buffers (ring removal input and
+    output, output image), which cost ~185 million page faults per run and
+    most of the "sys" time, and five single-threaded copies of the sinogram
+    and tomogram.  Now the ring removal runs in place on the CBP projection
+    buffer (pinned on the GPU build, so the host<->device copies run at full
+    speed), hp_tg writes the TIFF directly from the reconstruction buffer,
+    ofct_srec keeps its float conversion buffer, and the remaining copies
+    (projections in, black-projection check, tomogram out) are OpenMP
+    parallel.  sort_filter_g.cu keeps its device buffers between calls
+    instead of cudaMalloc/cudaFree x4 per call (new sort_filter_gpu_release();
+    result_data may now equal image_data).  The order of every arithmetic
+    operation is unchanged, so the output is byte-identical (verified on the
+    CPU build with a synthetic data set including black projections).  Note
+    for ct_rec_g_* run many-at-a-time: the ring-removal device buffers
+    (3 x Nx x Nt x 4 bytes) now stay allocated until the process exits.
 
 [ver 2.5 changes]
   - The projection-image generator ct_prj_f gained optional Paganin

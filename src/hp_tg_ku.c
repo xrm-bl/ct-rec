@@ -15,6 +15,16 @@
  *       HPTG_CHUNK_ROWS   : 1 チャンクあたりの行数を直接指定(最優先)
  *
  * 注意: 本プログラムは Dz==0 固定(スライス z = 行 y)。
+ *
+ * スライスごとのオーバーヘッド削減(2026-10):
+ *   旧版はリング除去用の image_data / result_data と Store() の書き出し
+ *   バッファをスライスごとに malloc/free しており、1 スライスあたり約
+ *   1.4 GB 分のページフォルトが sys 時間の大半を占めていた。現在は
+ *   - リング除去を P(cbp の連続バッファ、GPU 版は pinned)上でインプレース
+ *     に実行し、作業バッファと往復コピーを廃止、
+ *   - Store() は S.F が連続領域なのでコピーせず直接書き出し、
+ *   - W -> P の投影コピー、黒投影検出、F -> S.F の結果コピーは OpenMP 並列。
+ *   各要素の演算順序は従来と同一なので結果はビット単位で不変。
  * ==========================================================================*/
 
 #include <stdio.h>
@@ -154,25 +164,39 @@ static FUNCTION_T	Store(void *a)
 	Nx=s->N;
 	Ny=s->N;
 
-	if ((data32 = (float*)malloc(sizeof(float)*Nx*Ny)) == NULL) {
-		printf("cannot allocate memory for input 32bit TIFF image\n");
-		exit(1);
+	/* S.F は N*N の連続領域(S.F[y]=S.F[0]+y*N)なので、FOM==float なら
+	   コピーせずそのまま書き出す。FOM!=float のときだけ変換バッファを
+	   使う(初回に確保し、以後は使い回す)。 */
+	if (sizeof(FOM)==sizeof(float)) {
+	    data32=(float *)s->F[0];
+	}
+	else {
+	    static float	*conv=NULL;
+	    static size_t	conv_n=0;
+	    size_t		need=(size_t)Nx*(size_t)Ny;
+
+	    if (conv_n<need) {
+		free(conv);
+		if ((conv=(float *)malloc(sizeof(float)*need))==NULL) {
+		    printf("cannot allocate memory for output 32bit TIFF image\n");
+		    exit(1);
+		}
+		conv_n=need;
+	    }
+	    ll=0;
+	    for(y=0;y<Ny;++y)
+		for(x=0;x<Nx;++x) conv[ll++]=(float)s->F[y][x];
+	    data32=conv;
 	}
 
 /* insert start */
 
 	mmmin=100.0;
 	mmmax=-100.0;
-	ll=0;
-	for(y=0;y<Ny;++y){
-		for(x=0;x<Nx;++x){
-			*(data32+ll)=s->F[y][x];
-			XXX=*(data32+ll);
-			if (mmmin>XXX) mmmin = XXX;
-			if (mmmax<XXX) mmmax = XXX;
-			ll=ll+1;
-//			printf("%d\t%d\t%lf\n",x,y,XXX);
-		}
+	for(ll=0;ll<(long)Nx*(long)Ny;++ll){
+		XXX=*(data32+ll);
+		if (mmmin>XXX) mmmin = XXX;
+		if (mmmax<XXX) mmmax = XXX;
 	}
 	if ((comm=(char *)malloc(150))==NULL)
 		Error("comment memory allocation error.");
@@ -184,7 +208,7 @@ static FUNCTION_T	Store(void *a)
 	(void)printf("%d\t%s\n",s->z,comm);
 /* insert end */
 
-	free(data32); free(comm);
+	free(comm);
 	return RETURN_VALUE;
 }
 
@@ -305,6 +329,14 @@ int	main(int argc,char **argv)
 
 	S.N=Nx;
 
+	/* ---- リング除去は P 上でインプレース実行 ----
+	   前提: Float==float、かつ P[t]=P[0]+t*Nx の連続確保
+	   (cbp.cu / cbp_thread_*.c とも満たす)。 */
+	if (sizeof(Float)!=sizeof(float))
+	    Error("in-place ring removal requires Float==float.");
+	for (t=1; t<Nt; t++)
+	    if (P[t]!=P[t-1]+Nx) Error("projection buffer is not contiguous.");
+
 #ifdef WINDOWS
 	(void)sprintf(S.form,"%s\\rec%%0%dd.tif",argv[argc-1],5);
 #else
@@ -373,52 +405,58 @@ int	main(int argc,char **argv)
 
 	    /* ---- スライス cs..ce を再構成 ---- */
 	    for (z=cs; z<=ce; z++) {
+		/* 投影 t ごとに独立 -> OpenMP 並列(行単位のコピー) */
+		#pragma omp parallel for
 		for (t=0; t<Nt; t++) {
-		    P_F=P[t];
-		    if ((y=z+(int)floor(y0-dy*(double)t))<cy1 || y>cy2)
-			for (x=0; x<Nx; x++) *(P_F++)=0.0;
+		    Float	*pf=P[t],*wf;
+		    int		yy=z+(int)floor(y0-dy*(double)t),xx;
+
+		    if (yy<cy1 || yy>cy2)
+			for (xx=0; xx<Nx; xx++) pf[xx]=0.0;
 		    else {
-			w=W[y-cy1][t]; for (x=0; x<Nx; x++) *(P_F++)=(*(w++));
+			wf=W[yy-cy1][t]; for (xx=0; xx<Nx; xx++) pf[xx]=wf[xx];
 		    }
 		}
 
 /* ----------------  black projection correction start ---------------- */
 /*                                                                       */
 {
-		int		blk_t, blk_r, blk_good;
-		double	blk_sum;
+		int		blk_t, blk_r, blk_good=0, blk_black=0;
 		int		*blk_flag;
 		double	*blk_avg;
 
 		blk_flag = (int *)malloc((size_t)Nt * sizeof(int));
 		blk_avg  = (double *)malloc((size_t)Nx * sizeof(double));
 
-		/* initialize average profile */
-		for (blk_r = 0; blk_r < Nx; blk_r++) blk_avg[blk_r] = 0.0;
-		blk_good = 0;
-
-		/* detect black projections: all pixels == 0 */
+		/* detect black projections: all pixels == 0
+		   (投影ごとの和は従来と同じ r 昇順の double 加算 -> 同じ判定) */
+		#pragma omp parallel for
 		for (blk_t = 0; blk_t < Nt; blk_t++){
-			blk_sum = 0.0;
-			for (blk_r = 0; blk_r < Nx; blk_r++){
-				blk_sum += P[blk_t][blk_r];
-			}
-			if (blk_sum == 0.0){
-				blk_flag[blk_t] = 1;
+			double	s=0.0;
+			int	r;
+
+			for (r = 0; r < Nx; r++) s += P[blk_t][r];
+			blk_flag[blk_t] = (s == 0.0);
+		}
+		for (blk_t = 0; blk_t < Nt; blk_t++){
+			if (blk_flag[blk_t]) {
 				(void)fprintf(stderr, "Warning\t black\t z=%d t=%d\n", z, blk_t);
-			} else {
-				blk_flag[blk_t] = 0;
-				blk_good++;
-				for (blk_r = 0; blk_r < Nx; blk_r++){
-					blk_avg[blk_r] += P[blk_t][blk_r];
-				}
-			}
+				blk_black++;
+			} else blk_good++;
 		}
 
-		/* replace black projections with average profile */
-		if (blk_good > 0){
+		/* replace black projections with average profile
+		   (平均は黒投影があるときだけ計算。列ごとに t 昇順で加算するので
+		    従来の加算順と同一 -> 同じ値) */
+		if (blk_black > 0 && blk_good > 0){
+			#pragma omp parallel for
 			for (blk_r = 0; blk_r < Nx; blk_r++){
-				blk_avg[blk_r] /= (double)blk_good;
+				double	s=0.0;
+				int	tt;
+
+				for (tt = 0; tt < Nt; tt++)
+					if (!blk_flag[tt]) s += P[tt][blk_r];
+				blk_avg[blk_r] = s / (double)blk_good;
 			}
 			for (blk_t = 0; blk_t < Nt; blk_t++){
 				if (blk_flag[blk_t] == 1){
@@ -437,32 +475,16 @@ int	main(int argc,char **argv)
 
 /* ----------------  ring removal start ---------------- */
 /*                                                       */
-	    float		*image_data = NULL, *result_data = NULL;
 	    // Get kernel size from environment variable
 	    kernel_size = get_kernel_size_from_env();
 		// Get number of threads from environment variable
 	    num_threads = get_num_threads_from_env();
-	    // Allocate memory
-		image_data = (float *)malloc((size_t)Nx * Nt * sizeof(float));
-		result_data = (float *)malloc((size_t)Nx * Nt * sizeof(float));
-
-		for (j=0; j<Nt; j++){
-			for (i=0; i<Nx; i++){
-				*(image_data+Nx*j+i)=P[j][i];
-			}
-		}
-		// Execute OpenMP image processing
-		if (SORT_FILTER_RESTORE(image_data, result_data, Nx, Nt, kernel_size, num_threads) != 0) {
-			fprintf(stderr, "OpenMP image processing failed\n");
+	    /* P 上でインプレース実行(入力=出力)。GPU 版は H2D 後に D2H、
+	       CPU 版は列ごとに全行を読んでから書くので、どちらも安全。 */
+		if (SORT_FILTER_RESTORE(P[0], P[0], Nx, Nt, kernel_size, num_threads) != 0) {
+			fprintf(stderr, "ring removal failed\n");
 			return 5;
 		}
-		for (j=0; j<Nt; j++){
-			for (i=0; i<Nx; i++){
-					P[j][i]=*(result_data+Nx*j+i);
-			}
-		}
-	    if (image_data) free(image_data);
-	    if (result_data) free(result_data);
 /* ----------------  ring removal finish --------------- */
 /*                                                       */
 
@@ -473,9 +495,13 @@ int	main(int argc,char **argv)
 
 		S.z=z;
 
+		#pragma omp parallel for
 		for (y=0; y<Nx; y++) {
-		    S_F=S.F[y]; P_F=F[y];
-		    for (x=0; x<Nx; x++) *(S_F++)=(*(P_F++));
+		    FOM		*sf=S.F[y];
+		    Float	*ff=F[y];
+		    int		xx;
+
+		    for (xx=0; xx<Nx; xx++) sf[xx]=ff[xx];
 		}
 		INIT_MT(T,Store,&S);
 	    }
@@ -497,6 +523,9 @@ int	main(int argc,char **argv)
 
 	TERM_MT(T);
 
+#ifdef USE_GPU
+	sort_filter_gpu_release();
+#endif
 	free(*(S.F)); free(S.F); free(**W); free(*W); free(W); TermCBP();
 
 	return 0;
