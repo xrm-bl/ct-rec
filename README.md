@@ -68,7 +68,7 @@ libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/g
 |---|---|
 | [20260827_install_windows.md](20260827_install_windows.md) | install on Windows and run the first reconstruction (Japanese) |
 | [20260827_install_windows_EN.md](20260827_install_windows_EN.md) | same, English |
-| [readme.txt](readme.txt) | full manual, Japanese (current: ver 2.7) |
+| [readme.txt](readme.txt) | full manual, Japanese (current: ver 2.6) |
 | [readme_e.txt](readme_e.txt) | full manual, English |
 | [20260723_CT_env_vars.md](20260723_CT_env_vars.md) | all environment variables with defaults |
 | [20260504_filter_readme.md](20260504_filter_readme.md) | filter tools |
