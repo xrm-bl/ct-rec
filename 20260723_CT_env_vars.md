@@ -10,8 +10,8 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-09-09 版**（
 | 変数 | 用途 | 既定 | 使用ファイル (src/) | 備考 |
 |---|---|---|---|---|
 | `CBP_THREADS` | CPU版CBP(畳み込み+逆投影)のワーカースレッド数 | **実行PCの論理コア数−1 (下限1)** | cbp_thread.c cbp_thread_int.c cbp_thread_nai.c cbp_thread_avx.c | 2026-07 変更(旧: 固定8)。`-DCBP_THREADS=n` でコンパイル時固定も可。1〜M(投影数)の範囲外は `bad number of CBP_THREADS` で停止 |
-| `HPTG_READ_THREADS` | hp_tg / ofct_srec / p_rec の投影**並列読み込み**スレッド数 | 16 | hp_tg_ku.c ofct_srec.c p_rec.c | 2026-07 新設(p_rec は 2026-10 から)。InfiniBand等のディスクアレイは並列読みで帯域が出る。投影数超は自動クランプ |
-| `HPTG_PIPELINE` | hp_tg / ofct_srec / p_rec の 1 スライス先行パイプライン | 1(有効) | hp_tg_ku.c ofct_srec.c p_rec.c | 2026-10 新設。`0` で先行をやめ、同じ関数を逐次順(準備→計算→保存)で実行(比較・切り分け用)。結果は同一 |
+| `HPTG_READ_THREADS` | hp_tg / ofct_srec / p_rec(および act_tg / ofact_srec)の投影**並列読み込み**スレッド数 | 16 | hp_tg_ku.c ofct_srec.c p_rec.c act_tg_ku.c ofact_srec.c | 2026-07 新設(p_rec は 2026-10 から)。InfiniBand等のディスクアレイは並列読みで帯域が出る。投影数超は自動クランプ |
+| `HPTG_PIPELINE` | hp_tg / ofct_srec / p_rec(および act_tg / ofact_srec)の 1 スライス先行パイプライン | 1(有効) | hp_tg_ku.c ofct_srec.c p_rec.c act_tg_ku.c ofact_srec.c | 2026-10 新設。`0` で先行をやめ、同じ関数を逐次順(準備→計算→保存)で実行(比較・切り分け用)。結果は同一 |
 | `THREADS` | 回転軸探索の比較スレッド数 | 40 | oct_xy.c otf_xy.c ofct_DO.c | 3本とも既定40。0以下は `bad number of THREADS` |
 | `OMP_NUM_THREADS` | リング除去ソートフィルタの並列数 | 40 | sort_filter_omp.c sort_filter_g.cu | `get_num_threads_from_env()` が読む。**未設定時はOpenMP既定ではなく40を返す**。0以下は無効→40 |
 | `PAGANIN_THREADS` | ct_prj_f の Paganin 位相回復(内蔵 FFT)のスレッド数 | **論理CPU数** | paganin.h | 2026-09 新設(ver 2.5)。`OMP_NUM_THREADS` とは独立。OpenMP ビルドでのみ有効。0 以下・非数は既定にフォールバック |
@@ -39,9 +39,9 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-09-09 版**（
 
 | 変数 | 用途 | 既定 | 使用ファイル (src/) | 備考 |
 |---|---|---|---|---|
-| `HPTG_MEM_FRACTION` | 使用を許す空きメモリの割合(バンドサイズ算定) | **hp_tg: 0.95 / ofct_srec, p_rec: 0.9** | hp_tg_ku.c ofct_srec.c p_rec.c | 有効域 0.05 < v ≤ 0.95、範囲外は既定維持。**同一ノードで複数プロセスを並走させる場合は 0.8/プロセス数 程度に下げること**(全員が9割を要求するとスワップする) |
-| `HPTG_MEM_LIMIT_MB` | メモリ上限の絶対値(MB) | 未設定=割合ベース | hp_tg_ku.c ofct_srec.c p_rec.c | mb>0 のとき budget を mb×1024×1024 に置換(HPTG_MEM_FRACTION より優先) |
-| `HPTG_CHUNK_ROWS` | 1バンドあたりのスライス行数を手動指定 | 未設定=自動 | hp_tg_ku.c ofct_srec.c p_rec.c | atoi>0 でその行数に強制(1〜total_rows にクランプ)。3変数の優先順位: CHUNK_ROWS > MEM_LIMIT_MB > MEM_FRACTION |
+| `HPTG_MEM_FRACTION` | 使用を許す空きメモリの割合(バンドサイズ算定) | **hp_tg, act_tg: 0.95 / ofct_srec, ofact_srec, p_rec: 0.9** | hp_tg_ku.c ofct_srec.c p_rec.c act_tg_ku.c ofact_srec.c | 有効域 0.05 < v ≤ 0.95、範囲外は既定維持。**同一ノードで複数プロセスを並走させる場合は 0.8/プロセス数 程度に下げること**(全員が9割を要求するとスワップする) |
+| `HPTG_MEM_LIMIT_MB` | メモリ上限の絶対値(MB) | 未設定=割合ベース | hp_tg_ku.c ofct_srec.c p_rec.c act_tg_ku.c ofact_srec.c | mb>0 のとき budget を mb×1024×1024 に置換(HPTG_MEM_FRACTION より優先) |
+| `HPTG_CHUNK_ROWS` | 1バンドあたりのスライス行数を手動指定 | 未設定=自動 | hp_tg_ku.c ofct_srec.c p_rec.c act_tg_ku.c ofact_srec.c | atoi>0 でその行数に強制(1〜total_rows にクランプ)。3変数の優先順位: CHUNK_ROWS > MEM_LIMIT_MB > MEM_FRACTION |
 
 ## 入出力 (HiPic/TIFF 共通リーダ)
 

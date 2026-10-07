@@ -1,4 +1,4 @@
-/* split HIS format file to img files  */
+﻿/* split HIS format file to img files  */
 /* usage is 'his_spl_K inputfile partnum loopnum' */
 
 /*----------------------------------------------------------------------*/

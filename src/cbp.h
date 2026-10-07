@@ -1,4 +1,4 @@
-
+﻿
 #ifndef	Float
 #define Float	float
 #endif

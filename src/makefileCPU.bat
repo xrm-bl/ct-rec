@@ -1,8 +1,8 @@
 
 set   ICI=icl /DWINDOWS /O3 /D_USE_MATH_DEFINES /Qparallel /Qprec-div /Qstd=c99 /Dpopen=_popen /Dpclose=_pclose /D_WIN64 /D_AMD64_ 
 set   ICX=icl /DWINDOWS /O3  /Qparallel /Qprec-div
-set   CC2=cl /DWINDOWS /O2 /D_USE_MATH_DEFINES
-set   CCX=cl /DWINDOWS /Ox /D_USE_MATH_DEFINES
+set   CC2=cl /utf-8 /DWINDOWS /O2 /D_USE_MATH_DEFINES
+set   CCX=cl /utf-8 /DWINDOWS /Ox /D_USE_MATH_DEFINES
 set   CBP=cbp_thread_int.c
 set   CBPd=cbp_thread_nai.c
 set   SIF_F=sif_f_fast.c

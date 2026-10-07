@@ -1,6 +1,6 @@
 set   ICX=icl /DWINDOWS /O3 /Qparallel /Qprec-div
-set   CC2=cl /DWINDOWS /O2 /D_USE_MATH_DEFINES
-set   CCX=cl /DWINDOWS /Ox /D_USE_MATH_DEFINES
+set   CC2=cl /utf-8 /DWINDOWS /O2 /D_USE_MATH_DEFINES
+set   CCX=cl /utf-8 /DWINDOWS /Ox /D_USE_MATH_DEFINES
 set   CBP=cbp_thread_int.c
 set   SIF_F=sif_f_fast.c
 set   TIFFLIB=libtiff.lib jpeg.lib lzma.lib zs.lib
@@ -90,10 +90,17 @@ rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_s.exe  otf_rec.c error.c sort_filter_g.
 rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_c.exe  otf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /Feofct_rec_g_c.exe ofct_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
-rem automatic-CT reconstruction (fixed LAC range, direct 8/16bit output, no 32bit tiff)
+rem automatic-CT continuous reconstruction (direct 16bit rh*.tif + 8bit ro*.tif output, no 32bit tiff)
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /Feact_rec_g_r.exe act_rec_c.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
-%CC2% /openmp /DUSE_GPU /Feofact_rec_g_r.exe ofact_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Feact_tg_g_r.exe act_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofact_srec_g_r.exe ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Feact_tg_g_s.exe act_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofact_srec_g_s.exe ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Feact_tg_g_c.exe act_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /Feofact_srec_g_c.exe ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+
 
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran

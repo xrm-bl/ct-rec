@@ -1,4 +1,4 @@
-/*
+﻿/*
  * cbp_thread_avx.c - convolution back projection, float + AVX2/FMA
  *
  * cbp_thread_int.c (整数固定小数点BP) の選択制の変種。量子化を行わない

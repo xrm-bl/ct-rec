@@ -1,8 +1,17 @@
 ﻿/* ============================================================================
- * hp_tg_ku.c  (HiPic 入力 + メインメモリ上限チェック / チャンク分割版)
+ * act_tg_ku.c  自動CT装置用の連続再構成 (hp_tg_ku.c から派生、2026-10)
  * ----------------------------------------------------------------------------
+ *   act_tg HiPic Dr RC RA0          rec16 LACmin16 LACmax16 rec8 LACmin8 LACmax8
+ *   act_tg HiPic Dr L1 C1 L2 C2 RA0 rec16 LACmin16 LACmax16 rec8 LACmin8 LACmax8
+ *
  * 入力は rhp.h のリーダ(InitReadHiPic / ReadHiPic / TermReadHiPic / HiPic)
- * 経由で読む。出力は従来どおり rec*.tif (32bit float TIFF)。
+ * 経由で読む。出力は 32bit float TIFF ではなく、規格化範囲を引数で与えて
+ *   16bit  rec16/rh%05d.tif  (LACmin16 .. LACmax16)
+ *    8bit  rec8/ro%05d.tif   (LACmin8  .. LACmax8)
+ * を同時に直接書き出す。量子化規則(val=(long)(div*(v-LACmin))、1 未満は 0、
+ * 上限で飽和、奇数サイズは偶数に切り詰め)と 8 欄の ImageDescription は
+ * tif_f2i と同一で、「hp_tg (32bit) -> tif_f2i」の結果と画素値・記述ともに
+ * 一致する。再構成処理(読み込み、リング除去、CBP、パイプライン)は hp_tg と同じ。
  *
  * メモリ上限チェックとチャンク(複数パス)実行:
  *   巨大配列 W (= 行数 x Nt x Nx x sizeof(Float)) が空き物理メモリに
@@ -87,10 +96,13 @@ if (TERM_THREAD(T)) Error("multi-threading termination error.")
 #define LEN	2048
 
 typedef struct {
-		char	form[LEN];
-		int	z,N;
-		double	rc;		/* このスライスの回転中心 (ImageDescription 用) */
+		char	form16[LEN],form8[LEN];	/* "dir/rh%05d.tif", "dir/ro%05d.tif" */
+		int	z,N,cN;			/* cN: 偶数に切り詰めた出力サイズ(tif_f2i と同じ) */
+		double	rc;			/* このスライスの回転中心 (ImageDescription 用) */
 		FOM	**F;
+		unsigned short	*d16;		/* 量子化バッファ(1 回確保) */
+		unsigned char	*d8;
+		double	lo16,hi16,lo8,hi8;	/* 規格化範囲 */
 	} Struct;
 
 /* insert start */
@@ -130,27 +142,44 @@ static unsigned long long get_total_memory_bytes(void)
 }
 
 
-void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
+static void Store8TiffFile(char *wname, int wX, int wY, unsigned char *data8, char *wdesc)
 {
 	TIFF *image;
-	long i;
 
-	image = TIFFOpen(wname, "w");
+	if ((image = TIFFOpen(wname, "w"))==NULL) Error("cannot open 8bit output file.");
 
 	TIFFSetField(image, TIFFTAG_IMAGEWIDTH, wX);
 	TIFFSetField(image, TIFFTAG_IMAGELENGTH, wY);
-	TIFFSetField(image, TIFFTAG_BITSPERSAMPLE, 32);
+	TIFFSetField(image, TIFFTAG_BITSPERSAMPLE, 8);
 	TIFFSetField(image, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
 	TIFFSetField(image, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
-	TIFFSetField(image, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP );
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
-	TIFFSetField(image, TIFFTAG_ARTIST, "hp_tg");
-//	TIFFSetField(image, TIFFTAG_MINSAMPLEVALUE, mmmin );
-//	TIFFSetField(image, TIFFTAG_MAXSAMPLEVALUE, mmmax );
+	TIFFSetField(image, TIFFTAG_ARTIST, "act_tg");
 
-		ct_write_raw_strips(image, data32, (uint32_t)wX, (uint32_t)wY, sizeof(float));
+	ct_write_raw_strips(image, data8, (uint32_t)wX, (uint32_t)wY, sizeof(unsigned char));
+
+	TIFFClose(image);
+}
+
+static void Store16TiffFile(char *wname, int wX, int wY, unsigned short *data16, char *wdesc)
+{
+	TIFF *image;
+
+	if ((image = TIFFOpen(wname, "w"))==NULL) Error("cannot open 16bit output file.");
+
+	TIFFSetField(image, TIFFTAG_IMAGEWIDTH, wX);
+	TIFFSetField(image, TIFFTAG_IMAGELENGTH, wY);
+	TIFFSetField(image, TIFFTAG_BITSPERSAMPLE, 16);
+	TIFFSetField(image, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
+	TIFFSetField(image, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
+	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
+	TIFFSetField(image, TIFFTAG_ARTIST, "act_tg");
+
+	ct_write_raw_strips(image, data16, (uint32_t)wX, (uint32_t)wY, sizeof(unsigned short));
 
 	TIFFClose(image);
 }
@@ -158,67 +187,56 @@ void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char 
 static FUNCTION_T	Store(void *a)
 {
 	Struct	*s=(Struct *)a;
-	char	path[LEN];
-
-/* insert start */
-	char	*comm = NULL;
-	double	mmmin, mmmax, XXX;
-	int		x,y;
+	char	path[LEN],comm[256];
+	double	mmmin=100.0,mmmax=-100.0,XXX;
+	int	N=s->N,cN=s->cN,x,y;
 	long	ll;
-/* insert end */
+	const float	*src=(const float *)s->F[0];	/* FOM==float は起動時に確認済み */
+	double	div16=65535.0/(s->hi16-s->lo16),
+		div8 =255.0  /(s->hi8 -s->lo8 );
 
-	float *data32;
-	int Nx, Ny;
-
-	(void)sprintf(path,s->form,s->z);
-	Nx=s->N;
-	Ny=s->N;
-
-	/* S.F は N*N の連続領域(S.F[y]=S.F[0]+y*N)なので、FOM==float なら
-	   コピーせずそのまま書き出す。FOM!=float のときだけ変換バッファを
-	   使う(初回に確保し、以後は使い回す)。 */
-	if (sizeof(FOM)==sizeof(float)) {
-	    data32=(float *)s->F[0];
+	/* スライス全体(N*N)の最小・最大: 32bit 出力の ImageDescription と同じ値 */
+	for (ll=0; ll<(long)N*(long)N; ll++) {
+	    XXX=src[ll];
+	    if (mmmin>XXX) mmmin=XXX;
+	    if (mmmax<XXX) mmmax=XXX;
 	}
-	else {
-	    static float	*conv=NULL;
-	    static size_t	conv_n=0;
-	    size_t		need=(size_t)Nx*(size_t)Ny;
 
-	    if (conv_n<need) {
-		free(conv);
-		if ((conv=(float *)malloc(sizeof(float)*need))==NULL) {
-		    printf("cannot allocate memory for output 32bit TIFF image\n");
-		    exit(1);
-		}
-		conv_n=need;
+	/* 量子化(tif_f2i と同じ規則): val=(long)(div*(v-LACmin))、1 未満は 0、
+	   上限で飽和。出力は左上 cN*cN(奇数サイズは tif_f2i と同じく偶数に切り詰め)。
+	   行ごとに独立なので OpenMP 並列(結果は不変)。 */
+	#pragma omp parallel for private(x)
+	for (y=0; y<cN; y++) {
+	    for (x=0; x<cN; x++) {
+		double	v=(double)src[(size_t)y*(size_t)N+x];
+		long	val;
+
+		val=(long)(div16*(v-s->lo16));
+		if (val<1) val=0;
+		if (val>65535) val=65535;
+		s->d16[(size_t)y*(size_t)cN+x]=(unsigned short)val;
+
+		val=(long)(div8*(v-s->lo8));
+		if (val<1) val=0;
+		if (val>255) val=255;
+		s->d8[(size_t)y*(size_t)cN+x]=(unsigned char)val;
 	    }
-	    ll=0;
-	    for(y=0;y<Ny;++y)
-		for(x=0;x<Nx;++x) conv[ll++]=(float)s->F[y][x];
-	    data32=conv;
 	}
 
-/* insert start */
+	/* 8 欄の ImageDescription: hp_tg の 6 欄 + tif_f2i が付ける規格化範囲 2 欄 */
+	sprintf(comm,"%f\t%f\t%d\t%f\t%lf\t%lf\t%lf\t%lf",
+		Dr*10000.0, s->rc, hpNtM, RA0, mmmin, mmmax, s->lo16, s->hi16);
+	(void)sprintf(path,s->form16,s->z);
+	Store16TiffFile(path,cN,cN,s->d16,comm);
 
-	mmmin=100.0;
-	mmmax=-100.0;
-	for(ll=0;ll<(long)Nx*(long)Ny;++ll){
-		XXX=*(data32+ll);
-		if (mmmin>XXX) mmmin = XXX;
-		if (mmmax<XXX) mmmax = XXX;
-	}
-	if ((comm=(char *)malloc(150))==NULL)
-		Error("comment memory allocation error.");
+	sprintf(comm,"%f\t%f\t%d\t%f\t%lf\t%lf\t%lf\t%lf",
+		Dr*10000.0, s->rc, hpNtM, RA0, mmmin, mmmax, s->lo8, s->hi8);
+	(void)sprintf(path,s->form8,s->z);
+	Store8TiffFile(path,cN,cN,s->d8,comm);
 
-	sprintf(comm,"%f\t%f\t%d\t%f\t%lf\t%lf",Dr*10000.0, s->rc, hpNtM, RA0, mmmin, mmmax);
-
-//	StoreImageFile_Float(path,s->N,s->N,s->F,comm);
-	Store32TiffFile(path,Nx, Ny, 32, data32, comm);
-	(void)printf("%d\t%s\n",s->z,comm);
-/* insert end */
-
-	free(comm);
+	(void)printf("%d\t%f\t%f\t%d\t%f\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n",
+		s->z, Dr*10000.0, s->rc, hpNtM, RA0, mmmin, mmmax,
+		s->lo16, s->hi16, s->lo8, s->hi8);
 	return RETURN_VALUE;
 }
 
@@ -328,8 +346,9 @@ int	main(int argc,char **argv)
     int kernel_size = 5; // Default kernel size
     int num_threads = 40; // Default number of threads
 
-	if (argc!=6 && argc!=9){
-		fprintf(stderr,"usage : hp_tg HiPic/ Dr RC RA0 rec/\nusage : hp_tg HiPic/ Dr L1 C1 L2 C2 RA0 rec/");
+	if (argc!=11 && argc!=14){
+		fprintf(stderr,"usage : act_tg HiPic/ Dr RC RA0 rec16/ LACmin16 LACmax16 rec8/ LACmin8 LACmax8\n"
+			       "usage : act_tg HiPic/ Dr L1 C1 L2 C2 RA0 rec16/ LACmin16 LACmax16 rec8/ LACmin8 LACmax8\n");
 	    Error(" ");  
 	}
 
@@ -341,7 +360,7 @@ int	main(int argc,char **argv)
 	if ((Dr=0.0001*atof(argv[2]))<EPS)   // um -> cm
 	    Error("bad horizontal interval of detectors on HiPic image.");
 
-	if (argc==6){
+	if (argc==11){
 	    Nz=Ny; z1=0; z2=Nz-1; RC=atof(argv[3]); Ct=0.0;
 	}
 	else{
@@ -354,7 +373,7 @@ int	main(int argc,char **argv)
 	}
 
 //	RC=RC-1.0;
-	RA0=atof(argv[argc-2])*DEG;
+	RA0=atof(argv[argc-7])*DEG;	/* 末尾 6 個が rec16 LACmin16 LACmax16 rec8 LACmin8 LACmax8 */
 
 	P=InitCBP(Nx,Nt);
 	CBP_PIPE_INIT(P,Nx,Nt);
@@ -428,6 +447,15 @@ int	main(int argc,char **argv)
 	for (y=1; y<Nx; y++) S.F[y]=S.F[y-1]+Nx;
 
 	S.N=Nx;
+	S.cN=(Nx%2)?Nx-1:Nx;		/* tif_f2i と同じ偶数切り詰め */
+	S.lo16=atof(argv[argc-5]); S.hi16=atof(argv[argc-4]);
+	S.lo8 =atof(argv[argc-2]); S.hi8 =atof(argv[argc-1]);
+	if (!(S.hi16>S.lo16)) Error("LACmin16 must be smaller than LACmax16.");
+	if (!(S.hi8 >S.lo8 )) Error("LACmin8 must be smaller than LACmax8.");
+	if (sizeof(FOM)!=sizeof(float)) Error("act_tg requires FOM==float.");
+	if ((S.d16=(unsigned short *)malloc(sizeof(unsigned short)*(size_t)S.cN*(size_t)S.cN))==NULL ||
+	    (S.d8 =(unsigned char  *)malloc(sizeof(unsigned char )*(size_t)S.cN*(size_t)S.cN))==NULL)
+	    Error("memory allocation error for 8/16bit output.");
 
 	/* ---- 投影バッファ 2 面(1 スライス先行パイプライン) ----
 	   Pbuf[0] は cbp の P、Pbuf[1] は AllocCBPProjection() の 2 面目
@@ -451,9 +479,11 @@ int	main(int argc,char **argv)
 		    Error("projection buffer is not contiguous.");
 
 #ifdef WINDOWS
-	(void)sprintf(S.form,"%s\\rec%%0%dd.tif",argv[argc-1],5);
+	(void)sprintf(S.form16,"%s\\rh%%0%dd.tif",argv[argc-6],5);
+	(void)sprintf(S.form8, "%s\\ro%%0%dd.tif",argv[argc-3],5);
 #else
-	(void)sprintf(S.form,"%s/rec%%0%dd.tif",argv[argc-1],5);
+	(void)sprintf(S.form16,"%s/rh%%0%dd.tif",argv[argc-6],5);
+	(void)sprintf(S.form8, "%s/ro%%0%dd.tif",argv[argc-3],5);
 #endif
 
 	/* ============================================================
@@ -584,6 +614,7 @@ int	main(int argc,char **argv)
 #ifdef USE_GPU
 	sort_filter_gpu_release();
 #endif
+	free(S.d16); free(S.d8);
 	free(*(S.F)); free(S.F); free(**W); free(*W); free(W); TermCBP();
 
 	return 0;

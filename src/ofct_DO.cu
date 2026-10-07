@@ -1,4 +1,4 @@
-/*======================================================================*/
+﻿/*======================================================================*/
 /* ofct_DO.cu : GPU version of ofct_DO (offset-CT rotation-axis finder). */
 /*                                                                        */
 /* Host side (reading via rhp_c, -log, horizontal flip of the opposing   */

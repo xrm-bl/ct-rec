@@ -1,4 +1,4 @@
-
+﻿
 #ifndef	FOM
 #define FOM	double
 #endif

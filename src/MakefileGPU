@@ -35,10 +35,10 @@ NVCCFLAGS = -O3 -I$(CUDAINCL) $(CUDA_ARCH) -use_fast_math -Xcompiler "-Wno-unuse
 EXE_DIR = ../bin
 
 .PHONY: all clean ct_rec_g hp_tg_g \
-        ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_rec_g filters_g
+        ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g act_tg_g ofact_srec_g filters_g
 
 all: ct_rec_g hp_tg_g \
-     ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_rec_g filters_g
+     ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g filters_g
 
 # ---------------------------------------------------------------
 # GPU ring removal object (pure CUDA C; no Thrust, no -lstdc++)
@@ -140,18 +140,32 @@ ofct_rec_g_c: sort_filter_g.o
 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofct_rec_g_c ofct_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 
 # ---------------------------------------------------------------
-# Automatic-CT reconstruction (GPU): the LAC normalization range is
-# given on the command line, so the slice is written directly as
-# 8bit (ro*.tif) + 16bit (rh*.tif); no 32bit float tiff stage.
+# Automatic-CT continuous reconstruction (GPU):
+# hp_tg / ofct_srec with direct 16bit (rh*.tif) + 8bit (ro*.tif) output,
+# normalization range on the command line; no 32bit float tiff stage.
 # ---------------------------------------------------------------
-act_rec_g: act_rec_g_r ofact_rec_g_r
+act_g: act_tg_g ofact_srec_g
+act_tg_g: act_tg_g_r act_tg_g_s act_tg_g_c
+ofact_srec_g: ofact_srec_g_r ofact_srec_g_s ofact_srec_g_c
 
-act_rec_g_r: sort_filter_g.o
+act_tg_g_r: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/act_rec_g_r act_rec_c.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
-ofact_rec_g_r: sort_filter_g.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DFOM=float -DFloat=float -o $(EXE_DIR)/act_tg_g_r act_tg_ku.c error.c rhp_c.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+act_tg_g_s: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DFOM=float -DFloat=float -o $(EXE_DIR)/act_tg_g_s act_tg_ku.c error.c rhp_c.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+act_tg_g_c: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DFOM=float -DFloat=float -o $(EXE_DIR)/act_tg_g_c act_tg_ku.c error.c rhp_c.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofact_srec_g_r: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
-	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofact_rec_g_r ofact_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofact_srec_g_r ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofact_srec_g_s: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofact_srec_g_s ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofact_srec_g_c: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofact_srec_g_c ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 
 # oftf_srec_g: oftf_srec_g_r oftf_srec_g_s oftf_srec_g_c
 # 
@@ -223,7 +237,8 @@ clean:
 	$(EXE_DIR)/tf_tg_g_r  $(EXE_DIR)/tf_tg_g_s  $(EXE_DIR)/tf_tg_g_c \
 	$(EXE_DIR)/ofct_srec_g_r $(EXE_DIR)/ofct_srec_g_s $(EXE_DIR)/ofct_srec_g_c \
 	$(EXE_DIR)/ofct_rec_g_r  $(EXE_DIR)/ofct_rec_g_s  $(EXE_DIR)/ofct_rec_g_c \
-	$(EXE_DIR)/act_rec_g_r   $(EXE_DIR)/ofact_rec_g_r \
+	$(EXE_DIR)/act_tg_g_r    $(EXE_DIR)/act_tg_g_s    $(EXE_DIR)/act_tg_g_c \
+	$(EXE_DIR)/ofact_srec_g_r $(EXE_DIR)/ofact_srec_g_s $(EXE_DIR)/ofact_srec_g_c \
 	$(EXE_DIR)/ofct_DO_g \
 	$(EXE_DIR)/otf_rec_g_r   $(EXE_DIR)/otf_rec_g_s   $(EXE_DIR)/otf_rec_g_c \
 	$(EXE_DIR)/oftf_srec_g_r $(EXE_DIR)/oftf_srec_g_s $(EXE_DIR)/oftf_srec_g_c \

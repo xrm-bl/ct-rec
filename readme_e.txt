@@ -3,6 +3,7 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.10.08  ver. 2.7
 2026.09.22  ver. 2.6
 2026.09.09  ver. 2.5
 2026.08.06  ver. 2.4
@@ -12,16 +13,32 @@ Uesugi
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
 
+[ver 2.7 changes]
+  - New act_tg_g_F (2f) and ofact_srec_g_F (3d): whole-volume
+    reconstruction with direct 16-bit + 8-bit output.  They are hp_tg /
+    ofct_srec up to the reconstruction, but instead of 32-bit rec*.tif
+    every slice is written at the same time as rec16/rh%05d.tif and
+    rec8/ro%05d.tif, normalized with two ranges given on the command line
+    (rec16 LACmin16 LACmax16 rec8 LACmin8 LACmax8).  Quantisation,
+    even-size trimming and the 8-field ImageDescription are those of
+    tif_f2i, so the files are identical to "hp_tg / ofct_srec -> tif_f2i"
+    (verified on the CPU and GPU builds).  Written for the automatic CT
+    system, but usable for ordinary CT measurements as well; note that
+    the two normalization ranges must always be given explicitly - there
+    is no automatic range.  GPU builds only (_r / _s / _c).
+  - act_rec_g_r / ofact_rec_g_r (ver 2.6, single-slice, direct 8/16-bit)
+    are retired; they are no longer built or distributed.  Use act_tg /
+    ofact_srec, or ct_rec / ofct_rec followed by tif_f2i.
+  - hp_tg: in the pipelined build (ver 2.6 update) the rotation-centre
+    field of the ImageDescription could belong to the next slice for the
+    tilted-axis form (L1 C1 L2 C2); pixel values were not affected.  Fixed.
+  - Windows build: sources with Japanese comments now carry a UTF-8 BOM
+    and cl is called with /utf-8, so the C4819 code-page warnings are
+    gone.  No effect on Linux or on the generated code.
+
 [ver 2.6 changes]
-  - New reconstruction programs for the automatic CT system:
-    act_rec_g_r (180-degree scan) and ofact_rec_g_r (offset CT), see 2e
-    and 3d.  The normalization range (LACmin/LACmax) is given on the
-    command line, so the 32-bit float TIFF stage is skipped entirely:
-    each slice is written directly as 8-bit (ro*.tif) and 16-bit
-    (rh*.tif) at the same time.  The quantisation and the 8-field
-    ImageDescription are identical to tif_f2i; the output is verified
-    byte-identical to the legacy "reconstruction (32bit) -> tif_f2i"
-    chain.  All six arguments are mandatory.
+  - act_rec_g_r / ofact_rec_g_r: single-slice reconstruction for the
+    automatic CT system with direct 8/16-bit output (retired in ver 2.7).
   - All GPU tools: clearer messages on GPU memory exhaustion.  The
     free/total GPU memory and a hint are appended, and cuFFT errors now
     show the error-code name.  The reconstruction (cbp) layer estimates
@@ -294,8 +311,8 @@ Uesugi
       zero, so the pad is automatically not applied. Setting PAD_THRESH=0
       (or negative) forces it OFF, giving results identical to the previous
       version.
-      This applies to ct_rec / act_rec / hp_tg / p_rec / ofct_rec /
-      ofact_rec / ofct_srec / sf_rec / rec2rec alike. Note that the input of rec2rec is already attenuated at
+      This applies to ct_rec / hp_tg / act_tg / p_rec / ofct_rec /
+      ofct_srec / ofact_srec / sf_rec / rec2rec alike. Note that the input of rec2rec is already attenuated at
       the edges by the reconstruction circle, so a smaller value of about
       0.1-0.2 is appropriate there.
 
@@ -395,29 +412,28 @@ Uesugi
 
       *) As with hp_tg, run one directory above the HiPic directory.
 
-   e. Single Slice Reconstruction for the Automatic CT System
-      (direct 8/16-bit output)
-      act_rec_g_r layer center pixel_size offsetangle LACmin LACmax
+   f. Continuous Reconstruction for the Automatic CT System
+      (direct 16/8-bit output)
+      act_tg_g_r HiPic Dr RC RA0 rec16 LACmin16 LACmax16 rec8 LACmin8 LACmax8
+      act_tg_g_r HiPic Dr L1 C1 L2 C2 RA0 rec16 LACmin16 LACmax16 rec8 LACmin8 LACmax8
 
-      layer: Layer (height) to reconstruct
-      center: Rotation axis position (pixels)
-      pixel size: Pixel size (um)
-      offsetangle: Rotation axis origin offset
-      LACmin / LACmax: Normalization range (same meaning as in tif_f2i,
-                       see section 4)
+      HiPic, Dr, RC / L1 C1 L2 C2, RA0: as in hp_tg (2b)
+      rec16: Output directory for the 16-bit images rh%05d.tif
+      LACmin16 / LACmax16: Normalization range of the 16-bit images
+      rec8: Output directory for the 8-bit images ro%05d.tif
+      LACmin8 / LACmax8: Normalization range of the 8-bit images
 
-      For the automatic CT system, where the normalization range is fixed
-      before execution.  The 32-bit TIFF stage is skipped: the slice is
-      written directly to the current directory as ro%05d.tif (8-bit) and
-      rh%05d.tif (16-bit) at the same time (no rec*.tif is produced).
-      All six arguments are mandatory; the program stops with an error
-      otherwise.  The quantisation and the 8-field ImageDescription are
-      identical to tif_f2i, so the output is byte-identical to the legacy
-      "ct_rec (32bit) -> tif_f2i" chain.  The reconstruction itself (ring
-      removal, truncation pad, CBP) is the same as ct_rec.
+      Identical to hp_tg up to the reconstruction; instead of 32-bit
+      rec*.tif, every slice is written at the same time as a 16-bit and an
+      8-bit image with the two ranges given on the command line (both
+      directories must exist before execution; each LACmin must be smaller
+      than its LACmax).  Quantisation, even-size trimming and the 8-field
+      ImageDescription are the same as tif_f2i (section 4), so the files
+      are identical to what "hp_tg -> tif_f2i" produces.  All environment
+      variables of hp_tg apply.  GPU build only; the filter suffix is as
+      in hp_tg (act_tg_g_r / act_tg_g_s / act_tg_g_c).
 
-      *) Run in the directory containing q????.img or q????.tif files
-         (auto-detected from dark.img / dark.tif).
+      *) As with hp_tg, run one directory above the HiPic directory.
 
 3. 360-degree Scan (Offset CT): Standard Absorption CT Reconstruction
    a. Rotation Axis Position Estimation
@@ -468,16 +484,17 @@ Uesugi
 
       *) Run in the directory containing q????.img or q????.tif files (auto-detected from dark.img / dark.tif).
 
-   d. Single Slice Reconstruction for the Automatic CT System
-      (offset CT, direct 8/16-bit output)
-      ofact_rec_g_r layer offset pixel_size offsetangle LACmin LACmax
+   d. Offset-CT Continuous Reconstruction for the Automatic CT System
+      (direct 16/8-bit output)
+      ofact_srec_g_r HiPic Rc Oy rangeList Dr RA0 rec16 LACmin16 LACmax16 rec8 LACmin8 LACmax8
 
-      Offset-CT version of act_rec (2e); offset has the same meaning as
-      center in ofct_rec.  All six arguments are mandatory.  The output
-      is only ro%05d.tif / rh%05d.tif in the current directory (no
-      rec*.tif), byte-identical to the legacy "ofct_rec (32bit) ->
-      tif_f2i" chain.
-
+      Identical to ofct_srec (3b) up to the reconstruction; writes
+      rec16/rh%05d.tif (16-bit, LACmin16..LACmax16) and rec8/ro%05d.tif
+      (8-bit, LACmin8..LACmax8) directly, with the same quantisation and
+      ImageDescription as tif_f2i, so the files are identical to
+      "ofct_srec -> tif_f2i".  The three-argument form (HiPic Rc Oy) still
+      only prints the memory estimate.  GPU build only; the filter suffix
+      is as in ofct_srec (ofact_srec_g_r / _s / _c).
 
 4. Normalization of 32-bit TIFF Images
     tif_f2i bit rec out {LACmin LACmax} {x1 y1 x2 y2}
