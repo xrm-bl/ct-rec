@@ -41,7 +41,15 @@
     cudaMalloc/cudaFree × 4。解放用 sort_filter_gpu_release() を追加。
     result_data と image_data は同一バッファ可)。各演算の順序は従来と同一
     なので出力はバイト単位で一致する(黒投影を含む合成データで CPU 版を
-    旧版と比較して検証済み)。ct_rec_g_* を多数同時実行する場合の注意:
+    旧版と比較して検証済み)。
+    さらに hp_tg / ofct_srec は 1 スライス先行のパイプライン(cbp_pipe.h)で
+    動く。投影バッファを 2 面持ち、GPU がスライス z を再構成している間に
+    ホストはスライス z+1 の準備(投影コピー、黒投影判定、専用 CUDA ストリーム
+    でのリング除去)を済ませ、z の TIFF コピー・書き出しは z+1 の GPU 計算と
+    重なる。このために cbp.cu に AllocCBPProjection() / SelectCBPProjection()
+    を追加(既存の CBP() / BeginCBP() / EndCBP() は不変)。角度表の転送を FFT
+    より前に移し、BeginCBP() がフィルタ処理の完了を待たずに戻るようにした。
+    ct_rec_g_* を多数同時実行する場合の注意:
     リング除去のデバイスバッファ(3 × Nx × Nt × 4 バイト)がプロセス終了
     まで確保されたままになる。
 

@@ -160,6 +160,13 @@ __global__ void	BP_GMF(int N,int M,int L1,
 
 static int		N,M,L,L1,L2,batch,tail;
 static Float		**p,**f;
+/* 投影バッファの選択: PrepareCBP が読む配列。既定は p。hp_tg 等が
+   AllocCBPProjection() で 2 面目を確保し SelectCBPProjection() で切り替える
+   (1 スライス先行パイプライン)。 */
+static Float		**pin=NULL;
+#define MAX_EXT_P	4
+static Float		**pext[MAX_EXT_P];
+static int		pext_pinned[MAX_EXT_P],npext=0;
 static size_t		sof_L2,sof2_L1,sof_N,MOmax;
 static float		*gpf,*F;
 static float2		*G,*PQ,*SC,*scf;	/* SC:角度表(device) scf:host転送用 */
@@ -238,8 +245,8 @@ static void	DetectPad(void)
 	PadW=0;
 	if (PadThreshold()<=0.0) return;
 	for (m=0; m<M; m++) {
-	    for (n=0; n<N; n++) tot+=fabs((double)p[m][n]);
-	    edge+=fabs((double)p[m][0])+fabs((double)p[m][N-1]);
+	    for (n=0; n<N; n++) tot+=fabs((double)pin[m][n]);
+	    edge+=fabs((double)pin[m][0])+fabs((double)pin[m][N-1]);
 	}
 	if (tot>0.0 &&
 	    edge/(2.0*(double)M)>PadThr*tot/((double)M*(double)N)) {
@@ -293,6 +300,7 @@ EXTERN Float	**InitCBP(int n,int m)
 
 	for (m=1; m<M; m++) p[m]=p[m-1]+N;
 	for (n=1; n<N; n++) f[n]=f[n-1]+N;
+	pin=p;
 
 	sof_L2=sizeof(float)*(size_t)L2;
 	sof2_L1=sizeof(float2)*(size_t)L1;
@@ -378,6 +386,30 @@ EXTERN Float	**InitCBP(int n,int m)
 	return p;
 }
 
+/* ---- 追加の投影バッファ (pinned、M*N 連続、行ポインタ付き) ----
+   PrepareCBP の入力に SelectCBPProjection() で指定できる。TermCBP が解放する。 */
+EXTERN Float	**AllocCBPProjection(void)
+{
+	Float	**pp;
+	int	m;
+
+	if (npext>=MAX_EXT_P) return NULL;
+	if ((pp=ALLOC(Float *,(size_t)M))==NULL) return NULL;
+	if ((*pp=(Float *)HostAlloc(sizeof(Float)*(size_t)M*(size_t)N,
+				    &pext_pinned[npext],"p2"))==NULL) {
+	    free(pp); return NULL;
+	}
+	for (m=1; m<M; m++) pp[m]=pp[m-1]+N;
+	pext[npext++]=pp;
+	return pp;
+}
+
+/* 次の PrepareCBP/BeginCBP が読む投影バッファを選ぶ (NULL で既定の p) */
+EXTERN void	SelectCBPProjection(Float **pp)
+{
+	pin=(pp!=NULL)?pp:p;
+}
+
 EXTERN void	PrepareCBP()
 {
 	int	n,m;
@@ -390,7 +422,7 @@ EXTERN void	PrepareCBP()
 	       (旧実装はホスト詰め替え+cudaMemcpy を M回) */
 	    CUDA_SAFE_CALL(cudaMemset(PQ,0,sof2_L1*(size_t)M));
 	    CUDA_SAFE_CALL(cudaMemcpy2D((float *)PQ+L,sof2_L1,
-					p[0],sizeof(Float)*(size_t)N,
+					pin[0],sizeof(Float)*(size_t)N,
 					sof_N,(size_t)M,
 					cudaMemcpyHostToDevice));
 	    if (PadW>0) {
@@ -405,13 +437,13 @@ EXTERN void	PrepareCBP()
 	    for (n=L+N; n<L2; n++) gpf[n]=0.0;
 
 	    for (m=0; m<M; m++) {
-		for (n=0; n<N; n++) gpf[L+n]=p[m][n];
+		for (n=0; n<N; n++) gpf[L+n]=pin[m][n];
 		if (PadW>0)	/* edge hold + cosine decay (PAD_THRESH) */
 		    for (n=1; n<=PadW; n++) {
 			double w=0.5*(1.0+cos(M_PI*(double)n/(double)PadW));
 
-			gpf[L-n]    =(float)((double)p[m][0]  *w);
-			gpf[L+N-1+n]=(float)((double)p[m][N-1]*w);
+			gpf[L-n]    =(float)((double)pin[m][0]  *w);
+			gpf[L+N-1+n]=(float)((double)pin[m][N-1]*w);
 		    }
 
 		CUDA_SAFE_CALL(cudaMemcpy(PQ+(size_t)m*(size_t)L1,gpf,sof_L2,
@@ -436,6 +468,20 @@ EXTERN void	ExecuteCBP(double dr,double r0,double t0)
 #else
 #define MO	M
 #endif
+	/* 投影角の cos/sin を double で一度だけ生成して転送(ドリフト除去の要)。
+	   同期 cudaMemcpy なので FFT の投入より前に行う: 後ろに置くと、
+	   ホストがフィルタ処理の完了まで待たされ、BeginCBP が非同期に
+	   ならない (hp_tg の 1 スライス先行パイプラインの前提)。 */
+	{
+	    double	dt=M_PI/(double)MO;
+
+	    for (m=0; m<MO; m++) {
+		double th=t0+dt*(double)m;
+		scf[m].x=(float)cos(th); scf[m].y=(float)sin(th);
+	    }
+	    CUDA_SAFE_CALL(cudaMemcpy(SC,scf,sizeof(float2)*(size_t)MO,
+				      cudaMemcpyHostToDevice));
+	}
 	for (pq=PQ, m=0; m+batch<=M; m+=batch, pq+=(size_t)batch*(size_t)L1)
 	    CUFFT_SAFE_CALL(cufftExecR2C(R2C,(cufftReal *)pq,
 					     (cufftComplex *)pq));
@@ -466,15 +512,6 @@ EXTERN void	ExecuteCBP(double dr,double r0,double t0)
 	int	blocks=(N+THREADS_2D-1)/THREADS_2D;
 	dim3	blocks_2d(blocks,blocks),
 		threads_2d(THREADS_2D,THREADS_2D);
-	double	dt=M_PI/(double)MO;
-
-	/* 投影角の cos/sin を double で一度だけ生成して転送(ドリフト除去の要) */
-	for (m=0; m<MO; m++) {
-	    double th=t0+dt*(double)m;
-	    scf[m].x=(float)cos(th); scf[m].y=(float)sin(th);
-	}
-	CUDA_SAFE_CALL(cudaMemcpy(SC,scf,sizeof(float2)*(size_t)MO,
-				  cudaMemcpyHostToDevice));
 
 	    BP_GMF<<<blocks_2d,threads_2d>>>
 		  (N,MO,L1,
@@ -536,4 +573,9 @@ EXTERN void	TermCBP()
 
 	HostFree(*f,pinned_f); free(f);
 	HostFree(*p,pinned_p); free(p);
+	while (npext>0) {
+	    npext--;
+	    HostFree(*pext[npext],pext_pinned[npext]); free(pext[npext]);
+	}
+	pin=NULL;
 }

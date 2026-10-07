@@ -4,6 +4,7 @@
 #include <math.h>
 #include "rhp.h"
 #include "cbp.h"
+#include "cbp_pipe.h"
 //#include "sif_f.h"
 //#include "cell.h"
 //#include "sif.h"
@@ -27,7 +28,10 @@ extern void	Error(char *msg),
    GPU 版は pinned)上でインプレースに実行して作業バッファと往復コピーを廃止、
    Store() の変換バッファは初回のみ確保して使い回し、SG -> P の投影コピー、
    黒投影検出、F -> fom の結果コピーは OpenMP 並列。各要素の演算順序は従来と
-   同一なので結果はビット単位で不変。 */
+   同一なので結果はビット単位で不変。
+   さらに投影バッファを 2 面持ち、スライス z の BeginCBP の直後に z+1 の
+   準備(SG -> P、黒投影検出、リング除去)を行う 1 スライス先行パイプライン
+   (cbp_pipe.h、hp_tg_ku.c と同じ構造)。 */
 
 #ifdef	_WIN32
 #include <process.h>
@@ -186,6 +190,86 @@ static double	Log(double d)
 	return (d>0.0)?log(d):0.0;
 }
 
+/* ---- 1 スライス分のホスト側準備: SG[k] -> Pb、黒投影検出、リング除去 ----
+   GPU 版では直前のスライスの BeginCBP の後に呼ばれ、GPU 計算と並行して走る。 */
+static int	PrepareSlice(Float **Pb,Float **sgk,int N,int M,
+			     int *kernel_size,int *num_threads)
+{
+	int	m;
+
+	/* 投影 m ごとに独立 -> OpenMP 並列(行単位のコピー) */
+	#pragma omp parallel for
+	for (m=0; m<M; m++) {
+	    Float	*pf=Pb[m],*sf=sgk[m];
+	    int		rr;
+
+	    for (rr=0; rr<N; rr++) pf[rr]=sf[rr];
+	}
+
+/* ----------------  black projection correction start ---------------- */
+	{
+		int		blk_m, blk_r, blk_good=0, blk_black=0;
+		int		*blk_flag;
+		double	*blk_avg;
+
+		blk_flag = (int *)malloc(M * sizeof(int));
+		blk_avg  = (double *)malloc(N * sizeof(double));
+		if (blk_flag==NULL || blk_avg==NULL)
+			Error("memory allocation error for black projection check.");
+
+		/* detect black projections: all pixels == 0
+		   (投影ごとの和は従来と同じ r 昇順の double 加算 -> 同じ判定) */
+		#pragma omp parallel for
+		for (blk_m = 0; blk_m < M; blk_m++){
+			double	s=0.0;
+			int	r;
+
+			for (r = 0; r < N; r++) s += Pb[blk_m][r];
+			blk_flag[blk_m] = (s == 0.0);
+		}
+		for (blk_m = 0; blk_m < M; blk_m++){
+			if (blk_flag[blk_m]) {
+				(void)fprintf(stderr, "Warning\t black\t m=%d\n", blk_m);
+				blk_black++;
+			} else blk_good++;
+		}
+
+		/* replace black projections with average profile
+		   (黒投影があるときだけ計算。列ごとに m 昇順で加算 = 従来と同じ順) */
+		if (blk_black > 0 && blk_good > 0){
+			#pragma omp parallel for
+			for (blk_r = 0; blk_r < N; blk_r++){
+				double	s=0.0;
+				int	mm;
+
+				for (mm = 0; mm < M; mm++)
+					if (!blk_flag[mm]) s += Pb[mm][blk_r];
+				blk_avg[blk_r] = s / (double)blk_good;
+			}
+			for (blk_m = 0; blk_m < M; blk_m++){
+				if (blk_flag[blk_m] == 1){
+					for (blk_r = 0; blk_r < N; blk_r++){
+						Pb[blk_m][blk_r] = blk_avg[blk_r];
+					}
+				}
+			}
+		}
+
+		free(blk_flag);
+		free(blk_avg);
+	}
+/* ----------------  black projection correction finish --------------- */
+
+/* ----------------  ring removal (in place on Pb) ---------------- */
+	*kernel_size = get_kernel_size_from_env();
+	*num_threads = get_num_threads_from_env();
+	if (SORT_FILTER_RESTORE(Pb[0], Pb[0], N, M, *kernel_size, *num_threads) != 0) {
+		fprintf(stderr, "ring removal failed\n");
+		return 5;
+	}
+	return 0;
+}
+
 int	main(int argc,char **argv)
 {
 	HiPic	hp;
@@ -226,7 +310,7 @@ int	main(int argc,char **argv)
 	if (argc!=4)
 {
 	char		*target;
-	int		l,z,m,y,r,x, i,j;
+	int		l,z,m,y,r,x, i,j, cur, pipe_on=1;
 //	double		Dr,DO,RA;
 	Float		**P,***SG,*sg,**F;
 	FOM		*T;
@@ -255,19 +339,33 @@ int	main(int argc,char **argv)
 	RA=atof(argv[6]);
 
 	P=InitCBP(N,M);
+	CBP_PIPE_INIT(P,N,M);
 
 	if ((fom=(FOM **)malloc(sizeof(FOM *)*N))==NULL ||
 	    (*fom=(FOM *)malloc(sizeof(FOM)*(size_t)N*N))==NULL)
 	    Error("memory allocation error for tomogram.");
 	for (y=1; y<N; y++) fom[y]=fom[y-1]+N;
 
-	/* ---- リング除去は P 上でインプレース実行 ----
-	   前提: Float==float、かつ P[m]=P[0]+m*N の連続確保
+	/* ---- 投影バッファ 2 面(1 スライス先行パイプライン) ----
+	   Pbuf[0] は cbp の P、Pbuf[1] は AllocCBPProjection() の 2 面目
+	   (GPU 版は pinned)。リング除去はこの上でインプレース実行するので、
+	   Float==float と P[m]=P[0]+m*N の連続確保が前提
 	   (cbp.cu / cbp_thread_*.c とも満たす)。 */
+	Float	**Pbuf[2];
+
+	Pbuf[0]=P;
+	if ((Pbuf[1]=CBP_PIPE_ALLOC())==NULL)
+	    Error("memory allocation error for the second projection buffer.");
+	/* HPTG_PIPELINE=0 で先行パイプラインを止め、同じ関数を逐次順
+	   (準備 -> Begin -> End -> 保存)で呼ぶ。切り分け・比較用。 */
+	{ char *e=getenv("HPTG_PIPELINE"); if (e && atoi(e)==0) pipe_on=0; }
+	if (!pipe_on) fprintf(stderr,"HPTG_PIPELINE=0: sequential order\n");
 	if (sizeof(Float)!=sizeof(float))
 	    Error("in-place ring removal requires Float==float.");
-	for (m=1; m<M; m++)
-	    if (P[m]!=P[m-1]+N) Error("projection buffer is not contiguous.");
+	for (i=0; i<2; i++)
+	    for (m=1; m<M; m++)
+		if (Pbuf[i][m]!=Pbuf[i][m-1]+N)
+		    Error("projection buffer is not contiguous.");
 
 	/* ============================================================
 	 *  メモリ上限チェック -> 1 バンドあたりのスライス数を決定
@@ -401,105 +499,53 @@ int	main(int argc,char **argv)
 	    }
 	    fprintf(stderr,"\n");
 
-	    /* ---- バンド内スライスを再構成 ---- */
+	    /* ---- バンド内スライスを再構成 (1 スライス先行のパイプライン) ----
+	       BeginCBP(k) を投げた直後に k+1 の準備を行い、EndCBP(k) で結果を
+	       受け取ってから BeginCBP(k+1) を投げる。F -> fom のコピーと Store は
+	       k+1 の GPU 計算と並行する。バンド境界でパイプラインは空になる。 */
+	    cur=0;
+	    if (pipe_on) {
+		if (PrepareSlice(Pbuf[cur],SG[0],N,M,&kernel_size,&num_threads)) return 5;
+		CBP_PIPE_SELECT(Pbuf[cur]); CBP_PIPE_BEGIN(Dr,DO,RA);
+	    }
+
 	    for (k=cs; k<ce; k++) {
 		z=sel[k];
-		/* 投影 m ごとに独立 -> OpenMP 並列(行単位のコピー) */
-		#pragma omp parallel for
-		for (m=0; m<M; m++) {
-		    Float	*pf=P[m],*sf=SG[k-cs][m];
-		    int		rr;
+		if (pipe_on) {
+		    if (k+1<ce &&
+			PrepareSlice(Pbuf[cur^1],SG[k+1-cs],N,M,&kernel_size,&num_threads))
+			return 5;
 
-		    for (rr=0; rr<N; rr++) pf[rr]=sf[rr];
+		    F=CBP_PIPE_END();			/* スライス z の結果 */
+
+		    if (k+1<ce) {
+			CBP_PIPE_SELECT(Pbuf[cur^1]); CBP_PIPE_BEGIN(Dr,DO,RA);
+		    }
+		}
+		else {					/* 逐次順(比較用) */
+		    if (PrepareSlice(Pbuf[0],SG[k-cs],N,M,&kernel_size,&num_threads)) return 5;
+		    CBP_PIPE_SELECT(Pbuf[0]); CBP_PIPE_BEGIN(Dr,DO,RA);
+		    F=CBP_PIPE_END();
 		}
 
-/* ----------------  black projection correction start ---------------- */
-/*                                                                       */
-{
-			int		blk_m, blk_r, blk_good=0, blk_black=0;
-			int		*blk_flag;
-			double	*blk_avg;
+		if (slice_done++ != 0) TERM_MT(t,Store);
 
-			blk_flag = (int *)malloc(M * sizeof(int));
-			blk_avg  = (double *)malloc(N * sizeof(double));
+		#pragma omp parallel for
+		for (y=0; y<N; y++) {
+		    FOM		*ff=fom[y];
+		    Float	*sf=F[y];
+		    int		xx;
 
-			/* detect black projections: all pixels == 0
-			   (投影ごとの和は従来と同じ r 昇順の double 加算 -> 同じ判定) */
-			#pragma omp parallel for
-			for (blk_m = 0; blk_m < M; blk_m++){
-				double	s=0.0;
-				int	r;
-
-				for (r = 0; r < N; r++) s += P[blk_m][r];
-				blk_flag[blk_m] = (s == 0.0);
-			}
-			for (blk_m = 0; blk_m < M; blk_m++){
-				if (blk_flag[blk_m]) {
-					(void)fprintf(stderr, "Warning\t black\t m=%d\n", blk_m);
-					blk_black++;
-				} else blk_good++;
-			}
-
-			/* replace black projections with average profile
-			   (黒投影があるときだけ計算。列ごとに m 昇順で加算 = 従来と同じ順) */
-			if (blk_black > 0 && blk_good > 0){
-				#pragma omp parallel for
-				for (blk_r = 0; blk_r < N; blk_r++){
-					double	s=0.0;
-					int	mm;
-
-					for (mm = 0; mm < M; mm++)
-						if (!blk_flag[mm]) s += P[mm][blk_r];
-					blk_avg[blk_r] = s / (double)blk_good;
-				}
-				for (blk_m = 0; blk_m < M; blk_m++){
-					if (blk_flag[blk_m] == 1){
-						for (blk_r = 0; blk_r < N; blk_r++){
-							P[blk_m][blk_r] = blk_avg[blk_r];
-						}
-					}
-				}
-			}
-
-			free(blk_flag);
-			free(blk_avg);
-}
-/* ----------------  black projection correction finish --------------- */
-/*                                                                       */
-
-/* ----------------  ring removal start ---------------- */
-/*                                                       */
-    // Get kernel size from environment variable
-    kernel_size = get_kernel_size_from_env();
-	// Get number of threads from environment variable
-    num_threads = get_num_threads_from_env();
-	/* P 上でインプレース実行(入力=出力)。GPU 版は H2D 後に D2H、
-	   CPU 版は列ごとに全行を読んでから書くので、どちらも安全。 */
-	if (SORT_FILTER_RESTORE(P[0], P[0], N, M, kernel_size, num_threads) != 0) {
-		fprintf(stderr, "ring removal failed\n");
-		return 5;
-	}
-/* ----------------  ring removal finish --------------- */
-/*                                                       */
-			F=CBP(Dr,DO,RA);
-
-			if (slice_done++ != 0) TERM_MT(t,Store);
-
-			#pragma omp parallel for
-			for (y=0; y<N; y++) {
-			    FOM		*ff=fom[y];
-			    Float	*sf=F[y];
-			    int		xx;
-
-			    for (xx=0; xx<N; xx++) ff[xx]=sf[xx];
-			}
+		    for (xx=0; xx<N; xx++) ff[xx]=sf[xx];
+		}
 
 #ifdef WINDOWS
-			(void)sprintf(path,"%s\\rec%05d.tif",argv[argc-1],Z=z);
+		(void)sprintf(path,"%s\\rec%05d.tif",argv[argc-1],Z=z);
 #else
-	    	(void)sprintf(path,"%s/rec%05d.tif",argv[argc-1],Z=z);
+		(void)sprintf(path,"%s/rec%05d.tif",argv[argc-1],Z=z);
 #endif
-	    	INIT_MT(t,Store,ac);
+		INIT_MT(t,Store,ac);
+		cur^=1;
 	    }
 	}
 

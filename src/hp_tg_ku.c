@@ -25,6 +25,14 @@
  *   - Store() は S.F が連続領域なのでコピーせず直接書き出し、
  *   - W -> P の投影コピー、黒投影検出、F -> S.F の結果コピーは OpenMP 並列。
  *   各要素の演算順序は従来と同一なので結果はビット単位で不変。
+ *
+ * 1 スライス先行パイプライン(2026-10、cbp_pipe.h):
+ *   投影バッファを 2 面持ち、スライス z の BeginCBP(GPU 計算の投入)の直後に
+ *   スライス z+1 の準備(W -> P、黒投影検出、リング除去)をホスト側で行い、
+ *   EndCBP(z) で結果を受け取ってから BeginCBP(z+1) を投げる。F -> S.F の
+ *   コピーと Store も z+1 の GPU 計算と並行する。GPU 版ではスライスごとの
+ *   ホスト処理がほぼ隠れ、総時間は読み込み + GPU 計算に近づく。CPU 版は
+ *   cbp_pipe.h の同期エミュレーションで同じ順序・同じ結果になる。
  * ==========================================================================*/
 
 #include <stdio.h>
@@ -32,6 +40,7 @@
 #include <math.h>
 #include "rhp.h"
 #include "cbp.h"
+#include "cbp_pipe.h"
 //#include "sif_f.h"
 #include "tiffio.h"
 #include "tifwrite.h"
@@ -215,11 +224,100 @@ static FUNCTION_T	Store(void *a)
 #define EPS	1e-9
 #define DEG	3.14159265358979323846/180.0
 
+/* ---- 1 スライス分のホスト側準備: W -> Pb、黒投影検出、リング除去 ----
+   GPU 版では直前のスライスの BeginCBP の後に呼ばれ、GPU 計算と並行して走る。
+   Pb は cbp の投影バッファ(P)か AllocCBPProjection() で得た 2 面目。 */
+static int	PrepareSlice(int z,Float **Pb,Float ***W,int cy1,int cy2,
+			     double y0,double dy,int Nx,int Nt,
+			     int *kernel_size,int *num_threads)
+{
+	int	t;
+
+	/* 投影 t ごとに独立 -> OpenMP 並列(行単位のコピー) */
+	#pragma omp parallel for
+	for (t=0; t<Nt; t++) {
+	    Float	*pf=Pb[t],*wf;
+	    int		yy=z+(int)floor(y0-dy*(double)t),xx;
+
+	    if (yy<cy1 || yy>cy2)
+		for (xx=0; xx<Nx; xx++) pf[xx]=0.0;
+	    else {
+		wf=W[yy-cy1][t]; for (xx=0; xx<Nx; xx++) pf[xx]=wf[xx];
+	    }
+	}
+
+/* ----------------  black projection correction start ---------------- */
+	{
+		int		blk_t, blk_r, blk_good=0, blk_black=0;
+		int		*blk_flag;
+		double	*blk_avg;
+
+		blk_flag = (int *)malloc((size_t)Nt * sizeof(int));
+		blk_avg  = (double *)malloc((size_t)Nx * sizeof(double));
+		if (blk_flag==NULL || blk_avg==NULL)
+			Error("memory allocation error for black projection check.");
+
+		/* detect black projections: all pixels == 0
+		   (投影ごとの和は従来と同じ r 昇順の double 加算 -> 同じ判定) */
+		#pragma omp parallel for
+		for (blk_t = 0; blk_t < Nt; blk_t++){
+			double	s=0.0;
+			int	r;
+
+			for (r = 0; r < Nx; r++) s += Pb[blk_t][r];
+			blk_flag[blk_t] = (s == 0.0);
+		}
+		for (blk_t = 0; blk_t < Nt; blk_t++){
+			if (blk_flag[blk_t]) {
+				(void)fprintf(stderr, "Warning\t black\t z=%d t=%d\n", z, blk_t);
+				blk_black++;
+			} else blk_good++;
+		}
+
+		/* replace black projections with average profile
+		   (平均は黒投影があるときだけ計算。列ごとに t 昇順で加算するので
+		    従来の加算順と同一 -> 同じ値) */
+		if (blk_black > 0 && blk_good > 0){
+			#pragma omp parallel for
+			for (blk_r = 0; blk_r < Nx; blk_r++){
+				double	s=0.0;
+				int	tt;
+
+				for (tt = 0; tt < Nt; tt++)
+					if (!blk_flag[tt]) s += Pb[tt][blk_r];
+				blk_avg[blk_r] = s / (double)blk_good;
+			}
+			for (blk_t = 0; blk_t < Nt; blk_t++){
+				if (blk_flag[blk_t] == 1){
+					for (blk_r = 0; blk_r < Nx; blk_r++){
+						Pb[blk_t][blk_r] = blk_avg[blk_r];
+					}
+				}
+			}
+		}
+
+		free(blk_flag);
+		free(blk_avg);
+	}
+/* ----------------  black projection correction finish --------------- */
+
+/* ----------------  ring removal (in place on Pb) ---------------- */
+	*kernel_size = get_kernel_size_from_env();
+	*num_threads = get_num_threads_from_env();
+	/* Pb 上でインプレース実行(入力=出力)。GPU 版は専用ストリームで H2D 後に
+	   D2H、CPU 版は列ごとに全行を読んでから書くので、どちらも安全。 */
+	if (SORT_FILTER_RESTORE(Pb[0], Pb[0], Nx, Nt, *kernel_size, *num_threads) != 0) {
+		fprintf(stderr, "ring removal failed\n");
+		return 5;
+	}
+	return 0;
+}
+
 int	main(int argc,char **argv)
 {
 	HiPic		hp;
 	double		y0,dy,Dz=0.0;
-	int		Nz,z1,z2,y,z,t,x,i,j;
+	int		Nz,z1,z2,y,z,t,x,i,j,cur,pipe_on=1;
 	int		Nx,Ny,Nt;
 	Float		**P,***W,*w,*P_F,**F;
 	Struct		S;
@@ -258,6 +356,7 @@ int	main(int argc,char **argv)
 	RA0=atof(argv[argc-2])*DEG;
 
 	P=InitCBP(Nx,Nt);
+	CBP_PIPE_INIT(P,Nx,Nt);
 
 	hpNtM=Nt;
 
@@ -329,13 +428,26 @@ int	main(int argc,char **argv)
 
 	S.N=Nx;
 
-	/* ---- リング除去は P 上でインプレース実行 ----
-	   前提: Float==float、かつ P[t]=P[0]+t*Nx の連続確保
+	/* ---- 投影バッファ 2 面(1 スライス先行パイプライン) ----
+	   Pbuf[0] は cbp の P、Pbuf[1] は AllocCBPProjection() の 2 面目
+	   (GPU 版は pinned)。リング除去はこの上でインプレース実行するので、
+	   Float==float と P[t]=P[0]+t*Nx の連続確保が前提
 	   (cbp.cu / cbp_thread_*.c とも満たす)。 */
+	Float	**Pbuf[2];
+
+	Pbuf[0]=P;
+	if ((Pbuf[1]=CBP_PIPE_ALLOC())==NULL)
+	    Error("memory allocation error for the second projection buffer.");
+	/* HPTG_PIPELINE=0 で先行パイプラインを止め、同じ関数を逐次順
+	   (準備 -> Begin -> End -> 保存)で呼ぶ。切り分け・比較用。 */
+	{ char *e=getenv("HPTG_PIPELINE"); if (e && atoi(e)==0) pipe_on=0; }
+	if (!pipe_on) fprintf(stderr,"HPTG_PIPELINE=0: sequential order\n");
 	if (sizeof(Float)!=sizeof(float))
 	    Error("in-place ring removal requires Float==float.");
-	for (t=1; t<Nt; t++)
-	    if (P[t]!=P[t-1]+Nx) Error("projection buffer is not contiguous.");
+	for (i=0; i<2; i++)
+	    for (t=1; t<Nt; t++)
+		if (Pbuf[i][t]!=Pbuf[i][t-1]+Nx)
+		    Error("projection buffer is not contiguous.");
 
 #ifdef WINDOWS
 	(void)sprintf(S.form,"%s\\rec%%0%dd.tif",argv[argc-1],5);
@@ -403,93 +515,35 @@ int	main(int argc,char **argv)
 	    }
 	    fprintf(stderr,"\n");
 
-	    /* ---- スライス cs..ce を再構成 ---- */
-	    for (z=cs; z<=ce; z++) {
-		/* 投影 t ごとに独立 -> OpenMP 並列(行単位のコピー) */
-		#pragma omp parallel for
-		for (t=0; t<Nt; t++) {
-		    Float	*pf=P[t],*wf;
-		    int		yy=z+(int)floor(y0-dy*(double)t),xx;
+	    /* ---- スライス cs..ce を再構成 (1 スライス先行のパイプライン) ----
+	       BeginCBP(z) を投げた直後に z+1 の準備を行い、EndCBP(z) で結果を
+	       受け取ってから BeginCBP(z+1) を投げる。F -> S.F のコピーと Store は
+	       z+1 の GPU 計算と並行する。チャンク境界でパイプラインは空になる。 */
+	    cur=0;
+	    if (pipe_on) {
+		if (PrepareSlice(cs,Pbuf[cur],W,cy1,cy2,y0,dy,Nx,Nt,
+				 &kernel_size,&num_threads)) return 5;
+		CBP_PIPE_SELECT(Pbuf[cur]); CBP_PIPE_BEGIN(Dr,-RC,RA0); RC=RC+Ct;
+	    }
 
-		    if (yy<cy1 || yy>cy2)
-			for (xx=0; xx<Nx; xx++) pf[xx]=0.0;
-		    else {
-			wf=W[yy-cy1][t]; for (xx=0; xx<Nx; xx++) pf[xx]=wf[xx];
+	    for (z=cs; z<=ce; z++) {
+		if (pipe_on) {
+		    if (z<ce &&
+			PrepareSlice(z+1,Pbuf[cur^1],W,cy1,cy2,y0,dy,Nx,Nt,
+				     &kernel_size,&num_threads)) return 5;
+
+		    F=CBP_PIPE_END();			/* スライス z の結果 */
+
+		    if (z<ce) {
+			CBP_PIPE_SELECT(Pbuf[cur^1]); CBP_PIPE_BEGIN(Dr,-RC,RA0); RC=RC+Ct;
 		    }
 		}
-
-/* ----------------  black projection correction start ---------------- */
-/*                                                                       */
-{
-		int		blk_t, blk_r, blk_good=0, blk_black=0;
-		int		*blk_flag;
-		double	*blk_avg;
-
-		blk_flag = (int *)malloc((size_t)Nt * sizeof(int));
-		blk_avg  = (double *)malloc((size_t)Nx * sizeof(double));
-
-		/* detect black projections: all pixels == 0
-		   (投影ごとの和は従来と同じ r 昇順の double 加算 -> 同じ判定) */
-		#pragma omp parallel for
-		for (blk_t = 0; blk_t < Nt; blk_t++){
-			double	s=0.0;
-			int	r;
-
-			for (r = 0; r < Nx; r++) s += P[blk_t][r];
-			blk_flag[blk_t] = (s == 0.0);
+		else {					/* 逐次順(比較用) */
+		    if (PrepareSlice(z,Pbuf[0],W,cy1,cy2,y0,dy,Nx,Nt,
+				     &kernel_size,&num_threads)) return 5;
+		    CBP_PIPE_SELECT(Pbuf[0]); CBP_PIPE_BEGIN(Dr,-RC,RA0); RC=RC+Ct;
+		    F=CBP_PIPE_END();
 		}
-		for (blk_t = 0; blk_t < Nt; blk_t++){
-			if (blk_flag[blk_t]) {
-				(void)fprintf(stderr, "Warning\t black\t z=%d t=%d\n", z, blk_t);
-				blk_black++;
-			} else blk_good++;
-		}
-
-		/* replace black projections with average profile
-		   (平均は黒投影があるときだけ計算。列ごとに t 昇順で加算するので
-		    従来の加算順と同一 -> 同じ値) */
-		if (blk_black > 0 && blk_good > 0){
-			#pragma omp parallel for
-			for (blk_r = 0; blk_r < Nx; blk_r++){
-				double	s=0.0;
-				int	tt;
-
-				for (tt = 0; tt < Nt; tt++)
-					if (!blk_flag[tt]) s += P[tt][blk_r];
-				blk_avg[blk_r] = s / (double)blk_good;
-			}
-			for (blk_t = 0; blk_t < Nt; blk_t++){
-				if (blk_flag[blk_t] == 1){
-					for (blk_r = 0; blk_r < Nx; blk_r++){
-						P[blk_t][blk_r] = blk_avg[blk_r];
-					}
-				}
-			}
-		}
-
-		free(blk_flag);
-		free(blk_avg);
-}
-/* ----------------  black projection correction finish --------------- */
-/*                                                                       */
-
-/* ----------------  ring removal start ---------------- */
-/*                                                       */
-	    // Get kernel size from environment variable
-	    kernel_size = get_kernel_size_from_env();
-		// Get number of threads from environment variable
-	    num_threads = get_num_threads_from_env();
-	    /* P 上でインプレース実行(入力=出力)。GPU 版は H2D 後に D2H、
-	       CPU 版は列ごとに全行を読んでから書くので、どちらも安全。 */
-		if (SORT_FILTER_RESTORE(P[0], P[0], Nx, Nt, kernel_size, num_threads) != 0) {
-			fprintf(stderr, "ring removal failed\n");
-			return 5;
-		}
-/* ----------------  ring removal finish --------------- */
-/*                                                       */
-
-		F=CBP(Dr,-RC,RA0);
-		RC=RC+Ct;
 
 		if (z!=z1) TERM_MT(T);
 
@@ -504,6 +558,7 @@ int	main(int argc,char **argv)
 		    for (xx=0; xx<Nx; xx++) sf[xx]=ff[xx];
 		}
 		INIT_MT(T,Store,&S);
+		cur^=1;
 	    }
 	}
 

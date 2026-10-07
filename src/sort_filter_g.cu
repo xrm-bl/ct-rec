@@ -203,20 +203,32 @@ static float        *g_d_image = NULL;   /* input, then result */
 static float        *g_d_sval  = NULL;
 static unsigned int *g_d_perm  = NULL;
 static size_t        g_cap     = 0;      /* capacity in elements */
+/* Own non-blocking stream: the copies and kernels issued here do not
+   serialise behind work on the legacy default stream (the CBP
+   back-projection of the previous slice in hp_tg), so the ring removal
+   of slice z+1 overlaps the reconstruction of slice z.  The function is
+   still synchronous for the caller (cudaStreamSynchronize at the end). */
+static cudaStream_t  g_stream   = NULL;
 
 extern "C" void sort_filter_gpu_release(void)
 {
     if (g_d_image) cudaFree(g_d_image);
     if (g_d_sval)  cudaFree(g_d_sval);
     if (g_d_perm)  cudaFree(g_d_perm);
-    g_d_image = NULL; g_d_sval = NULL; g_d_perm = NULL;
+    if (g_stream)  cudaStreamDestroy(g_stream);
+    g_d_image = NULL; g_d_sval = NULL; g_d_perm = NULL; g_stream = NULL;
     g_cap = 0;
 }
 
 static int sf_gpu_reserve(size_t total)
 {
+    if (g_stream == NULL)
+        CUDA_CHECK(cudaStreamCreateWithFlags(&g_stream, cudaStreamNonBlocking));
     if (total <= g_cap) return 0;
-    sort_filter_gpu_release();
+    if (g_d_image) cudaFree(g_d_image);
+    if (g_d_sval)  cudaFree(g_d_sval);
+    if (g_d_perm)  cudaFree(g_d_perm);
+    g_d_image = NULL; g_d_sval = NULL; g_d_perm = NULL; g_cap = 0;
     CUDA_CHECK(cudaMalloc((void **)&g_d_image, total * sizeof(float)));
     CUDA_CHECK(cudaMalloc((void **)&g_d_sval,  total * sizeof(float)));
     CUDA_CHECK(cudaMalloc((void **)&g_d_perm,  total * sizeof(unsigned int)));
@@ -295,11 +307,11 @@ extern "C" int sort_filter_restore_gpu(float *image_data, float *result_data,
 
     if (sf_gpu_reserve(total)) return 1;
 
-    CUDA_CHECK(cudaMemcpy(g_d_image, image_data, total * sizeof(float),
-                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpyAsync(g_d_image, image_data, total * sizeof(float),
+                               cudaMemcpyHostToDevice, g_stream));
 
     /* 1) sort every column (one block per column) */
-    sort_columns_bitonic<<<Nx, SORT_THREADS, shbytes>>>(
+    sort_columns_bitonic<<<Nx, SORT_THREADS, shbytes, g_stream>>>(
         g_d_image, g_d_sval, g_d_perm, Nx, Ny, pad);
     CUDA_CHECK(cudaGetLastError());
 
@@ -308,11 +320,12 @@ extern "C" int sort_filter_restore_gpu(float *image_data, float *result_data,
           the result (stream order guarantees the sort finished first). */
     int block = 256;
     int grid  = (int)((total + block - 1) / block);
-    median_scatter<<<grid, block>>>(g_d_sval, g_d_perm, g_d_image, Nx, Ny, kernel_size);
+    median_scatter<<<grid, block, 0, g_stream>>>(g_d_sval, g_d_perm, g_d_image, Nx, Ny, kernel_size);
     CUDA_CHECK(cudaGetLastError());
 
-    CUDA_CHECK(cudaMemcpy(result_data, g_d_image, total * sizeof(float),
-                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpyAsync(result_data, g_d_image, total * sizeof(float),
+                               cudaMemcpyDeviceToHost, g_stream));
+    CUDA_CHECK(cudaStreamSynchronize(g_stream));
 
     return 0;
 }

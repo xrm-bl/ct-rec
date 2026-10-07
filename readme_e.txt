@@ -50,7 +50,16 @@ Uesugi
     instead of cudaMalloc/cudaFree x4 per call (new sort_filter_gpu_release();
     result_data may now equal image_data).  The order of every arithmetic
     operation is unchanged, so the output is byte-identical (verified on the
-    CPU build with a synthetic data set including black projections).  Note
+    CPU build with a synthetic data set including black projections).
+    On top of that, hp_tg / ofct_srec now run a one-slice-ahead pipeline
+    (cbp_pipe.h): the projection buffer is double-buffered, and while the
+    GPU reconstructs slice z the host already prepares slice z+1
+    (projection copy, black-projection check, ring removal on its own CUDA
+    stream); the TIFF copy/write of slice z overlaps the GPU work of z+1.
+    cbp.cu gained AllocCBPProjection() / SelectCBPProjection() for this; the
+    existing CBP() / BeginCBP() / EndCBP() are unchanged, and the angle table
+    is now uploaded before the FFTs so that BeginCBP() returns without
+    waiting for the filter kernels.  Note
     for ct_rec_g_* run many-at-a-time: the ring-removal device buffers
     (3 x Nx x Nt x 4 bytes) now stay allocated until the process exits.
 
