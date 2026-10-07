@@ -30,6 +30,7 @@
 #ifndef CBP_PIPE_H
 #define CBP_PIPE_H
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "cbp.h"
@@ -47,8 +48,6 @@ EXTERN void	SelectCBPProjection(Float **pp);
 
 #else	/* ---- CPU backend: synchronous emulation ---- */
 
-extern void	Error(char *msg);	/* error.c */
-
 static Float	**cbp_pipe_P=NULL,	/* cbp 側の投影バッファ(InitCBP の戻り値) */
 		**cbp_pipe_sel=NULL,	/* 次の Begin が読むバッファ */
 		**cbp_pipe_F=NULL,	/* CBP() が返した内部バッファ */
@@ -61,8 +60,10 @@ static void	cbp_pipe_init(Float **P,int N,int M)
 
 	cbp_pipe_P=cbp_pipe_sel=P; cbp_pipe_N=N; cbp_pipe_M=M;
 	if ((cbp_pipe_Fout=(Float **)malloc(sizeof(Float *)*(size_t)N))==NULL ||
-	    (cbp_pipe_Fout[0]=(Float *)malloc(sizeof(Float)*(size_t)N*(size_t)N))==NULL)
-	    Error("memory allocation error for the CBP result copy.");
+	    (cbp_pipe_Fout[0]=(Float *)malloc(sizeof(Float)*(size_t)N*(size_t)N))==NULL) {
+	    fputs("cbp_pipe: memory allocation error for the CBP result copy.\n",stderr);
+	    exit(1);
+	}
 	for (y=1; y<N; y++) cbp_pipe_Fout[y]=cbp_pipe_Fout[y-1]+N;
 }
 

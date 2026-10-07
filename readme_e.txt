@@ -62,6 +62,20 @@ Uesugi
     waiting for the filter kernels.  Note
     for ct_rec_g_* run many-at-a-time: the ring-removal device buffers
     (3 x Nx x Nt x 4 bytes) now stay allocated until the process exits.
+  - p_rec: two fixes and the same speed-ups as hp_tg.  (1) The read loop
+    skipped the first p-file, so projection 0 was always empty (one view
+    out of Nt missing).  Every file is now used, which changes the result
+    by exactly that one view; files may be numbered from 0 or from 1.
+    (2) The outlier test applied the integer abs() to float data, so it
+    never rejected NaN/Inf and could leave the previous slice's values in
+    place; it now uses fabsf() and zeroes rejected pixels (threshold 100
+    unchanged, so normal data is unaffected).  Reading is parallel
+    (HPTG_READ_THREADS) and fetches only the strips of the rows a band
+    needs; ring removal runs in place, the output buffer is reused, unit
+    conversion and min/max are OpenMP, the TIFF is written by a separate
+    thread, and the one-slice-ahead pipeline of hp_tg is used
+    (HPTG_PIPELINE=0 for the sequential order).  Verified identical to the
+    old version (apart from fix 1) on the CPU and GPU builds.
 
 [ver 2.5 changes]
   - The projection-image generator ct_prj_f gained optional Paganin
@@ -337,6 +351,7 @@ Uesugi
    c. Continuous Reconstruction from p-images
       p_rec_P_F p rec Dr RC RA0
       (When the rotation axis is not tilted. All layers.)
+      (p-files may be numbered from 0 or from 1; every file is used.)
 
       p: Directory containing p?????.tif files (no trailing /)
       rec: Output directory for reconstructed images (must be created
