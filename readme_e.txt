@@ -35,6 +35,15 @@ Uesugi
   - Windows build: sources with Japanese comments now carry a UTF-8 BOM
     and cl is called with /utf-8, so the C4819 code-page warnings are
     gone.  No effect on Linux or on the generated code.
+  - ct_rec / ofct_rec (2026-10-13 update): when every projection of a
+    slice is judged black (no X-rays at all, see 1e), a placeholder image
+    is written under the normal name and size instead of nothing.  It
+    shows the file name, "fail!" and "all projections black" drawn in
+    large letters (background 0, text 1.0), and its ImageDescription ends
+    with "FAILED: all projections black".  The exit status stays non-zero
+    (1) so batch files still see the failure.  ofct_rec used to write an
+    all-zero image with exit status 0 in this case; it now behaves like
+    ct_rec.  Slices with at least one good projection are unchanged.
 
 [ver 2.6 changes]
   - act_rec_g_r / ofact_rec_g_r: single-slice reconstruction for the

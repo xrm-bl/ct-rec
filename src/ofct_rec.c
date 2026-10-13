@@ -14,6 +14,7 @@
 #include "tiffio.h"
 #include "tifwrite.h"
 #include "blacklim.h"
+#include "failimg.h"
 #ifdef USE_GPU
   #include "sort_filter_g.h"
   #define SORT_FILTER_RESTORE sort_filter_restore_gpu
@@ -301,7 +302,7 @@ int read_log()
 static int StoreProjection(ln)
 long		ln;
 {
-	int			i, j, k, jx, nshot, ilp, idcN, l;
+	int			i, j, k, jx, nshot, ilp, idcN, l, nblack=0;
 	double		t1, t2;
 	double		a[MAXPIXL], b[MAXPIXL];
 	char		ffi01[1024], ffi02[25], fii[25];
@@ -392,6 +393,7 @@ long		ln;
 					k, nclip, (int)N, 100.0*(double)nclip/(double)N,
 					black_thresh);
 				ilp=1;
+				nblack++;
 				BlackCountProjection();
 				for(jx=0;jx<N;++jx){
 					*(po+nshot*N+jx)=0.0;
@@ -418,6 +420,15 @@ long		ln;
 //	printf("1\n");
 
 //
+	/* every projection black (no X-rays): nothing to reconstruct from */
+	if (nshot > 0 && nblack >= nshot){
+		fprintf(stderr,
+			"every projection was judged black: no good projection is left.\n"
+			"Lower CT_REC_BLACK_THRESH or raise CT_REC_BLACK_FRAC.\n");
+		free(po);
+		return (2);	/* 2 = every projection black (main writes a placeholder) */
+	}
+
 	ddv=(double)((2*idcN)-1);
 	for(j=0;j<NNST;++j){
 		k=0;
@@ -499,6 +510,30 @@ extern long clock();
 
 #define CLOCK()		((double)clock()/(double)CLOCKS_PER_SEC)
 #define DESC_LEN	256
+
+/* ---- 失敗時のプレースホルダ画像 ----
+   全投影が黒(X線なし)で再構成できないとき、通常と同じ名前・同じサイズ(NN*NN)の
+   32bit TIFF に、ファイル名・"fail!"・理由を描いて書き出す(背景 0、文字 1.0)。
+   ImageDescription の末尾に "FAILED: ..." を付け、終了コードは非ゼロのまま。 */
+static void	FailSlice(long layer, int n, double f_size, double f_center,
+			  int m, double theta0)
+{
+	char		fout[32], comm[200];
+	const char	*lines[3];
+	float		*img;
+
+	(void)sprintf(fout, "rec%05d.tif", (int)layer);
+	lines[0] = fout; lines[1] = "fail!"; lines[2] = "all projections black";
+
+	if ((img = (float *)malloc(sizeof(float) * (size_t)n * (size_t)n)) == NULL)
+		Error("memory allocation error for the placeholder image.");
+	FailImageText(img, n, n, 1.0f, 0.0f, lines, 3);
+	sprintf(comm, "%f\t%f\t%d\t%f\t%f\t%f\tFAILED: all projections black",
+		(float)f_size, (float)f_center, m, (float)theta0, 0.0f, 1.0f);
+	Store32TiffFile(fout, n, n, 32, img, comm);
+	printf("%s\tFAILED: all projections black (placeholder image written)\n", fout);
+	free(img);
+}
 
 int main(argc,argv)
 int		argc;
@@ -584,6 +619,7 @@ char	**argv;
 	Clock=CLOCK();
 	if((i=StoreProjection(s_layer)) !=0){
 		printf("something wrong in StoreProjection (%d)\n",i);
+		if (i == 2) FailSlice(s_layer, NN, f_size, f_center, NNST, theta0);
 		return(1);
 	}
 	TAM=TA1/NST;

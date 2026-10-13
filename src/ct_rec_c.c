@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include "tiffio.h"
 #include "blacklim.h"
+#include "failimg.h"
 
 /*----------------------------------------------------------------------*/
 /* Ring removal backend selection (compile time).                        */
@@ -423,7 +424,7 @@ long		ln;
 			"every projection was judged black: no good projection is left "
 			"to build the replacement from.\n"
 			"Lower CT_REC_BLACK_THRESH or raise CT_REC_BLACK_FRAC.\n");
-		return (1);
+		return (2);	/* 2 = every projection black (main writes a placeholder) */
 	}
 	for(k=0;k<M;++k){
 		if(*(ilp+k)==1){
@@ -548,6 +549,39 @@ extern long clock();
 #define CLOCK()		((double)clock()/(double)CLOCKS_PER_SEC)
 #define DESC_LEN	256
 
+/* ---- 失敗時のプレースホルダ画像 ----
+   全投影が黒(X線なし)で再構成できないとき、通常と同じ名前・同じサイズの
+   32bit TIFF に、ファイル名・"fail!"・理由を描いて書き出す(背景 0、文字 1.0)。
+   ImageDescription の末尾に "FAILED: ..." を付け、終了コードは非ゼロのまま。 */
+static void	FailSlice(long layer, int n, double f_size, double f_center,
+			  int m, double theta0)
+{
+	char		fout[32], comm[200];
+	const char	*lines[3];
+	float		*img;
+	FOM		**fom;
+	int		v, hh;
+
+	(void)sprintf(fout, "rec%05d.tif", (int)layer);
+	lines[0] = fout; lines[1] = "fail!"; lines[2] = "all projections black";
+
+	if ((img = (float *)malloc(sizeof(float) * (size_t)n * (size_t)n)) == NULL ||
+	    (fom = (FOM **)malloc(sizeof(FOM *) * (size_t)n)) == NULL)
+		Error("memory allocation error for the placeholder image.");
+	FailImageText(img, n, n, 1.0f, 0.0f, lines, 3);
+	for (v = 0; v < n; v++) {
+		if ((fom[v] = (FOM *)malloc(sizeof(FOM) * (size_t)n)) == NULL)
+			Error("memory allocation error for the placeholder image.");
+		for (hh = 0; hh < n; hh++) fom[v][hh] = (FOM)img[(size_t)v * n + hh];
+	}
+	sprintf(comm, "%f\t%f\t%d\t%f\t%f\t%f\tFAILED: all projections black",
+		(float)f_size, (float)f_center, m, (float)theta0, 0.0f, 1.0f);
+	StoreImageFile_Float(fout, n, n, fom, comm);
+	printf("%s\tFAILED: all projections black (placeholder image written)\n", fout);
+	for (v = 0; v < n; v++) free(fom[v]);
+	free(fom); free(img);
+}
+
 int main(argc,argv)
 int		argc;
 char	**argv;
@@ -628,6 +662,7 @@ char	**argv;
 	Clock=CLOCK();
 	if((i=StoreProjection(s_layer)) !=0){
 		printf("something wrong in StoreProjection (%d)\n",i);
+		if (i == 2) FailSlice(s_layer, N, f_size, f_center, M, theta0);
 		return(1);
 	}
 	TAM=TA1/M;
