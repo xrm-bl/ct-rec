@@ -21,6 +21,13 @@
 extern void	Error(char *msg),
 		RangeList(char *rl,size_t limit,char *target);
 
+#ifdef HIS_INPUT
+#define PROG_NAME	"his_srec"	/* a.his + conv.bat + output.log via rhis_hp.c */
+#define main ofct_srec_main	/* his_main.c: 360-degree offset scan -> here, 180 -> hp_tg_main */
+#else
+#define PROG_NAME	"ofct_srec"
+#endif
+
 /* スライスごとのオーバーヘッド削減(2026-10、hp_tg_ku.c と同じ変更):
    旧版はリング除去用の image_data / result_data と Store() の float 変換
    バッファをスライスごとに malloc/free しており、1 スライスあたり数 GB 分の
@@ -72,8 +79,8 @@ static FOM	**fom;
 static char	path[LEN];
 
 /* insert start */
-	double		Dr,DO,RA;
-	int			hpNtM;
+	static double		Dr,DO,RA;
+	static int			hpNtM;
 /* insert end */
 
 
@@ -107,7 +114,7 @@ static unsigned long long get_total_memory_bytes(void)
 #endif
 }
 
-void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
+static void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
 {
 	TIFF *image;
 	long i;
@@ -123,7 +130,7 @@ void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char 
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
-	TIFFSetField(image, TIFFTAG_ARTIST, "ofct_srec");
+	TIFFSetField(image, TIFFTAG_ARTIST, PROG_NAME);
 //	TIFFSetField(image, TIFFTAG_MINSAMPLEVALUE, mmmin );
 //	TIFFSetField(image, TIFFTAG_MAXSAMPLEVALUE, mmmax );
 

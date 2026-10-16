@@ -2,6 +2,7 @@
 
 上杉
 
+2026.10.16  ver. 2.8
 2026.10.08  ver. 2.7
 2026.09.22  ver. 2.6
 2026.09.09  ver. 2.5
@@ -11,6 +12,24 @@
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+【ver 2.8 の変更点】
+  ・his_rec_P_F、his_srec_P_F、his_DO(2g)を新設。a.his から
+    直接、再構成と回転軸推定を行う。ビームラインの conv.bat(フレームを
+    dark.img / q????.img にする手順: img_ave / ren / copy)をメモリ上で解釈し、
+    output.log は従来どおり読むので、his2img と conv.bat の実行は不要で .img
+    ファイルは作られない。output.log の角度欄から 180° スキャンと 360° オフ
+    セットスキャン(試料像が 350° に達する。ofct_rec が従来から用いている判定)
+    を自動判別し、対応する本体を呼ぶ: his_rec = ct_rec / ofct_rec(1 枚、a.his
+    と同じ階層で実行。center 省略時はそのレイヤーから回転軸を推定、オフセット
+    では ofct_DO の探索の 1 レイヤー版)、his_srec = hp_tg / ofct_srec(全スライス、1 つ上で実行。
+    引数はどちらも hp_tg 形式)、his_DO = hp2DO / ofct_DO(回転軸推定)。平均は
+    img_ave と同じ整数演算(切り捨て)なので、結果は従来の手順とビット一致する
+    (CPU 版・GPU 版で検証済み。his_srec は TIFF の ARTIST タグのみ異なる)。
+    16bit の his のみ対応。暗電流・入射光の枚数や入射光のタイミングは
+    conv.bat と output.log から読み取り、固定値は持たない。既存プログラムの
+    動作は不変(2 本を 1 つの his_* に同居させるため、ファイル内の名前を
+    static にしただけ)。
 
 【ver 2.7 の変更点】
   ・act_tg_g_F(2f)と ofact_srec_g_F(3d)を新設。16bit + 8bit を直接出力する
@@ -269,7 +288,8 @@
       上記のほかに、投影の並列読み込みスレッド数(HPTG_READ_THREADS、既定16。
       hp_tg / ofct_srec で有効)、メモリに合わせたチャンク分割の指定
       (HPTG_MEM_FRACTION / HPTG_MEM_LIMIT_MB / HPTG_CHUNK_ROWS)、使用する
-      GPU 番号(CUDA_GPU、既定0)、入力ファイル名の上書き(RHP_O / RHP_D / RHP_Q)
+      GPU 番号(CUDA_GPU、既定0)、入力ファイル名の上書き(RHP_O / RHP_D / RHP_Q、
+      his_rec / his_srec / his_DO では RHIS_H / RHIS_C / HIS_SREC_OY)
       などがある。既定値を含む一覧は 20260723_CT_env_vars.md を参照のこと。
       同一ノードで複数プロセスを並走させる場合は HPTG_MEM_FRACTION を
       下げること(既定のままだと全プロセスが空きメモリの9割を要求する)。
@@ -369,6 +389,70 @@
       (act_tg_g_r / act_tg_g_s / act_tg_g_c)。
 
       *) hp_tg と同じく、HiPic ディレクトリの一つ上で実行する。
+
+   g. a.his からの直接再構成(his_rec / his_srec / his_DO)
+      his_rec_P_F  layer {center} {pixel size} {offsetangle}
+      his_srec_P_F HiPic Dr RC RA0 rec
+      his_srec_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
+      his_DO       HiPic {stride}                 (CPU)
+      his_DO_g     HiPic {navg {stride}}          (GPU)
+
+      入力はビームラインから持ち帰ったままの a.his(全撮影フレーム)・conv.bat・
+      output.log が置かれた 1 つのディレクトリ。his_rec はそのディレクトリ内で
+      (ct_rec と同様)、his_srec と his_DO は 1 つ上の階層でディレクトリ名を
+      HiPic に指定して(hp_tg / ofct_DO と同様)実行する。his2img と conv.bat は
+      実行せず、.img ファイルも作られない。conv.bat はメモリ上で次のように
+      解釈する。
+        his2img <his>                 his ファイル名(既定 a.his)
+        img_ave <frames>... dark.img  暗電流 = 列挙フレームの平均
+        img_ave <frames>... q<N>.img  q<N> = 列挙フレームの平均
+        ren <frame> q<N>.img          q<N> = そのフレーム
+        copy q<M>.img q<N>.img        q<N> = q<M> と同じデータ
+        hp2do D000 I000 E000 D180 I180 E180 ...   his_DO 用に記憶
+        rem / echo / pause            無視
+      <frame> は his2img の命名 a<数字>.img(a0001.img がファイルの先頭フレー
+      ム)。これ以外の命令、ファイル外のフレーム番号、同じ q の二重定義、
+      dark.img の未定義はエラーで停止する。したがって平均枚数や入射光群の
+      時間位置は conv.bat と output.log から読み取られ、固定値は持たない。
+
+      180° スキャンか 360° オフセットスキャンかは output.log の角度欄で判定
+      する(試料像が 350° に達すればオフセット。ofct_rec が従来から用いている
+      判定)。
+        プログラム  180° スキャン      360° オフセットスキャン
+        his_rec     ct_rec(2a)         ofct_rec(3c)
+        his_srec    hp_tg(2b)          ofct_srec(3b)。Rc = RC、Oy = 0、
+                                       rangeList は "-" または "L1-L2"
+        his_DO      conv.bat の hp2do 行の画像で hp2DO
+                                       ofct_DO / ofct_DO_g(3a)
+      center を省略すると his_rec は再構成するレイヤーから回転軸を推定する。
+      180° スキャンでは ct_rec 自身の推定、オフセットスキャンでは ofct_DO の
+      探索を 1 次元にしたもの(そのレイヤーの -log 透過率を同じガウス平滑化
+      OFCT_DO_SMOOTH で平滑化し、対向像を鏡像反転して、ofct_DO と同じ範囲の
+      ずらし量について全ビュー対の平均二乗差を累積、放物線で補間)を用いる。
+      読むのはそのレイヤーの行だけなので数秒で済む。推定値と実行した
+      ofct_rec のコマンドを標準エラーに表示し、最小値が探索範囲の端にある
+      (回転軸が 0.75*Nx～Nx-1 の外。ofct_DO でも扱えない)ときは警告する。
+      his_srec の引数は常に hp_tg 形式。オフセット時の RC は整数画素(小数は
+      警告の上で丸める)、Oy は環境変数 HIS_SREC_OY がなければ 0、回転軸の傾き
+      (C1 ≠ C2)はオフセット再構成に該当機能がないためエラーとする。his_DO は
+      180° スキャンでは hp2do 行の 6 画像(暗電流・入射光・0° の試料像、暗電流・
+      入射光・180° の試料像。hp2do 行がなければ ct_rec の中心推定と同じ q1 q2
+      と最終記録の次の 2 枚)で hp2DO の推定を行い(stride / navg 引数は無視)、
+      hp2DO と同じ出力を標準出力に書く。オフセットスキャンでは ofct_DO。
+      いずれも実行可能な his_srec のコマンド例を標準エラーに表示する(1.0 は
+      画素サイズ Dr に置き換える)。
+      平均は img_ave と同じ演算(整数和を枚数で切り捨て除算)なので、暗電流・
+      入射光データも再構成結果も ct_rec / hp_tg / ofct_rec / ofct_srec の手順
+      とビット一致し(his_srec は TIFF の ARTIST タグのみ異なる)、his_DO の
+      出力は hp2DO / ofct_DO と同一になる。his は 16bit(type 2)のみ対応。
+      環境変数は RHIS_H(his ファイル名。his2img 行より優先)、RHIS_C(conv.bat
+      名、既定 conv.bat)、RHP_O(output.log のパス)、HIS_SREC_OY(上記)のほか、
+      元のプログラムのものがすべて有効。フレームは 1 つのファイルハンドルへの
+      位置指定読み出しで読むので、hp_tg の並列読み込み(HPTG_READ_THREADS)と
+      メモリ量に応じたチャンク分割はそのまま働く。
+
+      *) his_rec は a.his・conv.bat・output.log のあるディレクトリで、his_srec
+         と his_DO はその 1 つ上で実行する。
 
 3. 360deg scan (offset CT)。標準的な吸収の画像再構成
    a. 回転軸位置の推定

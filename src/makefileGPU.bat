@@ -27,6 +27,15 @@ rem GPU
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
 %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_r.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+rem direct a.his input (conv.bat interpreted in memory by rhis.c); his_main.c picks the 180-degree body
+rem (ct_rec / hp_tg) or the 360-degree offset body (ofct_rec / ofct_srec) from the angles in output.log.
+rem hp_tg wants FOM=float and ofct_srec FOM=double, so those objects and rhis_hp.c are compiled separately.
+%CC2% /openmp /DUSE_GPU /DHIS_INPUT /DONLY_CT_VIEWS /DFOM=float /DFloat=float /DRHP_NAME_SUFFIX=_f /c /Fohis_hp_tg_g.obj hp_tg_ku.c
+%CC2% /openmp /DUSE_GPU /DHIS_INPUT /DONLY_CT_VIEWS /DFloat=float /c /Fohis_ofct_srec_g.obj ofct_srec.c
+%CC2% /openmp /DHIS_INPUT /DONLY_CT_VIEWS /DFOM=float /DRHP_NAME_SUFFIX=_f /c /Fohis_rhis_hp_f.obj rhis_hp.c
+%CC2% /openmp /DHIS_INPUT /DONLY_CT_VIEWS /c /Fohis_rhis_hp_d.obj rhis_hp.c
+%CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_REC /Fehis_rec_g_r.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_g.obj %SIF_F% %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_SREC /Fehis_srec_g_r.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
 rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_r.exe tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
@@ -40,6 +49,8 @@ rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
 %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_s.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_REC /Fehis_rec_g_s.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_g.obj %SIF_F% %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_SREC /Fehis_srec_g_s.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
 rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_s.exe  tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
@@ -53,6 +64,8 @@ rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
 %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_g_c.exe hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_REC /Fehis_rec_g_c.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_g.obj %SIF_F% %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_SREC /Fehis_srec_g_c.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
 rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_c.exe  tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
@@ -76,6 +89,8 @@ rem GPU
 
 rem offset-CT rotation-axis finder (GPU); img/tif auto-detect via rhp_c.c (FOM=double)
 %NVCC% -o ofct_DO_g.exe ofct_DO.cu rhp_c.c error.c %TIFFLIB%
+rem rotation-axis finder on a.his: hp2DO (180 deg) / ofct_DO_g (360 deg), chosen from the angles in output.log
+%NVCC% -Xcompiler /openmp -DHIS_INPUT -DHIS_DO -DONLY_CT_VIEWS -o his_DO_g.exe ofct_DO.cu his_main.c hp2DO.c rhis.c error.c his_rhis_hp_d.obj %TIFFLIB%
 
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran

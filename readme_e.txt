@@ -3,6 +3,7 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.10.16  ver. 2.8
 2026.10.08  ver. 2.7
 2026.09.22  ver. 2.6
 2026.09.09  ver. 2.5
@@ -12,6 +13,29 @@ Uesugi
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+[ver 2.8 changes]
+  - New his_rec_P_F, his_srec_P_F and his_DO (2g):
+    reconstruction and rotation-axis estimation directly from a.his.  The
+    beamline's conv.bat (how the frames become dark.img and q????.img:
+    img_ave / ren / copy) is interpreted in memory and output.log is read
+    as usual, so his2img and conv.bat need not be run and no .img file is
+    created.  The angle column of output.log tells a 180-degree scan from
+    a 360-degree offset scan (sample views reaching 350 degrees, the test
+    ofct_rec has always applied), and the matching body is run:
+    his_rec = ct_rec / ofct_rec (single slice, run beside a.his; without
+    center the axis is estimated from that layer, for an offset scan
+    with a one-layer version of ofct_DO's search),
+    his_srec = hp_tg / ofct_srec (whole volume, run one level up; hp_tg
+    argument form for both), his_DO = hp2DO / ofct_DO (axis estimate).
+    The averages are computed exactly like img_ave (integer sum,
+    truncating division), so the results are bit-identical to the
+    existing chains (verified on the CPU and GPU builds; only the ARTIST
+    tag of his_srec differs).  Only 16-bit his files; the number of
+    dark / I0 frames and the timing of the I0 groups are taken from
+    conv.bat and output.log, never assumed.  The existing programs are
+    unchanged (their file-scope names were made static so that two of
+    them can be linked into one his_* program).
 
 [ver 2.7 changes]
   - New act_tg_g_F (2f) and ofact_srec_g_F (3d): whole-volume
@@ -320,7 +344,7 @@ Uesugi
       zero, so the pad is automatically not applied. Setting PAD_THRESH=0
       (or negative) forces it OFF, giving results identical to the previous
       version.
-      This applies to ct_rec / hp_tg / act_tg / p_rec / ofct_rec /
+      This applies to ct_rec / hp_tg / his_rec / his_srec / act_tg / p_rec / ofct_rec /
       ofct_srec / ofact_srec / sf_rec / rec2rec alike. Note that the input of rec2rec is already attenuated at
       the edges by the reconstruction circle, so a smaller value of about
       0.1-0.2 is appropriate there.
@@ -331,7 +355,8 @@ Uesugi
       the memory-based chunking controls (HPTG_MEM_FRACTION /
       HPTG_MEM_LIMIT_MB / HPTG_CHUNK_ROWS), the CUDA device number to use
       (CUDA_GPU, default 0) and the input file name overrides (RHP_O / RHP_D /
-      RHP_Q). See 20260723_CT_env_vars.md for the full list with defaults.
+      RHP_Q; RHIS_H / RHIS_C / HIS_SREC_OY for his_rec / his_srec / his_DO).
+      See 20260723_CT_env_vars.md for the full list with defaults.
       When several processes are run on the same node, lower
       HPTG_MEM_FRACTION; with the default every process asks for 90% of the
       free memory.
@@ -443,6 +468,80 @@ Uesugi
       in hp_tg (act_tg_g_r / act_tg_g_s / act_tg_g_c).
 
       *) As with hp_tg, run one directory above the HiPic directory.
+
+   g. Reconstruction Directly from a.his (his_rec / his_srec / his_DO)
+      his_rec_P_F  layer {center} {pixel size} {offsetangle}
+      his_srec_P_F HiPic Dr RC RA0 rec
+      his_srec_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
+      his_DO       HiPic {stride}                 (CPU)
+      his_DO_g     HiPic {navg {stride}}          (GPU)
+
+      The input is the data as it comes from the beamline: a.his (every
+      frame of the scan), conv.bat and output.log in one directory.
+      his_rec runs in that directory (like ct_rec); his_srec and his_DO
+      run one level above it with the directory name as HiPic (like hp_tg
+      / ofct_DO).  his2img and conv.bat are not run and no .img file is
+      written: conv.bat is interpreted in memory.
+        his2img <his>                 name of the his file (default a.his)
+        img_ave <frames>... dark.img  dark = average of the listed frames
+        img_ave <frames>... q<N>.img  q<N> = average of the listed frames
+        ren <frame> q<N>.img          q<N> = that frame
+        copy q<M>.img q<N>.img        q<N> = same data as q<M>
+        hp2do D000 I000 E000 D180 I180 E180 ...   remembered for his_DO
+        rem / echo / pause            ignored
+      <frame> is a<digits>.img as his2img names it (a0001.img = first frame
+      of the file).  Any other command stops the program, as do frame
+      numbers outside the file, a q defined twice, or a missing dark.img.
+      How many frames are averaged and where the I0 groups sit in time
+      are therefore read from conv.bat and output.log, never assumed.
+
+      180-degree or 360-degree offset scan is decided from the angle
+      column of output.log: when the sample views reach 350 degrees the
+      data are an offset scan (the test ofct_rec has always applied).
+        program    180-degree scan   360-degree offset scan
+        his_rec    ct_rec (2a)       ofct_rec (3c)
+        his_srec   hp_tg (2b)        ofct_srec (3b) with Rc = RC, Oy = 0,
+                                     rangeList "-" or "L1-L2"
+        his_DO     hp2DO on the views of the hp2do line of conv.bat
+                                     ofct_DO / ofct_DO_g (3a)
+      When center is omitted, his_rec estimates the rotation axis from the
+      layer it reconstructs: on a 180-degree scan with ct_rec's own search,
+      on an offset scan with a one-dimensional version of ofct_DO's search
+      (the -log transmittances of that layer, smoothed with the same
+      Gaussian OFCT_DO_SMOOTH, mirrored opposing views, mean squared
+      difference accumulated over all view pairs for shifts in ofct_DO's
+      range, parabolic refinement).  Only that layer is read, so it takes
+      seconds; the result and the ofct_rec command used are printed on
+      stderr, with a warning when the minimum sits at the edge of the
+      search range (axis outside 0.75*Nx .. Nx-1, which ofct_DO cannot
+      handle either).
+      The command line of his_srec is always the hp_tg form.  For an
+      offset scan RC must be an integer pixel (a fractional value is
+      rounded with a warning), Oy is 0 unless the environment variable
+      HIS_SREC_OY is set, and a tilted axis (C1 != C2) is rejected because
+      the offset reconstruction has no such mode.  his_DO on a 180-degree
+      scan uses hp2DO's estimate on the six views named on the hp2do line
+      (dark, I0 and view at 0 deg; dark, I0 and view at 180 deg; without
+      such a line q1 q2 and the two views after the last logged one, as in
+      ct_rec's centre search), ignores the stride / navg arguments, and
+      prints hp2DO's output on stdout; on an offset scan it is ofct_DO.
+      In both cases a ready-to-run his_srec command is printed on stderr
+      (with 1.0 standing for the pixel size Dr).
+      The averages use the arithmetic of img_ave (integer sum, truncating
+      division), so dark / I0 data and the reconstructions are
+      bit-identical to the ct_rec / hp_tg / ofct_rec / ofct_srec chains
+      (his_srec only differs in the ARTIST tag of the TIFF), and his_DO
+      prints exactly what hp2DO / ofct_DO print.  Only 16-bit his files
+      (type 2) are accepted.  Environment variables: RHIS_H (his file
+      name, overrides the his2img line), RHIS_C (conv.bat name, default
+      conv.bat), RHP_O (output.log path), HIS_SREC_OY (see above) and
+      everything that applies to the underlying programs.  Frames are
+      read with positional reads on one shared file handle, so the
+      parallel projection reading of hp_tg (HPTG_READ_THREADS) and the
+      memory-adaptive chunking work unchanged.
+
+      *) his_rec: run in the directory containing a.his, conv.bat and
+         output.log.  his_srec, his_DO: run one directory above it.
 
 3. 360-degree Scan (Offset CT): Standard Absorption CT Reconstruction
    a. Rotation Axis Position Estimation

@@ -306,15 +306,23 @@ static void StoreTiffFile(const char *path, int width, int height,
 
 #define DEFAULT_SEARCH_PERCENT 20.0
 
-int main(int argc, char **argv)
+/* ---------------------------------------------------------------
+ * The axis estimate proper, on images that are already in memory.
+ * stdout is unchanged: "Nx Ny", one line per row (y R0 RMS CC), then
+ * "A B sigma {z1 z2}".  out_path != NULL saves the RMS map as 16-bit TIFF.
+ * R0 = A*y + B is the (negated) axis position; A and B are also returned
+ * so that his_DO can print a ready-to-run command.
+ * --------------------------------------------------------------- */
+int hp2DO_compute(unsigned short **dataD000, unsigned short **dataI000,
+                  unsigned short **dataE000, unsigned short **dataD180,
+                  unsigned short **dataI180, unsigned short **dataE180,
+                  int Nx, int Ny, int z1, int z2, int print_range,
+                  double search_percent, const char *out_path,
+                  double *A_out, double *B_out)
 {
-    unsigned short **dataD000, **dataI000, **dataE000,
-                   **dataD180, **dataI180, **dataE180;
-    int Nx, Ny, z1, z2, N1, N2, Nc, y;
-    int use_tiff;
+    int N1, N2, Nc, y;
     int search_range;
     int save_image;
-    int effective_argc;
     double **array = NULL;
     double D, A, B, RMS1, RMS2, dRMS,
            sCC = 0.0, sCCy = 0.0, sCCR0 = 0.0,
@@ -324,61 +332,6 @@ int main(int argc, char **argv)
     char desc[DESC_LEN],
          *cmae = "cell memory allocation error.";
     int num_threads = 16;
-    double search_percent = DEFAULT_SEARCH_PERCENT;
-
-    if (argc < 7 || argc > 11)
-        Error("usage : hp2DO D000 I000 E000 D180 I180 E180 {y1 y2} {image} {search%}");
-
-    /* Detect format from first argument */
-    use_tiff = IsTiffFile(PathD000);
-
-    /* Suppress libtiff warnings for cleaner output */
-    TIFFSetWarningHandler(NULL);
-
-    /* Parse optional search% (last argument, numeric) */
-    effective_argc = argc;
-    if (argc >= 8) {
-        double tmp = atof(argv[argc - 1]);
-        if (tmp > 0.0 && tmp <= 50.0) {
-            if (effective_argc == 8 || effective_argc == 10) {
-                search_percent = tmp;
-                effective_argc--;
-            }
-        }
-    }
-
-    /* ---------------------------------------------------------------
-     * Load all input files into memory
-     * (only this section differs between img and tif)
-     * --------------------------------------------------------------- */
-    if (use_tiff) {
-        fprintf(stderr, "TIFF mode: Loading files...\n");
-        dataD000 = ReadTiffFile(PathD000, &Nx, &Ny, 1);
-        dataI000 = ReadTiffFile(PathI000, &Nx, &Ny, 0);
-        dataE000 = ReadTiffFile(PathE000, &Nx, &Ny, 0);
-        dataD180 = ReadTiffFile(PathD180, &Nx, &Ny, 0);
-        dataI180 = ReadTiffFile(PathI180, &Nx, &Ny, 0);
-        dataE180 = ReadTiffFile(PathE180, &Nx, &Ny, 0);
-    } else {
-        fprintf(stderr, "img mode: Loading files...\n");
-        dataD000 = ReadImgFile(PathD000, &Nx, &Ny, 1);
-        dataI000 = ReadImgFile(PathI000, &Nx, &Ny, 0);
-        dataE000 = ReadImgFile(PathE000, &Nx, &Ny, 0);
-        dataD180 = ReadImgFile(PathD180, &Nx, &Ny, 0);
-        dataI180 = ReadImgFile(PathI180, &Nx, &Ny, 0);
-        dataE180 = ReadImgFile(PathE180, &Nx, &Ny, 0);
-    }
-    fprintf(stderr, "Loading complete.\n");
-
-    /* Parse slice range */
-    if (effective_argc == 7 || effective_argc == 8) {
-        z1 = 0;
-        z2 = Ny - 1;
-    } else {
-        if ((z1 = atoi(argv[7])) < 0 ||
-            (z2 = atoi(argv[8])) >= Ny || z1 >= z2)
-            Error("bad slice range.");
-    }
 
     printf("%d\t%d\n", Nx, Ny);
 
@@ -400,7 +353,7 @@ int main(int argc, char **argv)
     if (R0_arr == NULL || RMS0_arr == NULL || CC_arr == NULL || dx0_arr == NULL)
         Error("result array memory allocation error.");
 
-    save_image = (effective_argc == 8 || effective_argc == 10);
+    save_image = (out_path != NULL);
     Nc = search_range * 2 + 1;
     if (save_image) {
         if ((array = (double **)MA(Ny, array)) == NULL) Error(cmae);
@@ -496,15 +449,16 @@ int main(int argc, char **argv)
     B = (sCCy2 * sCCR0 - sCCy * sCCyR0) / D;
     printf("%lf\t%lf\t%lf", A, B,
            Sqrt_val((sCCR02 - A * sCCyR0 - B * sCCR0) / sCC));
-    if (effective_argc == 9 || effective_argc == 10)
+    if (print_range)
         printf("\t%d\t%d", z1, z2);
     putchar('\n');
+    if (A_out != NULL) *A_out = A;
+    if (B_out != NULL) *B_out = B;
 
     /* ---------------------------------------------------------------
      * Save output image (optional)
      * --------------------------------------------------------------- */
     if (save_image) {
-        const char *out_path = argv[effective_argc - 1];
         unsigned short **cell_t;
 
         RMS1 = RMS2 = RMS0_arr[0];
@@ -547,6 +501,86 @@ int main(int argc, char **argv)
     free(RMS0_arr);
     free(CC_arr);
     free(dx0_arr);
+    return 0;
+}
+
+/* ---------------------------------------------------------------
+ * Main (file-based: six img / tif images on the command line)
+ * --------------------------------------------------------------- */
+
+#ifdef HIS_INPUT
+#define main hp2DO_main		/* his_DO uses hp2DO_compute() on frames read from a.his */
+#endif
+
+int main(int argc, char **argv)
+{
+    unsigned short **dataD000, **dataI000, **dataE000,
+                   **dataD180, **dataI180, **dataE180;
+    int Nx, Ny, z1, z2;
+    int use_tiff;
+    int effective_argc;
+    const char *out_path;
+    double search_percent = DEFAULT_SEARCH_PERCENT;
+
+    if (argc < 7 || argc > 11)
+        Error("usage : hp2DO D000 I000 E000 D180 I180 E180 {y1 y2} {image} {search%}");
+
+    /* Detect format from first argument */
+    use_tiff = IsTiffFile(PathD000);
+
+    /* Suppress libtiff warnings for cleaner output */
+    TIFFSetWarningHandler(NULL);
+
+    /* Parse optional search% (last argument, numeric) */
+    effective_argc = argc;
+    if (argc >= 8) {
+        double tmp = atof(argv[argc - 1]);
+        if (tmp > 0.0 && tmp <= 50.0) {
+            if (effective_argc == 8 || effective_argc == 10) {
+                search_percent = tmp;
+                effective_argc--;
+            }
+        }
+    }
+
+    /* ---------------------------------------------------------------
+     * Load all input files into memory
+     * (only this section differs between img and tif)
+     * --------------------------------------------------------------- */
+    if (use_tiff) {
+        fprintf(stderr, "TIFF mode: Loading files...\n");
+        dataD000 = ReadTiffFile(PathD000, &Nx, &Ny, 1);
+        dataI000 = ReadTiffFile(PathI000, &Nx, &Ny, 0);
+        dataE000 = ReadTiffFile(PathE000, &Nx, &Ny, 0);
+        dataD180 = ReadTiffFile(PathD180, &Nx, &Ny, 0);
+        dataI180 = ReadTiffFile(PathI180, &Nx, &Ny, 0);
+        dataE180 = ReadTiffFile(PathE180, &Nx, &Ny, 0);
+    } else {
+        fprintf(stderr, "img mode: Loading files...\n");
+        dataD000 = ReadImgFile(PathD000, &Nx, &Ny, 1);
+        dataI000 = ReadImgFile(PathI000, &Nx, &Ny, 0);
+        dataE000 = ReadImgFile(PathE000, &Nx, &Ny, 0);
+        dataD180 = ReadImgFile(PathD180, &Nx, &Ny, 0);
+        dataI180 = ReadImgFile(PathI180, &Nx, &Ny, 0);
+        dataE180 = ReadImgFile(PathE180, &Nx, &Ny, 0);
+    }
+    fprintf(stderr, "Loading complete.\n");
+
+    /* Parse slice range */
+    if (effective_argc == 7 || effective_argc == 8) {
+        z1 = 0;
+        z2 = Ny - 1;
+    } else {
+        if ((z1 = atoi(argv[7])) < 0 ||
+            (z2 = atoi(argv[8])) >= Ny || z1 >= z2)
+            Error("bad slice range.");
+    }
+
+    out_path = (effective_argc == 8 || effective_argc == 10) ? argv[effective_argc - 1] : NULL;
+
+    hp2DO_compute(dataD000, dataI000, dataE000, dataD180, dataI180, dataE180,
+                  Nx, Ny, z1, z2, (effective_argc == 9 || effective_argc == 10),
+                  search_percent, out_path, NULL, NULL);
 
     /* Free image data */
     FreeImageData(dataD000, Ny);

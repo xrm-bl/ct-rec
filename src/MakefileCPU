@@ -16,10 +16,10 @@ SIF_F   = sif_f_fast.c
 
 EXE_DIR = ../bin
 
-.PHONY: all clean ct_rec hp_tg ofct_srec ofct_rec \
+.PHONY: all clean ct_rec hp_tg his his_rec his_srec his_DO ofct_srec ofct_rec \
         p_rec sf_rec misc si_tools filters
 
-all: ct_rec hp_tg ofct_srec ofct_rec \
+all: ct_rec hp_tg his ofct_srec ofct_rec \
      p_rec sf_rec misc si_tools filters
 
 # ---------------------------------------------------------------
@@ -48,6 +48,51 @@ hp_tg_t_s:
 	$(CC) $(CFLAGS) $(OMPF) -DONLY_CT_VIEWS -DFOM=float -DFloat=float -o $(EXE_DIR)/hp_tg_t_s hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c $(TIFFLIB) $(CBP) -DFilter=Shepp $(LIBS)
 hp_tg_t_c:
 	$(CC) $(CFLAGS) $(OMPF) -DONLY_CT_VIEWS -DFOM=float -DFloat=float -o $(EXE_DIR)/hp_tg_t_c hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c $(TIFFLIB) $(CBP) -DFilter=Chesler $(LIBS)
+
+# ---------------------------------------------------------------
+# Reconstruction directly from a.his.  conv.bat is interpreted in memory
+# by rhis.c (dark / I0 averaging as img_ave, ren, copy); no q????.img is
+# created.  his_main.c reads the angles in output.log and runs the
+# 180-degree body (ct_rec / hp_tg) or the 360-degree offset body
+# (ofct_rec / ofct_srec); the sources are linked side by side with their
+# main() renamed (-DHIS_INPUT), rhis_hp.c once per FOM (rhp.h).
+#   his_rec_t_F  : single slice, run beside a.his  (ct_rec_c.c + ofct_rec.c)
+#   his_srec_t_F : whole volume, run one level up  (hp_tg_ku.c + ofct_srec.c)
+#   his_DO       : rotation-axis estimate          (hp2DO.c + ofct_DO.c)
+# ---------------------------------------------------------------
+his: his_rec his_srec his_DO
+his_rec: his_rec_t_r his_rec_t_s his_rec_t_c
+HIS_REC_SRC = his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c
+his_rec_t_r:
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_REC -o $(EXE_DIR)/his_rec_t_r $(HIS_REC_SRC) sort_filter_omp.c $(SIF_F) $(TIFFLIB) $(CBP) -DFilter=Ramachandran $(LIBS)
+his_rec_t_s:
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_REC -o $(EXE_DIR)/his_rec_t_s $(HIS_REC_SRC) sort_filter_omp.c $(SIF_F) $(TIFFLIB) $(CBP) -DFilter=Shepp $(LIBS)
+his_rec_t_c:
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_REC -o $(EXE_DIR)/his_rec_t_c $(HIS_REC_SRC) sort_filter_omp.c $(SIF_F) $(TIFFLIB) $(CBP) -DFilter=Chesler $(LIBS)
+
+# hp_tg wants FOM=float, ofct_srec FOM=double: compile them and rhis_hp.c
+# separately (the float variant of the reader is renamed with _f).
+HIS_SREC_OBJS_T = his_hp_tg_t.o his_ofct_srec_t.o his_rhis_hp_f.o his_rhis_hp_d.o
+his_hp_tg_t.o: hp_tg_ku.c rhis.h rhp.h cbp.h cbp_pipe.h
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DONLY_CT_VIEWS -DFOM=float -DFloat=float -DRHP_NAME_SUFFIX=_f -c hp_tg_ku.c -o $@
+his_ofct_srec_t.o: ofct_srec.c rhis.h rhp.h cbp.h cbp_pipe.h
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DONLY_CT_VIEWS -DFloat=float -c ofct_srec.c -o $@
+his_rhis_hp_f.o: rhis_hp.c rhis.h rhp.h blacklim.h
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DONLY_CT_VIEWS -DFOM=float -DRHP_NAME_SUFFIX=_f -c rhis_hp.c -o $@
+his_rhis_hp_d.o: rhis_hp.c rhis.h rhp.h blacklim.h
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DONLY_CT_VIEWS -c rhis_hp.c -o $@
+HIS_SREC_SRC = his_main.c rhis.c error.c rl.c sort_filter_omp.c
+his_srec: his_srec_t_r his_srec_t_s his_srec_t_c
+his_srec_t_r: $(HIS_SREC_OBJS_T)
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_SREC -DFloat=float -o $(EXE_DIR)/his_srec_t_r $(HIS_SREC_SRC) $(HIS_SREC_OBJS_T) $(TIFFLIB) $(CBP) -DFilter=Ramachandran $(LIBS)
+his_srec_t_s: $(HIS_SREC_OBJS_T)
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_SREC -DFloat=float -o $(EXE_DIR)/his_srec_t_s $(HIS_SREC_SRC) $(HIS_SREC_OBJS_T) $(TIFFLIB) $(CBP) -DFilter=Shepp $(LIBS)
+his_srec_t_c: $(HIS_SREC_OBJS_T)
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_SREC -DFloat=float -o $(EXE_DIR)/his_srec_t_c $(HIS_SREC_SRC) $(HIS_SREC_OBJS_T) $(TIFFLIB) $(CBP) -DFilter=Chesler $(LIBS)
+
+# rotation-axis estimate from a.his: hp2DO (180 deg) / ofct_DO (360 deg)
+his_DO: his_rhis_hp_d.o
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_DO -DONLY_CT_VIEWS -o $(EXE_DIR)/his_DO his_main.c hp2DO.c ofct_DO.c rhis.c error.c msd.c his_rhis_hp_d.o $(SIF_F) $(TIFFLIB) $(LIBS)
 
 # tf_tg: tf_tg_t_r tf_tg_t_s tf_tg_t_c
 # tf_tg_t_r:
@@ -254,6 +299,8 @@ clean:
 	rm -f *.o $(EXE_DIR)/ct_rec_t_r $(EXE_DIR)/ct_rec_t_s $(EXE_DIR)/ct_rec_t_c \
 	$(EXE_DIR)/tf_rec_t_r $(EXE_DIR)/tf_rec_t_s $(EXE_DIR)/tf_rec_t_c \
 	$(EXE_DIR)/hp_tg_t_r $(EXE_DIR)/hp_tg_t_s $(EXE_DIR)/hp_tg_t_c \
+	$(EXE_DIR)/his_rec_t_r $(EXE_DIR)/his_rec_t_s $(EXE_DIR)/his_rec_t_c \
+	$(EXE_DIR)/his_srec_t_r $(EXE_DIR)/his_srec_t_s $(EXE_DIR)/his_srec_t_c $(EXE_DIR)/his_DO \
 	$(EXE_DIR)/tf_tg_t_r $(EXE_DIR)/tf_tg_t_s $(EXE_DIR)/tf_tg_t_c \
 	$(EXE_DIR)/ofct_srec_t_r $(EXE_DIR)/ofct_srec_t_s $(EXE_DIR)/ofct_srec_t_c \
 	$(EXE_DIR)/otf_rec_t_r $(EXE_DIR)/otf_rec_t_s $(EXE_DIR)/otf_rec_t_c \

@@ -24,6 +24,22 @@ rem %CC2% /openmp /Fetf_rec_t_c.exe tf_rec.c error.c sort_filter_omp.c %TIFFLIB%
 %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_s.exe hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Shepp
 %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fehp_tg_t_c.exe hp_tg_ku.c error.c rhp_c.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Chesler
 
+rem direct a.his input (conv.bat interpreted in memory by rhis.c); his_main.c picks the 180-degree body
+rem (ct_rec / hp_tg) or the 360-degree offset body (ofct_rec / ofct_srec) from the angles in output.log.
+%CC2% /openmp /DHIS_INPUT /DHIS_REC /Fehis_rec_t_r.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_omp.c %SIF_F% %TIFFLIB% %CBP% /DFilter=Ramachandran
+%CC2% /openmp /DHIS_INPUT /DHIS_REC /Fehis_rec_t_s.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_omp.c %SIF_F% %TIFFLIB% %CBP% /DFilter=Shepp
+%CC2% /openmp /DHIS_INPUT /DHIS_REC /Fehis_rec_t_c.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_omp.c %SIF_F% %TIFFLIB% %CBP% /DFilter=Chesler
+rem hp_tg wants FOM=float and ofct_srec FOM=double, so those objects and rhis_hp.c are compiled separately
+%CC2% /openmp /DHIS_INPUT /DONLY_CT_VIEWS /DFOM=float /DFloat=float /DRHP_NAME_SUFFIX=_f /c /Fohis_hp_tg_t.obj hp_tg_ku.c
+%CC2% /openmp /DHIS_INPUT /DONLY_CT_VIEWS /DFloat=float /c /Fohis_ofct_srec_t.obj ofct_srec.c
+%CC2% /openmp /DHIS_INPUT /DONLY_CT_VIEWS /DFOM=float /DRHP_NAME_SUFFIX=_f /c /Fohis_rhis_hp_f.obj rhis_hp.c
+%CC2% /openmp /DHIS_INPUT /DONLY_CT_VIEWS /c /Fohis_rhis_hp_d.obj rhis_hp.c
+%CC2% /openmp /DHIS_INPUT /DHIS_SREC /DFloat=float /Fehis_srec_t_r.exe his_main.c rhis.c error.c rl.c sort_filter_omp.c his_hp_tg_t.obj his_ofct_srec_t.obj his_rhis_hp_f.obj his_rhis_hp_d.obj %TIFFLIB% %CBP% /DFilter=Ramachandran
+%CC2% /openmp /DHIS_INPUT /DHIS_SREC /DFloat=float /Fehis_srec_t_s.exe his_main.c rhis.c error.c rl.c sort_filter_omp.c his_hp_tg_t.obj his_ofct_srec_t.obj his_rhis_hp_f.obj his_rhis_hp_d.obj %TIFFLIB% %CBP% /DFilter=Shepp
+%CC2% /openmp /DHIS_INPUT /DHIS_SREC /DFloat=float /Fehis_srec_t_c.exe his_main.c rhis.c error.c rl.c sort_filter_omp.c his_hp_tg_t.obj his_ofct_srec_t.obj his_rhis_hp_f.obj his_rhis_hp_d.obj %TIFFLIB% %CBP% /DFilter=Chesler
+rem rotation-axis finder on a.his: hp2DO (180 deg) / ofct_DO (360 deg), chosen from the angles in output.log
+%CC2% /openmp /DHIS_INPUT /DHIS_DO /DONLY_CT_VIEWS /Fehis_DO.exe his_main.c hp2DO.c ofct_DO.c rhis.c error.c msd.c his_rhis_hp_d.obj %SIF_F% %TIFFLIB%
+
 rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_r.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Ramachandran
 rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_s.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Shepp
 rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_c.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Chesler

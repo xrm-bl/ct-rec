@@ -8,6 +8,10 @@
 
 extern void	Error(char *msg);
 
+#ifdef HIS_INPUT
+#define main ofct_DO_main	/* his_DO: his_main.c calls this for 360-degree offset scans */
+#endif
+
 #ifdef	_WIN32
 #include <process.h>
 #include <windows.h>
@@ -243,7 +247,12 @@ int	main(int argc,char **argv)
         centerf=((double)(hp.Nx+Ox1+X)+dx)/2.0;
         oyf=(double)(Oy1+Y)+dy;
         Rc=(int)floor(centerf+0.5); Oyv=(int)floor(oyf+0.5);
+#ifdef HIS_INPUT
+        (void)fprintf(stderr,"try: his_srec_g_c %s 1.0 %d 0.0 rec   (replace 1.0 by the pixel size Dr)\n",argv[1],Rc);
+        if (Oyv!=0) (void)fprintf(stderr,"note: estimated Oy=%d; his_srec uses Oy=0 unless HIS_SREC_OY is set\n",Oyv);
+#else
         (void)fprintf(stderr,"try: ofct_srec_g_c raw %d %d - 1.0 0.0 rec\n",Rc,Oyv);
+#endif
 //        (void)fprintf(stderr,"center=%.3f\tOy=%.3f\t(dx=%.3f dy=%.3f, smooth=%.2f)\n",centerf,oyf,dx,dy,sig);
         (void)fprintf(stderr,"%d\n",Rc);
     }

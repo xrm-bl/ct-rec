@@ -1,6 +1,18 @@
-﻿
-#ifndef	FOM
+﻿#ifndef	FOM
 #define FOM	double
+#endif
+
+/* Two copies of the reader with different FOM in one program (his_srec:
+   hp_tg_ku.c wants FOM=float, ofct_srec.c FOM=double).  A translation
+   unit compiled with -DRHP_NAME_SUFFIX=_f sees and defines
+   InitReadHiPic_f etc., so both variants can be linked side by side. */
+#ifdef	RHP_NAME_SUFFIX
+#define RHP_CAT_(a,b)	a##b
+#define RHP_CAT(a,b)	RHP_CAT_(a,b)
+#define InitReadHiPic	RHP_CAT(InitReadHiPic,RHP_NAME_SUFFIX)
+#define ReadHiPic	RHP_CAT(ReadHiPic,RHP_NAME_SUFFIX)
+#define ReadHiPicBand	RHP_CAT(ReadHiPicBand,RHP_NAME_SUFFIX)
+#define TermReadHiPic	RHP_CAT(TermReadHiPic,RHP_NAME_SUFFIX)
 #endif
 
 typedef struct {
@@ -9,7 +21,7 @@ typedef struct {
 			a;
 		int	it;
 	} OutputLog;
-		
+
 typedef struct {
 		char		*dir,
 				**q_img;

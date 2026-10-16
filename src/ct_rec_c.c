@@ -2,6 +2,12 @@
 // 
 // Required files are q???.img, dark.img.
 // output file "rec????.tif"
+//
+// Built with -DHIS_INPUT (his_rec_P_F) the same program reads a.his
+// directly: conv.bat is interpreted in memory by rhis.c (dark / I0
+// averaging exactly as img_ave, ren, copy), output.log is read as usual,
+// and no q????.img file is created.  Run it where a.his, conv.bat and
+// output.log are.
 
 /*----------------------------------------------------------------------*/
 #include <stdio.h>
@@ -15,6 +21,14 @@
 #include "tiffio.h"
 #include "blacklim.h"
 #include "failimg.h"
+#ifdef HIS_INPUT
+#include "rhis.h"
+static HisSet	*his = NULL;	/* a.his + conv.bat in the current directory */
+/* his_rec links this file together with ofct_rec.c; his_main.c looks at
+   the angles in output.log and calls ct_rec_main (180-degree scan) or
+   ofct_rec_main (360-degree offset scan).  File-scope names are static. */
+#define main ct_rec_main
+#endif
 
 /*----------------------------------------------------------------------*/
 /* Ring removal backend selection (compile time).                        */
@@ -57,43 +71,43 @@ typedef struct HiPic_Header Header;
 /*----------------------------------------------------------------------*/
 
 // main data for read transmitted images (data[y][x])
-unsigned short	data[MAXPIXL];
+static unsigned short	data[MAXPIXL];
 
 //dark file name and data
-unsigned short	dark[MAXPIXL];
-short	cent_flag;
+static unsigned short	dark[MAXPIXL];
+static short	cent_flag;
 
 // image profile from 'output.log'
-float	shottime[MAX_SHOT], shotangle[MAX_SHOT];
-int		Ishot[MAX_SHOT], NI0, II0[MAX_SHOT];
+static float	shottime[MAX_SHOT], shotangle[MAX_SHOT];
+static int		Ishot[MAX_SHOT], NI0, II0[MAX_SHOT];
 
 // parameters for interpolation of incident beam
-unsigned short	II01[MAXPIXL], II02[MAXPIXL];     // II01[x], II02[x]
-unsigned short	I[MAXPIXL];                                // I[x]
-double	I0[MAXPIXL];
+static unsigned short	II01[MAXPIXL], II02[MAXPIXL];     // II01[x], II02[x]
+static unsigned short	I[MAXPIXL];                                // I[x]
+static double	I0[MAXPIXL];
 
-double	*po;
+static double	*po;
 
 // file head character  q???.img or q????.img
-char	flhead[]   = "q";
-char	darkfile[16] = "dark.img";
+static char	flhead[]   = "q";
+static char	darkfile[16] = "dark.img";
 
-int useTiff = 0;   // 0 = HiPic .img, 1 = 16-bit TIFF .tif (auto-detected)
+static int useTiff = 0;   // 0 = HiPic .img, 1 = 16-bit TIFF .tif (auto-detected)
 
 // output file name
-char	fn[256];
+static char	fn[256];
 
 // flag for q001.img or q0001.img
-int		iFlag;
+static int		iFlag;
 
 // projection
-short	N, M, n_total;
+static short	N, M, n_total;
 
 // calculation layer
-long	s_layer;
+static long	s_layer;
 
 // total absorption
-double	TA, TA1, TA2, TAM, TASD;
+static double	TA, TA1, TA2, TAM, TASD;
 
 
 /*----------------------------------------------------------------------*/
@@ -108,7 +122,7 @@ char        *msg;
 
 
 /*----------------------------------------------------------------------*/
-int read_hipic(int nfq, short *data, Header *h, long ln)
+static int read_hipic(int nfq, short *data, Header *h, long ln)
 {
 	int		j, i_res;
 	FILE	*fi;
@@ -200,7 +214,7 @@ int read_hipic(int nfq, short *data, Header *h, long ln)
 /*----------------------------------------------------------------------*/
 
 /* read one layer line from a 16-bit TIFF (dark.tif or q###/q####.tif)   */
-int read_tif_line(int nfq, short *data, long ln)
+static int read_tif_line(int nfq, short *data, long ln)
 {
     TIFF            *image;
     char            fname[1024];
@@ -243,16 +257,45 @@ int read_tif_line(int nfq, short *data, long ln)
 }
 
 /*----------------------------------------------------------------------*/
-/* dispatch to the .img or .tif reader based on the detected format      */
-int read_proj(int nfq, short *data, Header *h, long ln)
+#ifdef HIS_INPUT
+/* his_rec: one layer line of dark (nfq==0) or q<nfq>, straight from a.his.
+   Averaged entries (dark, I0 groups) are averaged like img_ave inside
+   rhis.c and cached there, so the repeated reads cost nothing.          */
+static int read_his_line(int nfq, unsigned short *data, long ln)
 {
+    if(his == NULL) his = HisOpen(".");
+    if(ln < 0 || ln >= HisNy(his)){
+        fprintf(stderr, "layer %ld is outside the frame (0 .. %d)\n", ln, HisNy(his)-1);
+        return((int)ln+1);
+    }
+    if(nfq == 0) HisReadDarkBand(his, (int)ln, (int)ln, data);
+    else{
+        if(!HisHasQ(his, nfq)){
+            fprintf(stderr, "q%04d.img is not produced by conv.bat\n", nfq);
+            return(-10);
+        }
+        HisReadQBand(his, nfq, (int)ln, (int)ln, data);
+    }
+    N = HisNx(his);
+    return(0);
+}
+#endif
+
+/* dispatch to the .img / .tif / .his reader based on the detected format */
+static int read_proj(int nfq, short *data, Header *h, long ln)
+{
+#ifdef HIS_INPUT
+    (void)h;
+    return read_his_line(nfq, (unsigned short *)data, ln);
+#else
     if(useTiff) return read_tif_line(nfq, data, ln);
     else        return read_hipic(nfq, data, h, ln);
+#endif
 }
 
 /*----------------------------------------------------------------------*/
 
-int read_log()
+static int read_log()
 {
 	int			i, j;
 	int		nnn;
@@ -442,7 +485,7 @@ long		ln;
 
 /*----------------------------------------------------------------------*/
 
-float calc_center(){
+static float calc_center(){
 int		i;
 long	j, dx, dx0, N1;
 double	mm1, mx1, mm2, mx2;
@@ -630,6 +673,10 @@ char	**argv;
 	}
 	s_layer = atoi(argv[1]);
 
+#ifdef HIS_INPUT
+    /* his_rec: a.his + conv.bat + output.log in the current directory */
+    his = HisOpen(".");
+#else
     /* detect input format: dark.img -> HiPic .img, else dark.tif -> 16-bit TIFF */
     {
         FILE *ftest;
@@ -644,6 +691,7 @@ char	**argv;
             return(1);
         }
     }
+#endif
 
 // read shot log file
 	if ((i = read_log()) != 0){
@@ -792,5 +840,8 @@ char	**argv;
 	fprintf(ff,"\n");
 	fclose(ff);
 
+#ifdef HIS_INPUT
+	HisClose(his);
+#endif
 	return 0;
 }

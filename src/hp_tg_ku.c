@@ -3,6 +3,9 @@
  * ----------------------------------------------------------------------------
  * 入力は rhp.h のリーダ(InitReadHiPic / ReadHiPic / TermReadHiPic / HiPic)
  * 経由で読む。出力は従来どおり rec*.tif (32bit float TIFF)。
+ * -DHIS_INPUT でビルドすると his_srec: rhp_c.c の代わりに rhis.c をリンクし、
+ * a.his + conv.bat + output.log を直接読む(q????.img は作らない)。本体は
+ * 無改造で、変わるのは ARTIST タグと usage の名前だけ。
  *
  * メモリ上限チェックとチャンク(複数パス)実行:
  *   巨大配列 W (= 行数 x Nt x Nx x sizeof(Float)) が空き物理メモリに
@@ -55,6 +58,13 @@
 
 extern void	Error(char *msg);
 
+#ifdef HIS_INPUT
+#define PROG_NAME	"his_srec"	/* a.his + conv.bat + output.log via rhis.c */
+#define main hp_tg_main		/* his_main.c: 180-degree scan -> here, 360 -> ofct_srec_main */
+#else
+#define PROG_NAME	"hp_tg"
+#endif
+
 #ifdef	_WIN32
 #include <process.h>
 #include <windows.h>
@@ -94,8 +104,8 @@ typedef struct {
 	} Struct;
 
 /* insert start */
-	double		Dr,RC,RA0,Ct;
-	int			hpNtM;
+	static double		Dr,RC,RA0,Ct;
+	static int			hpNtM;
 /* insert end */
 
 
@@ -130,7 +140,7 @@ static unsigned long long get_total_memory_bytes(void)
 }
 
 
-void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
+static void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
 {
 	TIFF *image;
 	long i;
@@ -146,7 +156,7 @@ void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char 
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
-	TIFFSetField(image, TIFFTAG_ARTIST, "hp_tg");
+	TIFFSetField(image, TIFFTAG_ARTIST, PROG_NAME);
 //	TIFFSetField(image, TIFFTAG_MINSAMPLEVALUE, mmmin );
 //	TIFFSetField(image, TIFFTAG_MAXSAMPLEVALUE, mmmax );
 
@@ -329,7 +339,7 @@ int	main(int argc,char **argv)
     int num_threads = 40; // Default number of threads
 
 	if (argc!=6 && argc!=9){
-		fprintf(stderr,"usage : hp_tg HiPic/ Dr RC RA0 rec/\nusage : hp_tg HiPic/ Dr L1 C1 L2 C2 RA0 rec/");
+		fprintf(stderr,"usage : " PROG_NAME " HiPic/ Dr RC RA0 rec/\nusage : " PROG_NAME " HiPic/ Dr L1 C1 L2 C2 RA0 rec/");
 	    Error(" ");  
 	}
 

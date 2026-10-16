@@ -24,6 +24,7 @@ his/tif split -> axis search -> reconstruction (ring removal + FBP) -> 32bit tif
 |---|---|---|
 | Single-slice reconstruction (180°) | `ct_rec_G_F` | rotation-axis RMSD search built in |
 | Whole-volume reconstruction | `hp_tg_G_F`, `ct_rec_loop` (`.bat`/`.sh`) | memory-adaptive chunking |
+| Reconstruction directly from a.his | `his_rec_G_F`, `his_srec_G_F`, `his_DO(_g)` | ct_rec / hp_tg (180°) or ofct_rec / ofct_srec (360° offset, chosen from the angles in output.log) reading a.his + conv.bat + output.log in memory; no his2img / img_ave stage, bit-identical results; `his_DO` = hp2DO / ofct_DO axis estimate |
 | Reconstruction from p-images | `p_rec_G_F`, `sf_rec_t_F` | |
 | Offset CT (360°, half-beam) | `ofct_DO(_g)`, `ofct_rec_G_F`, `ofct_srec_G_F` | axis finder + reconstruction |
 | Automatic-CT whole-volume reconstruction | `act_tg_g_F`, `ofact_srec_g_F` | hp_tg / ofct_srec with direct 16-bit + 8-bit output (two LAC ranges on the command line), no 32-bit stage |
@@ -68,7 +69,7 @@ libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/g
 |---|---|
 | [20260827_install_windows.md](20260827_install_windows.md) | install on Windows and run the first reconstruction (Japanese) |
 | [20260827_install_windows_EN.md](20260827_install_windows_EN.md) | same, English |
-| [readme.txt](readme.txt) | full manual, Japanese (current: ver 2.7) |
+| [readme.txt](readme.txt) | full manual, Japanese (current: ver 2.8) |
 | [readme_e.txt](readme_e.txt) | full manual, English |
 | [20260723_CT_env_vars.md](20260723_CT_env_vars.md) | all environment variables with defaults |
 | [20260504_filter_readme.md](20260504_filter_readme.md) | filter tools |

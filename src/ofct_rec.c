@@ -15,6 +15,11 @@
 #include "tifwrite.h"
 #include "blacklim.h"
 #include "failimg.h"
+#ifdef HIS_INPUT
+#include "rhis.h"	/* his_rec: a.his + conv.bat + output.log, no q????.img */
+static HisSet	*his = NULL;
+#define main ofct_rec_main	/* called by his_main.c for 360-degree offset scans */
+#endif
 #ifdef USE_GPU
   #include "sort_filter_g.h"
   #define SORT_FILTER_RESTORE sort_filter_restore_gpu
@@ -34,50 +39,50 @@
 /*----------------------------------------------------------------------*/
 
 // main data for read transmitted images (data[y][x])
-unsigned short	data[MAXPIXL];
+static unsigned short	data[MAXPIXL];
 
 //dark file name and data
-unsigned short	dark[MAXPIXL];
-short	cent_flag;
+static unsigned short	dark[MAXPIXL];
+static short	cent_flag;
 
 // image profile from 'output.log'
-float	shottime[MAX_SHOT], shotangle[MAX_SHOT];
-int		Ishot[MAX_SHOT], NST, NI0, II0[MAX_SHOT];
+static float	shottime[MAX_SHOT], shotangle[MAX_SHOT];
+static int		Ishot[MAX_SHOT], NST, NI0, II0[MAX_SHOT];
 
 // parameters for interpolation of incident beam
-unsigned short	II01[MAXPIXL], II02[MAXPIXL];     // II01[x], II02[x]
-unsigned short	I[MAXPIXL];                                // I[x]
-double	I0[MAXPIXL];
+static unsigned short	II01[MAXPIXL], II02[MAXPIXL];     // II01[x], II02[x]
+static unsigned short	I[MAXPIXL];                                // I[x]
+static double	I0[MAXPIXL];
 
 // file head character  q???.tif or q????.tif
-char	flhead[]   = "q";
-char	darkfile[16] = "dark.tif";
+static char	flhead[]   = "q";
+static char	darkfile[16] = "dark.tif";
 
-int useTiff = 0;   // 0 = HiPic .img, 1 = 16-bit TIFF .tif (auto-detected)
+static int useTiff = 0;   // 0 = HiPic .img, 1 = 16-bit TIFF .tif (auto-detected)
 
 // output file name
-char	fn[256];
+static char	fn[256];
 
 // flag for q001.tif or q0001.tif
-int		iFlag, nfq, BPS;
+static int		iFlag, nfq, BPS;
 
 // projection
-unsigned short	N, n_total, NN, NNST;
+static unsigned short	N, n_total, NN, NNST;
 
 // calculation layer
-long	s_layer;
+static long	s_layer;
 
-int		Nx, Ny;
+static int		Nx, Ny;
 
-double	*pp;
+static double	*pp;
 
 // total absorption
-double	TA, TA1, TA2, TAM, TASD;
+static double	TA, TA1, TA2, TAM, TASD;
 
 // offset CT axis
-float	dcnt;
-int		idcnt;
-long	ldcnt;
+static float	dcnt;
+static int		idcnt;
+static long	ldcnt;
 
 /*----------------------------------------------------------------------*/
 
@@ -92,7 +97,7 @@ char        *msg;
 
 /*----------------------------------------------------------------------*/
 
-int Read16TiffFileLine(char* rname, int iHead)
+static int Read16TiffFileLine(char* rname, int iHead)
 {
 	TIFF* image;
 	long i, j;
@@ -159,7 +164,7 @@ typedef struct HiPic_Header Header;
 
 /* Read one layer line from a HiPic .img into the global data[]; mirrors
    Read16TiffFileLine (fills data[], sets N, iHead==1 -> size only).      */
-int Read16ImgFileLine(char *rname, int iHead)
+static int Read16ImgFileLine(char *rname, int iHead)
 {
     FILE   *fi;
     Header h;
@@ -201,8 +206,31 @@ int Read16ImgFileLine(char *rname, int iHead)
 /*----------------------------------------------------------------------*/
 /* Dispatch to .tif or .img reader based on the detected format.
    In img mode a ".tif" request name is mapped to ".img".                 */
-int ReadLine(char *rname, int iHead)
+static int ReadLine(char *rname, int iHead)
 {
+#ifdef HIS_INPUT
+    /* his_rec: line s_layer of dark.* or q<N>.* straight from a.his;
+       averaged entries are averaged like img_ave inside rhis.c */
+    int q;
+
+    if(his == NULL) his = HisOpen(".");
+    N = (unsigned short)HisNx(his);
+    if(iHead == 1) return 1;
+    if(s_layer < 0 || s_layer >= HisNy(his)){
+        fprintf(stderr, "layer %ld is outside the frame (0 .. %d)\n", s_layer, HisNy(his)-1);
+        return((int)s_layer + 1);
+    }
+    if(strncmp(rname, "dark", 4) == 0){
+        HisReadDarkBand(his, (int)s_layer, (int)s_layer, data);
+        return 0;
+    }
+    if(sscanf(rname + 1, "%d", &q) != 1 || !HisHasQ(his, q)){
+        fprintf(stderr, "%s is not produced by conv.bat\n", rname);
+        return(-10);
+    }
+    HisReadQBand(his, q, (int)s_layer, (int)s_layer, data);
+    return 0;
+#else
     char img[1024];
     int  L;
 
@@ -213,10 +241,11 @@ int ReadLine(char *rname, int iHead)
     if(L >= 4 && (strcmp(img + L - 4, ".tif") == 0 || strcmp(img + L - 4, ".TIF") == 0))
         strcpy(img + L - 4, ".img");
     return Read16ImgFileLine(img, iHead);
+#endif
 }
 
 /*----------------------------------------------------------------------*/
-void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
+static void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char *wdesc)
 {
 	TIFF *image;
 	long i;
@@ -243,7 +272,7 @@ void Store32TiffFile(char *wname, int wX, int wY, int wBPS, float *data32, char 
 
 /*----------------------------------------------------------------------*/
 
-int read_log()
+static int read_log()
 {
 	int			i, j;
 	short		nnn;
@@ -578,6 +607,9 @@ char	**argv;
 	}
 	s_layer = atoi(argv[1]);
 
+#ifdef HIS_INPUT
+    his = HisOpen(".");		/* a.his + conv.bat + output.log here */
+#else
     /* detect input format: dark.img -> HiPic .img, else dark.tif -> 16-bit TIFF */
     {
         FILE *ftest;
@@ -592,6 +624,7 @@ char	**argv;
             return(1);
         }
     }
+#endif
 	f_center=dcnt+0.5;
 		
 	NN=2*dcnt;
