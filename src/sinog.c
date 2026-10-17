@@ -2,6 +2,11 @@
 // 
 // Required files are q???.img, dark.img.
 // output file "s????.sin"
+//
+// Built with -DHIS_INPUT (his_sg) the same program reads a.his directly:
+// conv.bat is interpreted in memory by rhis.c, output.log is read as
+// usual, and no q????.img file is created.  Run it where a.his, conv.bat
+// and output.log are.
 
 /*----------------------------------------------------------------------*/
 #include <stdio.h>
@@ -11,6 +16,15 @@
 #include <time.h>
 #include "blacklim.h"
 #include "sif_f.h"
+
+#ifdef HIS_INPUT
+#include "rhis.h"
+static HisSet	*his = NULL;	/* a.his + conv.bat in the current directory */
+/* his_sg links this file together with of_sinog.c; his_main.c looks at the
+   angles in output.log and calls sinog_main (180-degree scan).  File-scope names
+   are static so that the two bodies can share one executable. */
+#define main sinog_main
+#endif
 
 
 /*----------------------------------------------------------------------*/
@@ -39,39 +53,39 @@ typedef struct HiPic_Header Header;
 /*----------------------------------------------------------------------*/
 
 // main data for read transmitted images (data[y][x]) 772
-unsigned short	data[MAXPIXL];
+static unsigned short	data[MAXPIXL];
 
 //dark file name and data
-unsigned short	dark[MAXPIXL];
-short	cent_flag;
+static unsigned short	dark[MAXPIXL];
+static short	cent_flag;
 
 // image profile from 'output.log'
-float	shottime[MAX_SHOT], shotangle[MAX_SHOT];
-int		Ishot[MAX_SHOT], NST, NI0, II0[MAX_SHOT];
+static float	shottime[MAX_SHOT], shotangle[MAX_SHOT];
+static int		Ishot[MAX_SHOT], NST, NI0, II0[MAX_SHOT];
 
 // parameters for interpolation of incident beam
-unsigned short	II01[MAXPIXL], II02[MAXPIXL];     // II01[x], II02[x]
-unsigned short	I[MAXPIXL];                                // I[x]
-double	I0[MAXPIXL];
+static unsigned short	II01[MAXPIXL], II02[MAXPIXL];     // II01[x], II02[x]
+static unsigned short	I[MAXPIXL];                                // I[x]
+static double	I0[MAXPIXL];
 
 // file head character  q???.img or q????.img
-char	flhead[]   = "q";
-char	darkfile[] = "dark.img";
+static char	flhead[]   = "q";
+static char	darkfile[] = "dark.img";
 
 // output file name
-char	fn[256];
+static char	fn[256];
 
 // flag for q001.img or q0001.img
-int		iFlag;
+static int		iFlag;
 
 // projection
-short	N, n_total;
+static short	N, n_total;
 
 // calculation layer
-long	s_layer, ndiv;
+static long	s_layer, ndiv;
 
 // total absorption
-double	TA, TA1, TA2, TAM, TASD;
+static double	TA, TA1, TA2, TAM, TASD;
 
 static FOM	**fom;
 
@@ -87,9 +101,38 @@ char        *msg;
 }
 
 
-/*----------------------------------------------------------------------*/
-int read_hipic(int nfq, unsigned short *data, Header *h, long ln)
+#ifdef HIS_INPUT
+/* his_sg: one layer line of dark (nfq==0) or q<nfq>, straight from a.his.
+   Averaged entries (dark, I0 groups) are averaged like img_ave inside
+   rhis.c and cached there, so the repeated reads cost nothing.          */
+static int read_his_line(int nfq, unsigned short *data, Header *h, long ln)
 {
+	if(his == NULL) his = HisOpen(".");
+	if(ln < 0 || ln >= HisNy(his)){
+		fprintf(stderr, "layer %ld is outside the frame (0 .. %d)\n", ln, HisNy(his)-1);
+		return((int)ln+1);
+	}
+	if(nfq == 0) HisReadDarkBand(his, (int)ln, (int)ln, data);
+	else{
+		if(!HisHasQ(his, nfq)){
+			fprintf(stderr, "q%04d.img is not produced by conv.bat\n", nfq);
+			return(-10);
+		}
+		HisReadQBand(his, nfq, (int)ln, (int)ln, data);
+	}
+	N = HisNx(his);
+	h->width = (short)HisNx(his);
+	h->height = (short)HisNy(his);
+	return(0);
+}
+#endif
+
+/*----------------------------------------------------------------------*/
+static int read_hipic(int nfq, unsigned short *data, Header *h, long ln)
+{
+#ifdef HIS_INPUT
+	return read_his_line(nfq, data, h, ln);
+#else
 	int		j, i_res;
 	FILE	*fi;
 	char	fname[1024];
@@ -177,11 +220,12 @@ int read_hipic(int nfq, unsigned short *data, Header *h, long ln)
 	free(h->comment);
 	fclose(fi);
 	return(0);
+#endif
 }
 
 /*----------------------------------------------------------------------*/
 
-int read_log()
+static int read_log()
 {
 	int			i, j;
 	short		nnn;
@@ -405,96 +449,6 @@ long		ln;
 
 /*----------------------------------------------------------------------*/
 
-float calc_center(){
-int		i;
-long	j, dx, dx0, N1;
-double	mm1, mx1, mm2, mx2;
-double	*p000, *p180, rsum, rd, rmsd0, rmsd;
-float	center;
-Header	h;
-
-// file name and data for calculation of rotation center (data[y][x])
-// odd = I_0, even = transmitted
-char	c_file[13];
-unsigned short	cent_1[MAXPIXL], cent_2[MAXPIXL];
-unsigned short	cent_3[MAXPIXL], cent_4[MAXPIXL];
-
-// read center file
-//I_0 file
-	if ((i = read_hipic(1, &cent_1[0], &h, s_layer)) != 0){
-		printf("something wrong -- return value is %d", i);
-		return(-1);
-	}
-
-// zero degree file(transmitted)
-	if ((i = read_hipic(2, &cent_2[0], &h, s_layer)) != 0){
-		printf("something wrong -- return value is %d", i);
-		return(-1);
-	}
-
-//I_0 file
-	if ((i = read_hipic(n_total-1, &cent_3[0], &h, s_layer)) != 0){
-		printf("something wrong -- return value is %d", i);
-		return(-1);
-	}
-
-//  180 degree file(transmitted)
-	if ((i = read_hipic(n_total, &cent_4[0], &h, s_layer)) != 0){
-		printf("something wrong -- return value is %d", i);
-		return(-1);
-	}
-
-// calculate center with RMSD
-		p000=(double *)malloc(N*sizeof(double));
-		p180=(double *)malloc(N*sizeof(double));
-		for(j=0;j<N;++j){
-			*(p000+j)=-BlackLog((double)(cent_1[j]-dark[j]),
-				    (double)(cent_2[j]-dark[j]), BlackThresh(), NULL);
-			*(p180+j)=-BlackLog((double)(cent_3[j]-dark[j]),
-				    (double)(cent_4[j]-dark[j]), BlackThresh(), NULL);
-		}
-		
-		N1=N-1;
-		rsum=0.0;
-		for(j=0;j<N;++j){
-			rd=*(p000+j)-*(p180+N1-j);
-			rsum=rsum+rd*rd;
-		}
-		rmsd0=sqrt(rsum/(double)N);
-		dx0=0;
-
-		for(dx=1;dx<=N/2;++dx){
-			rsum=0.0;
-			for(j=0;j<N1-dx;++j){
-				rd=*(p000+dx+j)-*(p180+N1-j);
-				rsum=rsum+rd*rd;
-			}
-			rmsd=sqrt(rsum/(double)(N-dx));
-			if(rmsd0>rmsd){
-				rmsd0=rmsd;
-				dx0=dx;
-//				printf("%d\t%lf\t%lf\n", dx,rmsd0,rmsd);
-			}
-
-			rsum=0.0;
-			for(j=0;j<N1-dx;++j){
-				rd=*(p000+j)-*(p180-dx+N1-j);
-				rsum=rsum+rd*rd;
-			}
-			rmsd=sqrt(rsum/(double)(N-dx));
-			if(rmsd0>rmsd){
-				rmsd0=rmsd;
-				dx0=-dx;
-//				printf("%d\t%lf\t%lf\n", -dx,rmsd0,rmsd);
-			}
-		}
-		center=(N1+dx0)/2.0;
-//		printf("%d\t%lf\t%lf\n", dx0,rmsd0,center);
-
-	return(center);
-}
-
-
 /*----------------------------------------------------------------------*/
 
 #ifndef CLOCKS_PER_SEC
@@ -512,7 +466,6 @@ char	**argv;
 	double		Clock;					// timer setting
 	int			i;
 	Header		h;
-	FILE		*fo;
 
 // parameter setting
 	ndiv=1;
@@ -555,18 +508,8 @@ char	**argv;
 //	fprintf(stderr," Store Sinogram \t%lf / sec\n",CLOCK()-Clock);
 //	fprintf(stderr, "output file name = %s \n", fn);
 
-//open output files
-	if((fo = fopen("sino.tmp","w")) == NULL){ 
-		printf("can not open %s for output\n", fn);
-		return(1);
-	}
-	fprintf(fo, "%d\n", h.width);
-	fprintf(fo, "%d\n", NST);
-	fprintf(fo, "%04ld\n", s_layer);
-	fprintf(fo, "%f\n", calc_center());
-	fprintf(fo, "%lf\n", TAM); // Mean of Total Absorption from sinogram
-	fprintf(fo, "%lf\n", TASD); // SD of Total Absorption from sinogram
-	fclose(fo);
+// (sino.tmp - width, projections, layer, centre, TA mean and SD for an
+//  old batch chain - is no longer written: 2026-10-18)
 
 // append to log file
 	FILE		*ff;
@@ -577,5 +520,8 @@ char	**argv;
 	fprintf(ff,"\n");
 	fclose(ff);
 
+#ifdef HIS_INPUT
+	HisClose(his);
+#endif
 	return 0;
 }

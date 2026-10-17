@@ -81,7 +81,38 @@ static char	path[LEN];
 /* insert start */
 	static double		Dr,DO,RA;
 	static int			hpNtM;
+	static double		RcZ;	/* axis position (detector pixels) of the slice being stored */
 /* insert end */
+
+/* ---- 傾いた回転軸 (2026-10-17) ----
+   ofct_srec HiPic L1 C1 L2 C2 Oy rangeList Dr RA0 rec の形では、スライス z の
+   軸位置を Rc(z) = C1 + (C2-C1)(z-L1)/(L2-L1) を整数に丸めて使う(貼り合わせは
+   画素単位)。幅 N(z) = Nx+|2Rc(z)-Nx| はスライスごとに変わるので、選択スライス
+   の最大幅 N を出力サイズとし、狭いスライスのシノグラムは N 幅のバッファの
+   中央に置いて左右を行の端の値で埋める(ゼロだと cbp の打ち切り判定 DetectPad
+   が両端の列を見て常に「打ち切りなし」とし、幅最大のスライスと補正の有無が
+   食い違う。リング除去の列方向フィルタも境界で混ざる)。回転中心は常に画像
+   中央で、CBP は N で 1 回だけ初期化する。C1 == C2 なら詰め物がなく従来形式と
+   同じ結果になる。ImageDescription の 2 列目にはそのスライスの Rc(z)+0.5 を
+   記録する(ofct_rec の dcnt+0.5 と同じ規約。軸が中央より右なら従来の (N+1)/2
+   と同値)。
+
+   ---- 小数の軸位置 (2026-10-18) ----
+   Rc = ci + f (ci = floor(Rc), 0 <= f < 1)。貼り合わせの枠(幅 N と各領域の境界)は
+   整数部 ci で決め、対向像 B だけを 2f 画素右へずらして置く(線形補間、端は
+   端値で保持)。像 A は不動なので鏡映の軸は f だけ右へ動き、回転中心を
+   (N+1)/2 + f にする。f = 0 では補間の重みが 0 になり従来とビット一致する。
+   ofct_rec の f_center = dcnt + 0.5 と同じ規約。 */
+/* stitching geometry of ofct_srec for the axis position Rc; 0 = bad offset */
+static int	Stitch(int Rc,int Nx,int *n,int *r0,int *r1,int *r2,int *r3,int *r4,int *r5)
+{
+	int	Ox=2*Rc-Nx;
+
+	if (Ox+Nx<=0 || Nx<=Ox) return 0;
+	if (Ox<0) { *n=Nx-Ox; *r0=(-Ox); *r1=Nx-1; *r2=0; *r3=*r4=(-Ox); *r5=Nx; }
+	else      { *n=Nx+Ox; *r0=0; *r1=*n-1; *r2=Nx; *r3=*n; *r4=Ox; *r5=Nx; }
+	return 1;
+}
 
 
 /* ==========================================================================
@@ -182,7 +213,7 @@ static FUNCTION_T	Store(void *argc)
 
 	if ((comm=(char *)malloc(150))==NULL)
 		Error("comment memory allocation error.");
-	sprintf(comm,"%f\t%f\t%d\t%f\t%lf\t%lf",Dr*10000.0, -DO, hpNtM, RA, mmmin, mmmax);
+	sprintf(comm,"%f\t%f\t%d\t%f\t%lf\t%lf",Dr*10000.0, RcZ, hpNtM, RA, mmmin, mmmax);
 
 //		StoreImageFile_Float(path,N,N,fom,comm);
 		Store32TiffFile(path,Nx, Ny, 32, data32, comm);
@@ -195,6 +226,20 @@ static FUNCTION_T	Store(void *argc)
 static double	Log(double d)
 {
 	return (d>0.0)?log(d):0.0;
+}
+
+/* -log of the opposing view at the (fractional) detector position x,
+   linear interpolation, edges held.  w == 0 returns -Log(Tb[i]) exactly,
+   so an integer axis position reproduces the old result bit for bit. */
+static double	Bval(const FOM *Tb,int Nx,double x)
+{
+	int	i=(int)floor(x);
+	double	w=x-(double)i,a;
+
+	if (i<0) { i=0; w=0.0; } else if (i>=Nx-1) { i=Nx-1; w=0.0; }
+	a=-Log(Tb[i]);
+	if (w==0.0) return a;
+	return (1.0-w)*a+w*(-Log(Tb[i+1]));
 }
 
 /* ---- 1 スライス分のホスト側準備: SG[k] -> Pb、黒投影検出、リング除去 ----
@@ -280,28 +325,39 @@ static int	PrepareSlice(Float **Pb,Float **sgk,int N,int M,
 int	main(int argc,char **argv)
 {
 	HiPic	hp;
-	int	Ox,Oy,r0,r1,r2,r3,r4,r5,L,z0,z1,M,i;
+	int	Oy,L,z0,z1,M,i,Rc0,tilt,L1=0,L2=0,r0,r1,r2,r3,r4,r5;
+	double	C1=0.0,C2=0.0,Rcf0;
+	char	*a_oy,*a_rl,*a_dr,*a_ra;
 
     int kernel_size = 5; // Default kernel size
     int num_threads = 40; // Default number of threads
 
-	if (argc!=4 && argc!=8)
-	    Error("usage : ofct_srec HiPic/ Rc Oy {rangeList Dr RA0 rec/}"
+	if (argc!=4 && argc!=8 && argc!=11)
+	    Error("usage : ofct_srec HiPic/ Rc Oy {rangeList Dr RA0 rec/}\n"
+		  "usage : ofct_srec HiPic/ L1 C1 L2 C2 Oy rangeList Dr RA0 rec/\n"
+		  "        (tilted axis: Rc = C1 at layer L1 and C2 at L2, rounded per slice;\n"
+		  "         every slice is written at the size of the widest one)"
 	    );
+
+	tilt=(argc==11);
+	if (tilt) {
+	    L1=atoi(argv[2]); C1=atof(argv[3]); L2=atoi(argv[4]); C2=atof(argv[5]);
+	    if (L1==L2 && C1!=C2) Error("tilted axis: L1 == L2 but C1 != C2.");
+	    Rcf0=C1;
+	    a_oy=argv[6]; a_rl=argv[7]; a_dr=argv[8]; a_ra=argv[9];
+	}
+	else {
+	    Rcf0=atof(argv[2]);		/* may be fractional */
+	    a_oy=argv[3]; a_rl=argv[4]; a_dr=argv[5]; a_ra=argv[6];
+	}
+	Rc0=(int)floor(Rcf0);
 
 	InitReadHiPic(argv[1],&hp);
 
 	if (hp.Nt%2) (void)fputs("bad number of views (warning).\n",stderr);
 
-	if ((Ox=2*atoi(argv[2])-hp.Nx)+hp.Nx<=0 || hp.Nx<=Ox ||
-	    (Oy=atoi(argv[3]))+hp.Ny<=0 || hp.Ny<=Oy) Error("bad offset.");
-
-	if (Ox<0) {
-	    N=hp.Nx-Ox; r0=(-Ox); r1=hp.Nx-1; r2=0; r3=r4=(-Ox); r5=hp.Nx;
-	}
-	else {
-	    N=hp.Nx+Ox; r0=0; r1=N-1; r2=hp.Nx; r3=N; r4=Ox; r5=r2;
-	}
+	if (!Stitch(Rc0,hp.Nx,&N,&r0,&r1,&r2,&r3,&r4,&r5) ||
+	    (Oy=atoi(a_oy))+hp.Ny<=0 || hp.Ny<=Oy) Error("bad offset.");
 	if (Oy<0) {
 	    L=hp.Ny+Oy; z0=0; z1=(-Oy);
 	}
@@ -331,7 +387,7 @@ int	main(int argc,char **argv)
 	if ((target=(char *)malloc(sizeof(char)*L))==NULL)
 	    Error("memory allocation error for range list.");
 
-	RangeList(argv[4],(size_t)L-1,target);
+	RangeList(a_rl,(size_t)L-1,target);
 
 	/* 選択スライスの実 z を sel[] に集約(コンパクト index = SG の行) */
 	if ((sel=(int *)malloc(sizeof(int)*L))==NULL)
@@ -341,9 +397,41 @@ int	main(int argc,char **argv)
 
 	if (nsel==0) Error("no slice.");
 
-	Dr=atof(argv[5])/10000.;
+	/* ---- スライスごとの軸位置と貼り合わせ幅(傾き対応) ----
+	   最大幅を N(出力サイズ)にし、狭いスライスは pad だけ右へずらして
+	   中央に置く。傾きなしでは全スライス同じで pad = 0。 */
+	int	*RcS,*NS,*padS,*r0S,*r1S,*r2S,*r3S,*r4S,*r5S,Nmax=0;
+	double	*RcF,*fS,*DOS,Rmin=0.0,Rmax=0.0;
+
+	if ((RcS=(int *)malloc(sizeof(int)*9*(size_t)nsel))==NULL ||
+	    (RcF=(double *)malloc(sizeof(double)*3*(size_t)nsel))==NULL)
+	    Error("memory allocation error for slice geometry.");
+	NS=RcS+nsel; padS=NS+nsel; r0S=padS+nsel; r1S=r0S+nsel; r2S=r1S+nsel;
+	r3S=r2S+nsel; r4S=r3S+nsel; r5S=r4S+nsel;
+	fS=RcF+nsel; DOS=fS+nsel;
+	for (i=0; i<nsel; i++) {
+	    z=sel[i];
+	    RcF[i]=(!tilt)?Rcf0:(L1==L2)?C1:C1+(C2-C1)*(double)(z-L1)/(double)(L2-L1);
+	    RcS[i]=(int)floor(RcF[i]);		/* integer part: stitching frame */
+	    fS[i]=RcF[i]-(double)RcS[i];	/* fraction: opposing view shifted by 2f, centre by f */
+	    if (!Stitch(RcS[i],hp.Nx,NS+i,r0S+i,r1S+i,r2S+i,r3S+i,r4S+i,r5S+i)) {
+		(void)fprintf(stderr,"slice %d: axis position %g gives a bad offset.\n",z,RcF[i]);
+		Error("bad offset.");
+	    }
+	    if (NS[i]>Nmax) Nmax=NS[i];
+	    if (i==0 || RcF[i]<Rmin) Rmin=RcF[i];
+	    if (i==0 || RcF[i]>Rmax) Rmax=RcF[i];
+	}
+	for (i=0; i<nsel; i++) padS[i]=(Nmax-NS[i])/2;
+	N=Nmax;
+	if (tilt)
+	    (void)fprintf(stderr,"tilted axis: Rc %g .. %g over the selected slices; "
+			  "output %d x %d, narrower slices centred and zero-padded\n",Rmin,Rmax,N,N);
+
+	Dr=atof(a_dr)/10000.;
 	DO=-(double)(N+1)/2.0;	/* rotation center = -(N+1)/2, matching ofct_rec's r0=-(dcnt+0.5); was -(N-1)/2 (1 px off) */
-	RA=atof(argv[6]);
+	for (i=0; i<nsel; i++) DOS[i]=DO-fS[i];	/* fractional part of the axis: centre moves by f */
+	RA=atof(a_ra);
 
 	P=InitCBP(N,M);
 	CBP_PIPE_INIT(P,N,M);
@@ -475,27 +563,46 @@ int	main(int argc,char **argv)
 			y1a=sel[cs]+z0;
 			ReadHiPicBand(&hp,mm,y1a,y1a+rows-1,dst,raw);
 			for (kk=cs; kk<ce; kk++) {
-			    T2=dst[sel[kk]+z0-y1a]; sg2=SG[kk-cs][mm]+r0;
+			    Float	*row=SG[kk-cs][mm];
+
+			    /* narrower slice: centred in the N-wide row; the margins are
+			       filled with the row's end values after the second view
+			       (below), so that the truncation check of cbp (DetectPad looks
+			       at the outermost columns) and the ring filter see the same
+			       edges as a slice reconstructed at its own width */
+			    T2=dst[sel[kk]+z0-y1a]; sg2=row+padS[kk]+r0S[kk];
 			    for (rr=0; rr<hp.Nx; rr++) sg2[rr]=(-Log(T2[rr]));
 			}
 
 			y1b=sel[cs]+z1;
 			ReadHiPicBand(&hp,mm+M,y1b,y1b+rows-1,dst,raw);
 			for (kk=cs; kk<ce; kk++) {
-			    T2=dst[sel[kk]+z1-y1b]+r1; sg2=SG[kk-cs][mm];
-			    for (rr=r2; rr<r3; rr++) sg2[rr]=(-Log(T2[-rr]));
-#ifdef	OCT_SBS	/* side by side */
-	rr=r4+(r5-r4-1)/2; if ((r5-r4)%2) sg2[rr]=(sg2[rr]-Log(T2[-rr]))/2.0;
+			    int	r1=r1S[kk],r2=r2S[kk],r3=r3S[kk],r4=r4S[kk],r5=r5S[kk];
+			    const FOM	*Tb=dst[sel[kk]+z1-y1b];
+			    double	f2=2.0*fS[kk];
+/* opposing view B at output position rr: detector position r1-rr, shifted by 2f */
+#define BV(rr)	Bval(Tb,hp.Nx,(double)(r1-(rr))+f2)
 
-	while (++rr<r5) sg2[rr]=(-Log(T2[-rr]));
+			    sg2=SG[kk-cs][mm]+padS[kk];
+			    for (rr=r2; rr<r3; rr++) sg2[rr]=BV(rr);
+#ifdef	OCT_SBS	/* side by side */
+	rr=r4+(r5-r4-1)/2; if ((r5-r4)%2) sg2[rr]=(sg2[rr]+BV(rr))/2.0;
+
+	while (++rr<r5) sg2[rr]=BV(rr);
 #else
 	for (rr=r4; rr<r5; rr++) sg2[rr]=
 #ifdef	OCT_SA	/* simple average */
-	(sg2[rr]-Log(T2[-rr]))/2.0;
+	(sg2[rr]+BV(rr))/2.0;
 #else		/* linear mixing */
-	((double)(r5-rr)*sg2[rr]+(double)(rr-r4+1)*(-Log(T2[-rr])))/(double)(r5-r4+1);
+	((double)(r5-rr)*sg2[rr]+(double)(rr-r4+1)*BV(rr))/(double)(r5-r4+1);
 #endif
 #endif
+#undef BV
+			    {	/* margins: hold the end values of the stitched row */
+				Float	*row=SG[kk-cs][mm],vl=row[padS[kk]],vr=row[padS[kk]+NS[kk]-1];
+				for (rr=0; rr<padS[kk]; rr++) row[rr]=vl;
+				for (rr=padS[kk]+NS[kk]; rr<N; rr++) row[rr]=vr;
+			    }
 			}
 			#pragma omp critical
 			fprintf(stderr,"band[%d-%d] read %d / %d\r",
@@ -513,7 +620,7 @@ int	main(int argc,char **argv)
 	    cur=0;
 	    if (pipe_on) {
 		if (PrepareSlice(Pbuf[cur],SG[0],N,M,&kernel_size,&num_threads)) return 5;
-		CBP_PIPE_SELECT(Pbuf[cur]); CBP_PIPE_BEGIN(Dr,DO,RA);
+		CBP_PIPE_SELECT(Pbuf[cur]); CBP_PIPE_BEGIN(Dr,DOS[cs],RA);
 	    }
 
 	    for (k=cs; k<ce; k++) {
@@ -526,12 +633,12 @@ int	main(int argc,char **argv)
 		    F=CBP_PIPE_END();			/* スライス z の結果 */
 
 		    if (k+1<ce) {
-			CBP_PIPE_SELECT(Pbuf[cur^1]); CBP_PIPE_BEGIN(Dr,DO,RA);
+			CBP_PIPE_SELECT(Pbuf[cur^1]); CBP_PIPE_BEGIN(Dr,DOS[k+1],RA);
 		    }
 		}
 		else {					/* 逐次順(比較用) */
 		    if (PrepareSlice(Pbuf[0],SG[k-cs],N,M,&kernel_size,&num_threads)) return 5;
-		    CBP_PIPE_SELECT(Pbuf[0]); CBP_PIPE_BEGIN(Dr,DO,RA);
+		    CBP_PIPE_SELECT(Pbuf[0]); CBP_PIPE_BEGIN(Dr,DOS[k],RA);
 		    F=CBP_PIPE_END();
 		}
 
@@ -546,6 +653,9 @@ int	main(int argc,char **argv)
 		    for (xx=0; xx<N; xx++) ff[xx]=sf[xx];
 		}
 
+		RcZ=RcF[k]+0.5;		/* after the join: Store reads it. Rc+0.5 = the centre
+					   convention of ofct_rec (dcnt+0.5) and of the old
+					   ofct_srec ((N+1)/2) for an axis right of the middle */
 #ifdef WINDOWS
 		(void)sprintf(path,"%s\\rec%05d.tif",argv[argc-1],Z=z);
 #else
@@ -576,6 +686,7 @@ int	main(int argc,char **argv)
 #endif
 	free(*fom); free(fom); free(**SG); free(*SG); free(SG); TermCBP();
 
+	free(RcF); free(RcS);
 	free(sel);
 	free(target);
 }

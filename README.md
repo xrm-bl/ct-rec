@@ -24,7 +24,7 @@ his/tif split -> axis search -> reconstruction (ring removal + FBP) -> 32bit tif
 |---|---|---|
 | Single-slice reconstruction (180°) | `ct_rec_G_F` | rotation-axis RMSD search built in |
 | Whole-volume reconstruction | `hp_tg_G_F`, `ct_rec_loop` (`.bat`/`.sh`) | memory-adaptive chunking |
-| Reconstruction directly from a.his | `his_rec_G_F`, `his_srec_G_F`, `his_DO(_g)` | ct_rec / hp_tg (180°) or ofct_rec / ofct_srec (360° offset, chosen from the angles in output.log) reading a.his + conv.bat + output.log in memory; no his2img / img_ave stage, bit-identical results; `his_DO` = hp2DO / ofct_DO axis estimate |
+| Reconstruction directly from a.his | `his_rec_G_F`, `his_srec_G_F`, `his_DO(_g)`, `his_sg` | ct_rec / hp_tg (180°) or ofct_rec / ofct_srec (360° offset, chosen from the angles in output.log) reading a.his + conv.bat + output.log in memory; no his2img / img_ave stage, bit-identical results; `his_DO` = hp2DO / ofct_DO axis estimate; `his_sg` = sinog / of_sinog sinogram of one layer |
 | Reconstruction from p-images | `p_rec_G_F`, `sf_rec_t_F` | |
 | Offset CT (360°, half-beam) | `ofct_DO(_g)`, `ofct_rec_G_F`, `ofct_srec_G_F` | axis finder + reconstruction |
 | Automatic-CT whole-volume reconstruction | `act_tg_g_F`, `ofact_srec_g_F` | hp_tg / ofct_srec with direct 16-bit + 8-bit output (two LAC ranges on the command line), no 32-bit stage |
@@ -77,7 +77,7 @@ libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/g
 | [20260909_paganin_phase_retrieval.md](20260909_paganin_phase_retrieval.md) | technical note: Paganin phase retrieval in `ct_prj_f` (Japanese) |
 | [20260909_tif2zar.md](20260909_tif2zar.md) | `tif2zar`: TIFF series to OME-Zarr converter (Japanese) |
 | [20260919_ct_rec_gpu_memory.md](20260919_ct_rec_gpu_memory.md) | technical note: GPU memory usage of `ct_rec_g_*` and how many instances fit on one GPU (Japanese) |
-| [20261016_his_rec.md](20261016_his_rec.md) | technical note: `his_rec` / `his_srec` / `his_DO`, reconstruction directly from a.his (design, conv.bat interpretation, 180/360 detection, verification; Japanese) |
+| [20261016_his_rec.md](20261016_his_rec.md) | technical note: `his_rec` / `his_srec` / `his_DO` / `his_sg`, reconstruction directly from a.his (design, conv.bat interpretation, 180/360 detection, verification; Japanese) |
 | [20260815_corrections.md](20260815_corrections.md) | the three corrections applied on top of plain CBP, with references (Japanese) |
 | [20260815_corrections_EN.md](20260815_corrections_EN.md) | same, English |
 | [imagej-plugins/readme.txt](imagej-plugins/readme.txt) | ImageJ plugin build/install |

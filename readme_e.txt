@@ -15,8 +15,9 @@ Uesugi
 2026.05.04  ver. 1.7
 
 [ver 2.8 changes]
-  - New his_rec_P_F, his_srec_P_F and his_DO (2g):
-    reconstruction and rotation-axis estimation directly from a.his.  The
+  - New his_rec_P_F, his_srec_P_F, his_DO and his_sg (2g):
+    reconstruction, rotation-axis estimation and sinograms directly from
+    a.his.  The
     beamline's conv.bat (how the frames become dark.img and q????.img:
     img_ave / ren / copy) is interpreted in memory and output.log is read
     as usual, so his2img and conv.bat need not be run and no .img file is
@@ -27,7 +28,23 @@ Uesugi
     center the axis is estimated from that layer, for an offset scan
     with a one-layer version of ofct_DO's search),
     his_srec = hp_tg / ofct_srec (whole volume, run one level up; hp_tg
-    argument form for both), his_DO = hp2DO / ofct_DO (axis estimate).
+    argument form for both), his_DO = hp2DO / ofct_DO (axis estimate),
+    his_sg = sinog / of_sinog (sinogram of one layer, run beside a.his).
+  - ofct_srec / ofct_rec / of_sinog: the rotation axis position of an
+    offset scan may be fractional, as for a 180-degree scan.  The opposing view is
+    resampled by twice the fraction (linear interpolation) and the
+    rotation centre moves by the fraction; an integer value gives exactly
+    the old result.  ofct_rec used to accept a fractional center but
+    stitched the views at the truncated integer; this is fixed.  his_rec's
+    single-layer axis estimate returns the fractional value (his_sg uses
+    the same estimate).
+  - ofct_srec: tilted rotation axis (L1 C1 L2 C2 form, 3b).  The axis
+    position is interpolated per slice, every slice is written
+    at the size of the widest one (narrower slices centred, margins hold
+    the row's end values), and the ImageDescription records Rc+0.5 of the
+    slice (field 2, the convention of ofct_rec).  his_srec's L1 C1 L2 C2 form
+    on an offset scan uses it.  With C1 == C2 the output is identical to
+    before.
     The averages are computed exactly like img_ave (integer sum,
     truncating division), so the results are bit-identical to the
     existing chains (verified on the CPU and GPU builds; only the ARTIST
@@ -469,17 +486,18 @@ Uesugi
 
       *) As with hp_tg, run one directory above the HiPic directory.
 
-   g. Reconstruction Directly from a.his (his_rec / his_srec / his_DO)
+   g. Reconstruction Directly from a.his (his_rec / his_srec / his_DO / his_sg)
       his_rec_P_F  layer {center} {pixel size} {offsetangle}
       his_srec_P_F HiPic Dr RC RA0 rec
       his_srec_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
       his_DO       HiPic {stride}                 (CPU)
       his_DO_g     HiPic {navg {stride}}          (GPU)
+      his_sg       layer {center} {skip}          (CPU)
 
       The input is the data as it comes from the beamline: a.his (every
       frame of the scan), conv.bat and output.log in one directory.
-      his_rec runs in that directory (like ct_rec); his_srec and his_DO
-      run one level above it with the directory name as HiPic (like hp_tg
+      his_rec and his_sg run in that directory (like ct_rec); his_srec and
+      his_DO run one level above it with the directory name as HiPic (like hp_tg
       / ofct_DO).  his2img and conv.bat are not run and no .img file is
       written: conv.bat is interpreted in memory.
         his2img <his>                 name of the his file (default a.his)
@@ -501,25 +519,29 @@ Uesugi
         program    180-degree scan   360-degree offset scan
         his_rec    ct_rec (2a)       ofct_rec (3c)
         his_srec   hp_tg (2b)        ofct_srec (3b) with Rc = RC, Oy = 0,
-                                     rangeList "-" or "L1-L2"
+                                     rangeList "-", or its L1 C1 L2 C2 form
         his_DO     hp2DO on the views of the hp2do line of conv.bat
                                      ofct_DO / ofct_DO_g (3a)
+        his_sg     sinog (6b)        of_sinog (6b) at center
       When center is omitted, his_rec estimates the rotation axis from the
       layer it reconstructs: on a 180-degree scan with ct_rec's own search,
       on an offset scan with a one-dimensional version of ofct_DO's search
       (the -log transmittances of that layer, smoothed with the same
       Gaussian OFCT_DO_SMOOTH, mirrored opposing views, mean squared
       difference accumulated over all view pairs for shifts in ofct_DO's
-      range, parabolic refinement).  Only that layer is read, so it takes
+      range, parabolic refinement; the smoothing margin is kept out of the
+      sum, which otherwise biases the minimum).  The fractional result is
+      used as it is.  Only that layer is read, so it takes
       seconds; the result and the ofct_rec command used are printed on
       stderr, with a warning when the minimum sits at the edge of the
       search range (axis outside 0.75*Nx .. Nx-1, which ofct_DO cannot
       handle either).
       The command line of his_srec is always the hp_tg form.  For an
-      offset scan RC must be an integer pixel (a fractional value is
-      rounded with a warning), Oy is 0 unless the environment variable
-      HIS_SREC_OY is set, and a tilted axis (C1 != C2) is rejected because
-      the offset reconstruction has no such mode.  his_DO on a 180-degree
+      offset scan RC may be fractional (3b) and Oy is 0 unless the
+      environment variable HIS_SREC_OY is set; the L1 C1 L2 C2 form is
+      handed to the tilted-axis form of ofct_srec (3b): the axis position
+      is interpolated per slice and every slice is written at the size of
+      the widest one.  his_DO on a 180-degree
       scan uses hp2DO's estimate on the six views named on the hp2do line
       (dark, I0 and view at 0 deg; dark, I0 and view at 180 deg; without
       such a line q1 q2 and the two views after the last logged one, as in
@@ -527,11 +549,18 @@ Uesugi
       prints hp2DO's output on stdout; on an offset scan it is ofct_DO.
       In both cases a ready-to-run his_srec command is printed on stderr
       (with 1.0 standing for the pixel size Dr).
+      his_sg writes the sinogram of one layer exactly as sinog does
+      (s%05d.tif, 32-bit float; a line in ../cmd-hst.log).  On
+      an offset scan the two halves are stitched by of_sinog at center,
+      which may be fractional; "-" or no center uses the single-layer
+      estimate of his_rec described above, and the of_sinog command used
+      is printed on stderr.  On a 180-degree scan center is not needed
+      and is ignored (write "-" to give skip).
       The averages use the arithmetic of img_ave (integer sum, truncating
-      division), so dark / I0 data and the reconstructions are
-      bit-identical to the ct_rec / hp_tg / ofct_rec / ofct_srec chains
-      (his_srec only differs in the ARTIST tag of the TIFF), and his_DO
-      prints exactly what hp2DO / ofct_DO print.  Only 16-bit his files
+      division), so dark / I0 data, the reconstructions and the sinograms
+      are bit-identical to the ct_rec / hp_tg / ofct_rec / ofct_srec /
+      sinog / of_sinog chains (his_srec only differs in the ARTIST tag of
+      the TIFF), and his_DO prints exactly what hp2DO / ofct_DO print.  Only 16-bit his files
       (type 2) are accepted.  Environment variables: RHIS_H (his file
       name, overrides the his2img line), RHIS_C (conv.bat name, default
       conv.bat), RHP_O (output.log path), HIS_SREC_OY (see above) and
@@ -540,8 +569,8 @@ Uesugi
       parallel projection reading of hp_tg (HPTG_READ_THREADS) and the
       memory-adaptive chunking work unchanged.
 
-      *) his_rec: run in the directory containing a.his, conv.bat and
-         output.log.  his_srec, his_DO: run one directory above it.
+      *) his_rec, his_sg: run in the directory containing a.his, conv.bat
+         and output.log.  his_srec, his_DO: run one directory above it.
 
 3. 360-degree Scan (Offset CT): Standard Absorption CT Reconstruction
    a. Rotation Axis Position Estimation
@@ -567,15 +596,44 @@ Uesugi
 
    b. Reconstruction
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
+      ofct_srec_P_F HiPic L1 C1 L2 C2 Oy rangeList Dr RA0 rec
 
       HiPic: Directory containing q????.img or q????.tif files (no trailing /)
-      Rc: Rotation axis position (pixels from left edge)
+      Rc: Rotation axis position (pixels from left edge).  May be
+           fractional (ver 2.8): the stitching frame follows the integer
+           part, the opposing view is resampled 2f pixels to the right
+           by linear interpolation and the rotation centre moves by f,
+           as for a 180-degree scan.  An integer value gives exactly the
+           old result.
+      L1 C1 L2 C2: Tilted rotation axis: position C1 at layer L1 and C2 at
+           layer L2 (ver 2.8).  Every slice uses the position interpolated
+           linearly between them (fractional, see Rc).  The stitched width
+           2*floor(Rc(z)) then differs from slice to slice, so every slice is
+           written at the size of the widest selected slice; a narrower
+           slice is centred in that frame and the margin of its sinogram
+           holds the end values of each row (not zero: the truncation
+           check of the reconstruction looks at the outermost columns, and
+           zero margins would switch the cupping correction off for the
+           narrower slices only).  The rotation axis is at the centre of
+           every output image, so the slices stack.  With C1 == C2 the
+           result is identical to the first form.  Near the image edge the
+           values differ slightly from a reconstruction at the slice's own
+           width: about 0.1 % of the value range in the centre and up to a
+           few per cent at the rim on test data.  L1 and L2 are output
+           layer numbers (equal to detector rows for Oy = 0); layers of
+           rangeList outside L1..L2 are extrapolated.
       Oy: Vertical shift (always specify 0)
       rangeList: Specify layers to reconstruct.
       Dr: Pixel size
       RA0: Rotation axis origin offset
       rec: Output directory for reconstructed images (must be created
            before execution)
+
+      The second field of the ImageDescription is Rc+0.5 of that slice,
+      the centre convention of ofct_rec (dcnt+0.5); for an axis right of
+      the middle this equals the stitched-image centre (N+1)/2 written
+      before ver 2.8, so existing output is unchanged.  With a tilted or
+      fractional axis the field carries the slice's own value.
 
       *) rangeList examples:
          Single layer 100: 100
@@ -586,7 +644,12 @@ Uesugi
       ofct_rec_P_F layer center {pixel size} {offsetangle}
 
       layer: Layer (height) to reconstruct
-      center: Rotation axis position (pixels)
+      center: Rotation axis position (pixels).  May be fractional
+           (ver 2.8): the opposing view is resampled by 2f pixels and
+           the rotation centre dcnt+0.5 then sits on the mirror axis.
+           Before ver 2.8 a fractional value moved the centre but
+           stitched the views at the truncated integer, i.e.
+           inconsistently; an integer value gives exactly the old result.
       pixel size: Pixel size (um). Defaults to 1.0 if omitted.
       offset angle: Rotation axis origin offset. Defaults to 0.0 if omitted.
 
@@ -643,10 +706,18 @@ Uesugi
       pid tiff-file
 
    b. Sinogram Generation
-      sinog layer {skip}
+      sinog    layer {skip}
+      of_sinog layer offset {skip}
       Output as 32-bit TIFF. Tags contain only min and max values.
       If skip is specified, the number of projections is reduced by
-      a factor of skip.
+      a factor of skip.  of_sinog stitches the two halves of a 360-degree
+      offset scan (3) at the rotation axis position offset (as the
+      center of ofct_rec; fractional allowed from ver 2.8, an integer
+      gives the old result); the axis of the stitched sinogram for 6c is
+      offset+0.5.  his_sg (2g) does the same directly from a.his.
+      The file sino.tmp (width, projections, layer, centre, mean and SD
+      of the total absorption, for an old batch chain) is no longer
+      written (ver 2.8).
 
    c. Reconstruction from Sinogram (generated by 6b)
       sf_rec_t_F input output {Dr RC RA0}

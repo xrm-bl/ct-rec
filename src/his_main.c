@@ -1,7 +1,7 @@
 /*
- * his_main.c - entry point of his_rec / his_srec / his_DO.
+ * his_main.c - entry point of his_rec / his_srec / his_DO / his_sg.
  *
- * All three work on the data set as it comes from the beamline: a.his,
+ * All of them work on the data set as it comes from the beamline: a.his,
  * conv.bat and output.log in one directory (read by rhis.c / rhis_hp.c).
  * The third column of output.log is the rotation angle; when the sample
  * views reach HIS_OFFSET_ANGLE degrees (350, the test ofct_rec has always
@@ -13,6 +13,7 @@
  *   his_rec    ct_rec_main            ofct_rec_main       (run beside a.his)
  *   his_srec   hp_tg_main             ofct_srec_main      (run one level up)
  *   his_DO     hp2DO_compute          ofct_DO_main        (run one level up)
+ *   his_sg     sinog_main             of_sinog_main       (run beside a.his)
  *
  * Command lines:
  *   his_rec  layer {center} {pixel size} {offsetangle}      (as ct_rec;
@@ -23,9 +24,12 @@
  *   his_srec HiPic Dr RC RA0 rec                            (as hp_tg)
  *   his_srec HiPic Dr L1 C1 L2 C2 RA0 rec
  *            An offset scan is handed to ofct_srec as
- *            "HiPic RC Oy rangeList Dr RA0 rec" with Oy = 0 (or the
- *            environment variable HIS_SREC_OY) and rangeList "-" or
- *            "L1-L2"; a tilted axis (C1 != C2) is not supported there.
+ *            "HiPic RC Oy - Dr RA0 rec" or, for the L1 C1 L2 C2 form,
+ *            "HiPic L1 C1 L2 C2 Oy L1-L2 Dr RA0 rec" (per-slice axis
+ *            position, every slice written at the widest size), with
+ *            Oy = 0 or the environment variable HIS_SREC_OY.  The axis
+ *            position may be fractional (ofct_srec resamples the
+ *            opposing view).
  *   his_DO   HiPic {stride}            (CPU)   his_DO_g HiPic {navg {stride}}
  *            180-degree scan: the hp2DO estimate on the six views named
  *            on the hp2do line of conv.bat (dark, I0 and view at 0 deg,
@@ -34,6 +38,12 @@
  *            extra arguments are ignored in this mode.
  *            360-degree scan: ofct_DO / ofct_DO_g.
  *   Both his_srec and his_DO print a ready-to-run suggestion to stderr.
+ *   his_sg   layer {center} {skip}                          (as sinog)
+ *            Sinogram s%05d.tif of one layer.  A 180-degree
+ *            scan is sinog (center, if given, is ignored); an offset scan
+ *            is of_sinog "layer center {skip}" with the stitched
+ *            sinogram, center as for his_rec: fractional, or "-" / omitted
+ *            for the single-layer estimate.
  */
 
 #include <stdio.h>
@@ -100,10 +110,7 @@ static const char	*BaseName(const char *p)
 }
 
 /* ====================================================================== */
-#if defined(HIS_REC)
-
-extern int	ct_rec_main(int argc,char **argv);
-extern int	ofct_rec_main(int argc,char **argv);
+#if defined(HIS_REC) || defined(HIS_SG)
 
 #include "blacklim.h"	/* same per-pixel floor as the readers */
 
@@ -157,13 +164,13 @@ static int	ReadLog(const char *dir,View **out)
 
 static double	Log0(double d) { return (d>0.0)?log(d):0.0; }
 
-static int	EstimateOffsetAxis(const char *dir,long layer)
+static double	EstimateOffsetAxis(const char *dir,long layer)
 {
 	HisSet	*s=HisOpen(dir);
 	View	*v,*I0,*V;
 	int	n,Ni=0,Nt=0,i,m,M,Nx,x,k,r=0,Ox1,Ox2,Ox,X,Rc;
 	unsigned short	*D,*I0row,*T1,*T2;
-	double	*S,*G,*H,*tmp,*ker=NULL,thr,c1,c2,sig,best;
+	double	*S,*G,*H,*tmp,*ker=NULL,thr,c1,c2,sig,best,result;
 	char	*env;
 
 	Nx=HisNx(s);
@@ -248,10 +255,15 @@ static int	EstimateOffsetAxis(const char *dir,long layer)
 		}
 	    }
 	    for (k=0; k<Ox; k++) {		/* G(x) vs mirrored H(x-Dx) over the overlap */
-		int	Dx=Ox1+k;
+		/* keep the smoothing radius r away from both ends of the overlap:
+		   there the truncated, re-normalised kernel distorts the profiles
+		   asymmetrically and biases the minimum (about +0.6 px with the
+		   default sigma 10 on test data; exact without smoothing) */
+		int	Dx=Ox1+k,x1=Dx+r,x2=Nx-r;
 		double	d,ssd=0.0;
-		for (x=Dx; x<Nx; x++) { d=G[x]-H[x-Dx]; ssd+=d*d; }
-		S[k]+=ssd/(double)(Nx-Dx);
+		if (x2-x1<8) { x1=Dx; x2=Nx; }
+		for (x=x1; x<x2; x++) { d=G[x]-H[x-Dx]; ssd+=d*d; }
+		S[k]+=ssd/(double)(x2-x1);
 	    }
 	}
 
@@ -265,8 +277,9 @@ static int	EstimateOffsetAxis(const char *dir,long layer)
 	    }
 	    centerf=((double)(Nx+Ox1+X)+dx)/2.0;
 	    Rc=(int)floor(centerf+0.5);
-	    (void)fprintf(stderr,"offset axis estimate at layer %ld: %d view pairs, shift %d%+.3f -> centre %.3f, Rc = %d\n",
+	    (void)fprintf(stderr,"offset axis estimate at layer %ld: %d view pairs, shift %d%+.3f -> centre %.3f (Rc %d)\n",
 			  layer,M,Ox1+X,dx,centerf,Rc);
+	    result=centerf;
 	    if (X==0 || X==Ox-1)
 		(void)fprintf(stderr,"warning: the minimum lies at the edge of the search range (centre %d .. %d, as ofct_DO); "
 			      "the estimate is unreliable - give center explicitly.\n",(Nx+Ox1)/2,(Nx+Ox2)/2);
@@ -275,8 +288,15 @@ static int	EstimateOffsetAxis(const char *dir,long layer)
 	free(S); free(ker); free(tmp); free(H); free(G); free(T2); free(T1); free(I0row); free(D);
 	free(V); free(I0); free(v);
 	HisClose(s);
-	return Rc;
+	return result;
 }
+#endif	/* HIS_REC || HIS_SG */
+
+/* ====================================================================== */
+#if defined(HIS_REC)
+
+extern int	ct_rec_main(int argc,char **argv);
+extern int	ofct_rec_main(int argc,char **argv);
 
 int	main(int argc,char **argv)
 {
@@ -284,7 +304,8 @@ int	main(int argc,char **argv)
 	    (void)fprintf(stderr,
 		"usage : %s layer {center} {pixel size} {offsetangle}\n"
 		"        run where a.his, conv.bat and output.log are; a 360-degree\n"
-		"        offset scan (angles in output.log) is reconstructed as ofct_rec.\n"
+		"        offset scan (angles in output.log) is reconstructed as ofct_rec\n"
+		"        (center may be fractional).\n"
 		"        Without center the rotation axis is estimated from this layer\n"
 		"        (180-degree scan: ct_rec's search; offset scan: ofct_DO's search\n"
 		"        on one layer).\n",argv[0]);
@@ -294,7 +315,7 @@ int	main(int argc,char **argv)
 	    if (argc<3) {
 		char	rc[32],*nargv[4];
 
-		(void)snprintf(rc,sizeof(rc),"%d",EstimateOffsetAxis(".",atol(argv[1])));
+		(void)snprintf(rc,sizeof(rc),"%.3f",EstimateOffsetAxis(".",atol(argv[1])));
 		nargv[0]=argv[0]; nargv[1]=argv[1]; nargv[2]=rc; nargv[3]=NULL;
 		(void)fprintf(stderr,"%s: offset reconstruction as: ofct_rec %s %s\n",BaseName(argv[0]),argv[1],rc);
 		return ofct_rec_main(3,nargv);
@@ -305,26 +326,63 @@ int	main(int argc,char **argv)
 }
 
 /* ====================================================================== */
+#elif defined(HIS_SG)
+
+extern int	sinog_main(int argc,char **argv);
+extern int	of_sinog_main(int argc,char **argv);
+
+/* his_sg layer {center} {skip}: the sinogram of one layer as sinog writes
+   it (s%05d.tif, 32-bit float; a line in ../cmd-hst.log).  On
+   an offset scan the two halves are stitched by of_sinog at center
+   (fractional allowed); "-" or no center means the single-layer estimate
+   of his_rec.  On a 180-degree scan center is not needed and ignored. */
+int	main(int argc,char **argv)
+{
+	char	*nargv[5],rc[32];
+	int	n=0,offset;
+
+	if (argc<2 || argc>4) {
+	    (void)fprintf(stderr,
+		"usage : %s layer {center} {skip}\n"
+		"        run where a.his, conv.bat and output.log are; writes the\n"
+		"        sinogram s%%05d.tif of that layer as sinog (32-bit float).\n"
+		"        A 360-degree offset scan (angles in output.log) is stitched as\n"
+		"        of_sinog at center (may be fractional); \"-\" or no center\n"
+		"        estimates the axis from this layer as his_rec does.  On a\n"
+		"        180-degree scan center is ignored (give \"-\" to use skip).\n",argv[0]);
+	    return 1;
+	}
+	offset=IsOffsetScan(".",BaseName(argv[0]));
+	nargv[n++]=argv[0]; nargv[n++]=argv[1];
+	if (offset) {
+	    if (argc<3 || strcmp(argv[2],"-")==0) {
+		(void)snprintf(rc,sizeof(rc),"%.3f",EstimateOffsetAxis(".",atol(argv[1])));
+		nargv[n++]=rc;
+	    }
+	    else nargv[n++]=argv[2];
+	    if (argc>3) nargv[n++]=argv[3];
+	    nargv[n]=NULL;
+	    (void)fprintf(stderr,"%s: stitched sinogram as: of_sinog %s %s%s%s\n",BaseName(argv[0]),
+			  nargv[1],nargv[2],(n>3)?" ":"",(n>3)?nargv[3]:"");
+	    return of_sinog_main(n,nargv);
+	}
+	if (argc>2 && strcmp(argv[2],"-")!=0)
+	    (void)fprintf(stderr,"%s: 180-degree scan, center %s ignored\n",BaseName(argv[0]),argv[2]);
+	if (argc>3) nargv[n++]=argv[3];
+	nargv[n]=NULL;
+	return sinog_main(n,nargv);
+}
+
+/* ====================================================================== */
 #elif defined(HIS_SREC)
 
 extern int	hp_tg_main(int argc,char **argv);
 extern int	ofct_srec_main(int argc,char **argv);
 
-/* "123" / "123.0" -> 123; anything else is rounded with a warning
-   (ofct_srec takes the axis position as an integer) */
-static void	IntegerAxis(const char *s,char *out,size_t n)
-{
-	double	v=atof(s);
-	long	r=(long)floor(v+0.5);
-
-	if (fabs(v-(double)r)>1.0e-9)
-	    (void)fprintf(stderr,"warning: offset scan: the axis position must be an integer pixel; %s rounded to %ld\n",s,r);
-	(void)snprintf(out,n,"%ld",r);
-}
-
 int	main(int argc,char **argv)
 {
-	char	rc[64],rl[128],*oy,*nargv[9];
+	char	rl[128],*oy,*nargv[12];
+	int	i;
 
 	if (argc!=6 && argc!=9) {
 	    (void)fprintf(stderr,
@@ -332,30 +390,35 @@ int	main(int argc,char **argv)
 		"usage : %s HiPic Dr L1 C1 L2 C2 RA0 rec\n"
 		"        HiPic holds a.his, conv.bat and output.log; run one level above it.\n"
 		"        A 360-degree offset scan is reconstructed as ofct_srec with Oy=0\n"
-		"        (environment variable HIS_SREC_OY) and RC as the axis position.\n",
+		"        (environment variable HIS_SREC_OY) and RC as the axis position\n"
+		"        (fractional values allowed); with L1 C1 L2 C2 the axis position is\n"
+		"        interpolated per slice and every slice is written at the size of\n"
+		"        the widest one.\n",
 		argv[0],argv[0]);
 	    return 1;
 	}
 	if (!IsOffsetScan(argv[1],BaseName(argv[0]))) return hp_tg_main(argc,argv);
 
-	/* ofct_srec: HiPic Rc Oy rangeList Dr RA0 rec */
 	if ((oy=getenv("HIS_SREC_OY"))==NULL || *oy=='\0') oy="0";
 	if (argc==6) {
-	    IntegerAxis(argv[3],rc,sizeof(rc));
-	    (void)snprintf(rl,sizeof(rl),"-");
+	    /* ofct_srec: HiPic Rc Oy rangeList Dr RA0 rec */
+	    nargv[0]=argv[0]; nargv[1]=argv[1]; nargv[2]=argv[3]; nargv[3]=oy; nargv[4]="-";
+	    nargv[5]=argv[2]; nargv[6]=argv[4]; nargv[7]=argv[5]; nargv[8]=NULL;
+	    argc=8;
 	}
 	else {
-	    if (atof(argv[4])!=atof(argv[6]))
-		Fail("offset scan: a tilted rotation axis (C1 != C2) is not supported by the offset reconstruction; give C1 == C2.");
-	    IntegerAxis(argv[4],rc,sizeof(rc));
+	    /* ofct_srec: HiPic L1 C1 L2 C2 Oy rangeList Dr RA0 rec (per-slice axis) */
 	    if (atoi(argv[3])<0 || atoi(argv[5])<atoi(argv[3])) Fail("bad layer range L1 L2.");
 	    (void)snprintf(rl,sizeof(rl),"%d-%d",atoi(argv[3]),atoi(argv[5]));
+	    nargv[0]=argv[0]; nargv[1]=argv[1]; nargv[2]=argv[3]; nargv[3]=argv[4]; nargv[4]=argv[5];
+	    nargv[5]=argv[6]; nargv[6]=oy; nargv[7]=rl; nargv[8]=argv[2]; nargv[9]=argv[7];
+	    nargv[10]=argv[8]; nargv[11]=NULL;
+	    argc=11;
 	}
-	nargv[0]=argv[0]; nargv[1]=argv[1]; nargv[2]=rc; nargv[3]=oy; nargv[4]=rl;
-	nargv[5]=argv[2]; nargv[6]=argv[argc-2]; nargv[7]=argv[argc-1]; nargv[8]=NULL;
-	(void)fprintf(stderr,"%s: offset reconstruction as: ofct_srec %s %s %s %s %s %s %s\n",
-		      BaseName(argv[0]),nargv[1],nargv[2],nargv[3],nargv[4],nargv[5],nargv[6],nargv[7]);
-	return ofct_srec_main(8,nargv);
+	(void)fprintf(stderr,"%s: offset reconstruction as: ofct_srec",BaseName(argv[0]));
+	for (i=1; i<argc; i++) (void)fprintf(stderr," %s",nargv[i]);
+	(void)fputc('\n',stderr);
+	return ofct_srec_main(argc,nargv);
 }
 
 /* ====================================================================== */
@@ -450,5 +513,5 @@ int	main(int argc,char **argv)
 }
 
 #else
-#error "build with -DHIS_REC, -DHIS_SREC or -DHIS_DO"
+#error "build with -DHIS_REC, -DHIS_SREC, -DHIS_DO or -DHIS_SG"
 #endif

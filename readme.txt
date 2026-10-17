@@ -14,8 +14,8 @@
 2026.05.04  ver. 1.7
 
 【ver 2.8 の変更点】
-  ・his_rec_P_F、his_srec_P_F、his_DO(2g)を新設。a.his から
-    直接、再構成と回転軸推定を行う。ビームラインの conv.bat(フレームを
+  ・his_rec_P_F、his_srec_P_F、his_DO、his_sg(2g)を新設。a.his から
+    直接、再構成・回転軸推定・シノグラム作成を行う。ビームラインの conv.bat(フレームを
     dark.img / q????.img にする手順: img_ave / ren / copy)をメモリ上で解釈し、
     output.log は従来どおり読むので、his2img と conv.bat の実行は不要で .img
     ファイルは作られない。output.log の角度欄から 180° スキャンと 360° オフ
@@ -23,13 +23,24 @@
     を自動判別し、対応する本体を呼ぶ: his_rec = ct_rec / ofct_rec(1 枚、a.his
     と同じ階層で実行。center 省略時はそのレイヤーから回転軸を推定、オフセット
     では ofct_DO の探索の 1 レイヤー版)、his_srec = hp_tg / ofct_srec(全スライス、1 つ上で実行。
-    引数はどちらも hp_tg 形式)、his_DO = hp2DO / ofct_DO(回転軸推定)。平均は
+    引数はどちらも hp_tg 形式)、his_DO = hp2DO / ofct_DO(回転軸推定)、
+    his_sg = sinog / of_sinog(1 レイヤーのシノグラム、a.his と同じ階層で実行)。平均は
     img_ave と同じ整数演算(切り捨て)なので、結果は従来の手順とビット一致する
     (CPU 版・GPU 版で検証済み。his_srec は TIFF の ARTIST タグのみ異なる)。
     16bit の his のみ対応。暗電流・入射光の枚数や入射光のタイミングは
     conv.bat と output.log から読み取り、固定値は持たない。既存プログラムの
     動作は不変(2 本を 1 つの his_* に同居させるため、ファイル内の名前を
     static にしただけ)。
+  ・ofct_srec / ofct_rec / of_sinog: オフセットスキャンの回転軸位置に 180° スキャン
+    と同様に小数を指定できるようにした。対向像を小数部の 2 倍だけ線形補間でずらして
+    重ね、回転中心を小数部だけ動かす。整数指定の結果は従来と同一。ofct_rec は
+    従来も小数を受け付けたが貼り合わせは切り捨てた整数で行っており、これを修正。
+    his_rec の単層の回転軸推定も小数のまま使う(his_sg も同じ推定を使う)。
+  ・ofct_srec: 傾いた回転軸に対応(L1 C1 L2 C2 形式、3b)。軸位置をスライスごとに
+    補間して使い、全スライスを最大幅で出力(狭いスライスは中央配置、余白は行の
+    端の値)、ImageDescription の 2 列目にそのスライスの Rc+0.5 を記録する
+    (ofct_rec と同じ規約)。his_srec の L1 C1 L2 C2 形式はオフセット時にこれを使う。
+    C1 = C2 なら出力は従来と同一。
 
 【ver 2.7 の変更点】
   ・act_tg_g_F(2f)と ofact_srec_g_F(3d)を新設。16bit + 8bit を直接出力する
@@ -390,16 +401,17 @@
 
       *) hp_tg と同じく、HiPic ディレクトリの一つ上で実行する。
 
-   g. a.his からの直接再構成(his_rec / his_srec / his_DO)
+   g. a.his からの直接再構成(his_rec / his_srec / his_DO / his_sg)
       his_rec_P_F  layer {center} {pixel size} {offsetangle}
       his_srec_P_F HiPic Dr RC RA0 rec
       his_srec_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
       his_DO       HiPic {stride}                 (CPU)
       his_DO_g     HiPic {navg {stride}}          (GPU)
+      his_sg       layer {center} {skip}          (CPU)
 
       入力はビームラインから持ち帰ったままの a.his(全撮影フレーム)・conv.bat・
-      output.log が置かれた 1 つのディレクトリ。his_rec はそのディレクトリ内で
-      (ct_rec と同様)、his_srec と his_DO は 1 つ上の階層でディレクトリ名を
+      output.log が置かれた 1 つのディレクトリ。his_rec と his_sg はそのディレ
+      クトリ内で(ct_rec と同様)、his_srec と his_DO は 1 つ上の階層でディレクトリ名を
       HiPic に指定して(hp_tg / ofct_DO と同様)実行する。his2img と conv.bat は
       実行せず、.img ファイルも作られない。conv.bat はメモリ上で次のように
       解釈する。
@@ -421,29 +433,39 @@
         プログラム  180° スキャン      360° オフセットスキャン
         his_rec     ct_rec(2a)         ofct_rec(3c)
         his_srec    hp_tg(2b)          ofct_srec(3b)。Rc = RC、Oy = 0、
-                                       rangeList は "-" または "L1-L2"
+                                       rangeList "-"、または L1 C1 L2 C2 形式
         his_DO      conv.bat の hp2do 行の画像で hp2DO
                                        ofct_DO / ofct_DO_g(3a)
+        his_sg      sinog(6b)          of_sinog(6b)。center で貼り合わせ
       center を省略すると his_rec は再構成するレイヤーから回転軸を推定する。
       180° スキャンでは ct_rec 自身の推定、オフセットスキャンでは ofct_DO の
       探索を 1 次元にしたもの(そのレイヤーの -log 透過率を同じガウス平滑化
       OFCT_DO_SMOOTH で平滑化し、対向像を鏡像反転して、ofct_DO と同じ範囲の
-      ずらし量について全ビュー対の平均二乗差を累積、放物線で補間)を用いる。
-      読むのはそのレイヤーの行だけなので数秒で済む。推定値と実行した
+      ずらし量について全ビュー対の平均二乗差を累積、放物線で補間。平滑化の
+      幅だけ重なりの両端を除外する。含めると最小値が偏る)を用い、小数の推定値を
+      そのまま使う。読むのはそのレイヤーの行だけなので数秒で済む。推定値と実行した
       ofct_rec のコマンドを標準エラーに表示し、最小値が探索範囲の端にある
       (回転軸が 0.75*Nx～Nx-1 の外。ofct_DO でも扱えない)ときは警告する。
-      his_srec の引数は常に hp_tg 形式。オフセット時の RC は整数画素(小数は
-      警告の上で丸める)、Oy は環境変数 HIS_SREC_OY がなければ 0、回転軸の傾き
-      (C1 ≠ C2)はオフセット再構成に該当機能がないためエラーとする。his_DO は
+      his_srec の引数は常に hp_tg 形式。オフセット時の RC は小数も可(3b)、
+      Oy は環境変数 HIS_SREC_OY がなければ 0。L1 C1 L2 C2 形式は ofct_srec の
+      傾き軸形式(3b)に渡され、軸位置をスライスごとに補間し、全スライスを
+      最大幅で出力する。his_DO は
       180° スキャンでは hp2do 行の 6 画像(暗電流・入射光・0° の試料像、暗電流・
       入射光・180° の試料像。hp2do 行がなければ ct_rec の中心推定と同じ q1 q2
       と最終記録の次の 2 枚)で hp2DO の推定を行い(stride / navg 引数は無視)、
       hp2DO と同じ出力を標準出力に書く。オフセットスキャンでは ofct_DO。
       いずれも実行可能な his_srec のコマンド例を標準エラーに表示する(1.0 は
       画素サイズ Dr に置き換える)。
+      his_sg は 1 レイヤーのシノグラムを sinog とまったく同じ形で書く(s%05d.tif、
+      32bit float、../cmd-hst.log への 1 行)。オフセットスキャンでは
+      of_sinog が center で両半分を貼り合わせる。center は小数も可で、"-" または
+      省略なら上記の his_rec と同じ単層推定を使い、実行した of_sinog のコマンドを
+      標準エラーに表示する。180° スキャンでは center は不要で無視される(skip を
+      与えるときは "-" と書く)。
       平均は img_ave と同じ演算(整数和を枚数で切り捨て除算)なので、暗電流・
-      入射光データも再構成結果も ct_rec / hp_tg / ofct_rec / ofct_srec の手順
-      とビット一致し(his_srec は TIFF の ARTIST タグのみ異なる)、his_DO の
+      入射光データも再構成結果もシノグラムも ct_rec / hp_tg / ofct_rec /
+      ofct_srec / sinog / of_sinog の手順とビット一致し(his_srec は TIFF の
+      ARTIST タグのみ異なる)、his_DO の
       出力は hp2DO / ofct_DO と同一になる。his は 16bit(type 2)のみ対応。
       環境変数は RHIS_H(his ファイル名。his2img 行より優先)、RHIS_C(conv.bat
       名、既定 conv.bat)、RHP_O(output.log のパス)、HIS_SREC_OY(上記)のほか、
@@ -451,8 +473,8 @@
       位置指定読み出しで読むので、hp_tg の並列読み込み(HPTG_READ_THREADS)と
       メモリ量に応じたチャンク分割はそのまま働く。
 
-      *) his_rec は a.his・conv.bat・output.log のあるディレクトリで、his_srec
-         と his_DO はその 1 つ上で実行する。
+      *) his_rec と his_sg は a.his・conv.bat・output.log のあるディレクトリで、
+         his_srec と his_DO はその 1 つ上で実行する。
 
 3. 360deg scan (offset CT)。標準的な吸収の画像再構成
    a. 回転軸位置の推定
@@ -477,9 +499,23 @@
 
    b. 再構成
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
+      ofct_srec_P_F HiPic L1 C1 L2 C2 Oy rangeList Dr RA0 rec
       
       HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
-      Rc: 回転軸の位置(左端からの画素数)
+      Rc: 回転軸の位置(左端からの画素数)。小数も可(ver 2.8)。貼り合わせの枠は
+           整数部で決め、対向像を 2f 画素だけ線形補間でずらして重ね、回転中心を
+           f だけ動かす(180° スキャンと同様)。整数を与えれば従来と同一の結果。
+      L1 C1 L2 C2: 傾いた回転軸(ver 2.8)。レイヤー L1 で位置 C1、L2 で C2 とし、
+           各スライスは線形補間した位置を使う(小数。Rc の項を参照)。
+           貼り合わせ幅 2*floor(Rc(z)) がスライスごとに変わるので、選択
+           スライスのうち最大の幅で全スライスを出力し、狭いスライスは中央に
+           置いてシノグラムの余白を各行の端の値で埋める(0 にすると、両端の列を
+           見る打ち切り補正の判定が狭いスライスだけ常に無効になるため)。回転軸
+           は常に画像中央にあり、そのまま積層できる。C1 = C2 なら第 1 の形式と
+           同一の結果。画像の縁付近では、そのスライス固有の幅で再構成した場合と
+           わずかに異なる(試験データで中心部は値域の 0.1 % 程度、縁で数 %)。
+           L1、L2 は出力レイヤー番号(Oy = 0 なら検出器の行番号と同じ)。rangeList
+           で L1～L2 の外を指定すると外挿になる。
       Oy: 縦ずれ量（常に 0 を指定）。
       rangeList: 再構成するレイヤーを指定。
       Dr: 画素サイズ
@@ -491,11 +527,18 @@
          100-150 レイヤー: 100-150
          全部: -
 
+      ImageDescription の 2 列目はそのスライスの Rc+0.5(ofct_rec の dcnt+0.5 と
+      同じ規約)。軸が中央より右なら ver 2.8 より前の貼り合わせ画像の中心 (N+1)/2
+      と同値で、既存の出力は変わらない。傾きや小数の軸ではスライス固有の値になる。
+
    c. img/tif データから1枚だけ再構成（オフセットCT）
       ofct_rec_P_F layer center {pixel size} {offsetangle}
       
       layer: 再構成するレイヤー(高さ)
-      center: 回転軸の位置(pixel)。
+      center: 回転軸の位置(pixel)。小数も可(ver 2.8)。対向像を 2f 画素ずらして
+           重ね、回転中心 dcnt+0.5 が鏡映の軸に一致する。ver 2.8 より前は小数を
+           与えると中心だけ動き、貼り合わせは切り捨てた整数で行われていた
+           (不整合)。整数なら従来と同一の結果。
       pixel size: 画素サイズ(um)。省略した場合は1.0になる。
       offset angle: 回転軸の原点オフセット。省略した場合は0.0になる。
       
@@ -545,9 +588,15 @@
       pid tiff-file
       
    b. シノグラム作成
-      sinog layer {skip}
+      sinog    layer {skip}
+      of_sinog layer offset {skip}
       32bit tiff にて出力。タグには最大と最小値のみ入る。
-      skip を指定すると、投影数をskip分の1にして出力する。
+      skip を指定すると、投影数をskip分の1にして出力する。of_sinog は 360°
+      オフセットスキャン(3)の両半分を回転軸位置 offset(ofct_rec の center と
+      同じ。ver 2.8 から小数も可、整数なら従来と同じ結果)で貼り合わせる。
+      貼り合わせたシノグラムの回転軸位置(6c 用)は offset+0.5。his_sg(2g)は
+      同じことを a.his から直接行う。sino.tmp(幅・投影数・レイヤー・中心・
+      全吸収の平均と SD。旧バッチ処理用)は ver 2.8 から書かない。
 
    c. b のシノグラムから再構成
       sf_rec_t_F input output {Dr RC RA0}

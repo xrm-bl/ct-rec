@@ -299,7 +299,7 @@ int	main(int argc,char **argv)
         oyf=(double)(Oy1+Y)+dy;
         Rc=(int)floor(centerf+0.5); Oyv=(int)floor(oyf+0.5);
 #ifdef HIS_INPUT
-        (void)fprintf(stderr,"try: his_srec_g_c %s 1.0 %d 0.0 rec   (replace 1.0 by the pixel size Dr)\n",argv[1],Rc);
+        (void)fprintf(stderr,"try: his_srec_g_c %s 1.0 %.2f 0.0 rec   (replace 1.0 by the pixel size Dr)\n",argv[1],centerf);
         if (Oyv!=0) (void)fprintf(stderr,"note: estimated Oy=%d; his_srec uses Oy=0 unless HIS_SREC_OY is set\n",Oyv);
 #else
         (void)fprintf(stderr,"try: ofct_srec_g_c raw %d %d - 1.0 0.0 rec\n",Rc,Oyv);

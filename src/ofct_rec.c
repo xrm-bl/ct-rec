@@ -83,6 +83,24 @@ static double	TA, TA1, TA2, TAM, TASD;
 static float	dcnt;
 static int		idcnt;
 static long	ldcnt;
+static double	fsub;		/* fractional part of the axis position (2026-10-18) */
+
+/* The axis position may be fractional: dcnt = idcnt + fsub.  The stitching
+   frame (NN = 2*idcnt, the blend region) follows the integer part; the
+   opposing view is resampled 2*fsub pixels to the right (linear
+   interpolation, edges held) and the rotation centre f_center = dcnt + 0.5
+   then sits at the mirror axis.  fsub == 0 reproduces the old result bit
+   for bit.  Before this change a fractional center shifted the centre
+   but stitched the views at the truncated integer, i.e. inconsistently. */
+static double	Bval(const double *pb,int n,double x)
+{
+	int	i=(int)floor(x);
+	double	w=x-(double)i;
+
+	if (i<0) { i=0; w=0.0; } else if (i>=n-1) { i=n-1; w=0.0; }
+	if (w==0.0) return pb[i];
+	return (1.0-w)*pb[i]+w*pb[i+1];
+}
 
 /*----------------------------------------------------------------------*/
 
@@ -476,11 +494,11 @@ long		ln;
 		for(jx=-idcN;jx<idcN;++jx){
 			dva=ddv-(double)l;
 			dvb=(double)l;
-			*(pp+j*NN+k)=(*(po+j*N+jx+idcnt)*dva+*(po+(j+NNST)*N+idcnt-jx-1)*dvb)/ddv;
+			*(pp+j*NN+k)=(*(po+j*N+jx+idcnt)*dva+Bval(po+(j+NNST)*N,N,(double)(idcnt-jx-1)+2.0*fsub)*dvb)/ddv;
 			k=k+1;l=l+1;
 		}
 		for(jx=0;jx<idcnt-idcN;++jx){
-			*(pp+j*NN+k)=*(po+(j+NNST)*N+idcnt-idcN-jx-1);
+			*(pp+j*NN+k)=Bval(po+(j+NNST)*N,N,(double)(idcnt-idcN-jx-1)+2.0*fsub);
 			k=k+1;
 		}
 
@@ -627,9 +645,11 @@ char	**argv;
 #endif
 	f_center=dcnt+0.5;
 		
-	NN=2*dcnt;
-	idcnt=(short)dcnt;
+	idcnt=(short)floor(dcnt);		/* stitching frame from the integer part */
+	fsub=(double)dcnt-(double)idcnt;	/* fraction: opposing view shifted by 2*fsub */
+	NN=2*idcnt;
 	ldcnt=(long)(dcnt*10);
+	if (fsub!=0.0) fprintf(stderr,"center %g: frame of %d, opposing view shifted by %.3f px\n",(double)dcnt,idcnt,2.0*fsub);
 
 // read shot log file
 	if ((i = read_log()) != 0){
