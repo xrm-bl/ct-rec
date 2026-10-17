@@ -60,6 +60,7 @@ struct HisSet {
 	unsigned long long	*off;	/* data offset of every frame */
 	HisQ	dark,*Q;
 	int	n_avg,n_frame;		/* statistics for the start-up message */
+	int	frames_per_scan,nscan,scan,frame0;	/* Z scans, see HisScanLayout */
 	char	*hp2do[6];		/* image names of the hp2do line (his_DO) */
 	int	n_hp2do;
 };
@@ -278,12 +279,78 @@ static int	FrameIndex(HisSet *s,const char *tok,int lineno)
 			  "(<letter><digits>.img).\n",s->conv,lineno,tok);
 	    exit(1);
 	}
-	if (n<1 || n>s->nframes) {
+	if (n<1 || n-1+s->frame0>=s->nframes) {
 	    (void)fprintf(stderr,"rhis: %s line %d : frame %s is outside the his "
-			  "file (%d frames).\n",s->conv,lineno,tok,s->nframes);
+			  "file (%d frames%s).\n",s->conv,lineno,tok,s->nframes,
+			  (s->nscan>1)?", scan selected by RHIS_SCAN":"");
 	    exit(1);
 	}
-	return (int)(n-1);
+	return (int)(n-1)+s->frame0;
+}
+
+/* ---- Z scans: several scans of equal length in one his file ----
+   conv.bat names the frames of ONE scan (a0001.img .. a<L>.img, L = the
+   highest frame number it uses).  A Z scan (or energy scan) is written
+   by the beamline as M consecutive blocks of L frames into one a.his,
+   with the same conv.bat and output.log for every block - exactly what
+   his_spl_E splits into 001/raw .. 00M/raw.  When the file holds a whole
+   multiple M > 1 of L frames, RHIS_SCAN = 1..M selects the block and
+   every frame number of conv.bat is offset by (M-1)*L.  Such a file is
+   refused without RHIS_SCAN: the first block is never used silently. */
+static int	Tokenize(char *line,char **tok,int maxtok);	/* defined below */
+
+/* the highest frame number conv.bat uses (= frames per scan), 0 if none */
+static long	HisConvMaxFrame(HisSet *s)
+{
+	FILE	*f;
+	char	line[LEN],*tok[LEN/2],path[LEN],c;
+	int	ntok,i;
+	long	n,L=0;
+
+	if (snprintf(path,LEN,"%s/%s",s->dir,s->conv)>=LEN) HisError(s->conv,"path too long.");
+	if ((f=fopen(path,"r"))==NULL) HisError(path,"file not open.");
+	while (fgets(line,LEN,f)!=NULL) {
+	    line[strcspn(line,"\r\n")]='\0';
+	    if ((ntok=Tokenize(line,tok,LEN/2))<0) HisError(s->conv,"too many words on one line.");
+	    for (i=1; i<ntok; i++)
+		if (ParseImgName(tok[i],&c,&n) && c!='q' && n>L) L=n;
+	}
+	(void)fclose(f);
+	return L;
+}
+
+/* RHIS_SCAN: pick the scan (frames_per_scan and nscan are already set) */
+static void	HisScanLayout(HisSet *s)
+{
+	char	*env;
+	long	L=s->frames_per_scan;
+
+	if ((env=getenv("RHIS_SCAN"))!=NULL && *env!='\0') {
+	    char	*end;
+	    long	k=strtol(env,&end,10);
+
+	    if (*end!='\0' || k<1) HisError(s->path,"RHIS_SCAN must be a scan number (1, 2, ...).");
+	    if (L<=0) HisError(s->conv,"RHIS_SCAN is set but conv.bat names no frame.");
+	    if (s->nframes%L!=0) {
+		(void)fprintf(stderr,"rhis: %s : %d frames is not a whole number of scans of %ld frames "
+			      "(the highest frame conv.bat uses); RHIS_SCAN cannot be applied.\n",
+			      s->path,s->nframes,L);
+		exit(1);
+	    }
+	    if (k>s->nscan) {
+		(void)fprintf(stderr,"rhis: %s : RHIS_SCAN=%ld but the file holds %d scan%s of %ld frames.\n",
+			      s->path,k,s->nscan,(s->nscan==1)?"":"s",L);
+		exit(1);
+	    }
+	    s->scan=(int)k; s->frame0=(int)((k-1)*L);
+	}
+	else if (s->nscan>1) {
+	    (void)fprintf(stderr,"rhis: %s : %d frames = %d scans of %ld frames (conv.bat uses frames "
+			  "1..%ld).  This looks like a Z scan: set RHIS_SCAN=1..%d to pick the scan "
+			  "(RHIS_SCAN=1 if it really is a single scan).\n",
+			  s->path,s->nframes,s->nscan,L,L,s->nscan);
+	    exit(1);
+	}
 }
 
 /* q<N>.img -> N, or -1 */
@@ -483,11 +550,12 @@ static void	HisReadConv(HisSet *s)
 /* public: open / close                                                   */
 /* ---------------------------------------------------------------------- */
 
-HisSet	*HisOpen(const char *dir)
+/* open the his file, read every frame header and the frame layout of
+   conv.bat (frames per scan L, number of scans M); no RHIS_SCAN check */
+static HisSet	*HisOpenHeaders(const char *dir)
 {
 	HisSet	*s=(HisSet *)HisMalloc(sizeof(HisSet),"HisSet");
 	char	his_name[LEN]="a.his",path[LEN],*env;
-	int	ndark;
 
 	memset(s,0,sizeof(HisSet));
 	s->fd=HIS_BAD_FD;
@@ -532,15 +600,55 @@ HisSet	*HisOpen(const char *dir)
 	if ((s->fd=HisFileOpen(s->path))==HIS_BAD_FD) HisError(s->path,"file not open.");
 
 	HisScanHeaders(s);
+	s->frames_per_scan=(int)HisConvMaxFrame(s);
+	s->nscan=1; s->scan=1; s->frame0=0;
+	if (s->frames_per_scan>0 && s->nframes>s->frames_per_scan &&
+	    s->nframes%s->frames_per_scan==0)
+	    s->nscan=s->nframes/s->frames_per_scan;
+	return s;
+}
+
+HisSet	*HisOpen(const char *dir)
+{
+	HisSet	*s=HisOpenHeaders(dir);
+	int	ndark;
+
+	HisScanLayout(s);
 	HisReadConv(s);
 
 	ndark=(s->dark.kind==HQ_AVG)?s->dark.nlist:1;
 	(void)fprintf(stderr,
 		      "%s: %d x %d, %d frames; %s: dark = %d frame%s, q0..q%d "
-		      "(%d averaged, %d single)\n",
+		      "(%d averaged, %d single)",
 		      s->path,s->Nx,s->Ny,s->nframes,s->conv,ndark,(ndark==1)?"":"s",
 		      s->Nq-1,s->n_avg,s->n_frame);
+	if (s->nscan>1)
+	    (void)fprintf(stderr,"; scan %d / %d (frames %d-%d)",s->scan,s->nscan,
+			  s->frame0+1,s->frame0+s->frames_per_scan);
+	(void)fputc('\n',stderr);
 	return s;
+}
+
+int	HisScan(const HisSet *s)	{ return s->scan; }
+int	HisNscan(const HisSet *s)	{ return s->nscan; }
+
+void	HisLayout(const char *dir,int *Nx,int *Ny,int *nframes,int *L,int *M)
+{
+	HisSet	*s=HisOpenHeaders(dir);
+
+	*Nx=s->Nx; *Ny=s->Ny; *nframes=s->nframes; *L=s->frames_per_scan; *M=s->nscan;
+	HisClose(s);
+}
+
+/* "   % RHIS_SCAN=k" for the cmd-hst.log line of the his_* programs, or "" */
+const char	*HisScanNote(void)
+{
+	static char	note[64];
+	const char	*env=getenv("RHIS_SCAN");
+
+	if (env==NULL || *env=='\0') return "";
+	(void)snprintf(note,sizeof(note),"   %% RHIS_SCAN=%.20s",env);
+	return note;
 }
 
 void	HisClose(HisSet *s)

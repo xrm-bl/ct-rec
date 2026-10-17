@@ -53,6 +53,7 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-09-09 版**（
 | `RHIS_H` | his_rec / his_srec / his_DO が読む his ファイル名 | conv.bat の his2img 行、なければ a.his | rhis.c | a.his と同じディレクトリ内の名前。16bit(type 2)のみ |
 | `RHIS_C` | his_rec / his_srec / his_DO が解釈する conv.bat の名前 | conv.bat | rhis.c | img_ave / ren / copy で dark・q を定義、hp2do 行は his_DO 用に記憶。his2img / rem / echo / pause は無視、他の命令はエラー停止。output.log は `RHP_O` で上書き可 |
 | `HIS_SREC_OY` | his_srec が 360° オフセットスキャンを ofct_srec で再構成するときの Oy | 0 | his_main.c | 180° スキャンでは無関係。his_DO が推定した Oy が 0 でないときの逃げ道 |
+| `RHIS_SCAN` | Z スキャン: 1 つの a.his に入った M 本のスキャンのうち使うスキャン番号 1..M | なし(M > 1 なら必須、M = 1 なら不要) | rhis.c | L = conv.bat が参照する最大フレーム番号、M = 総フレーム数 / L。conv.bat のフレーム番号に (k−1)·L を加える。M > 1 で未設定はエラー停止、L の倍数でないファイルに設定してもエラー。rc-check-his / gen-all-his が for ループ内で設定する。cmd-hst.log の行末に `% RHIS_SCAN=k` を記録 |
 
 ## GPU
 

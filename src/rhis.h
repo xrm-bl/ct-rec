@@ -29,8 +29,12 @@
  * first frame of the file).  Any other line stops the program.
  *
  * Environment:
- *   RHIS_H   his file name (overrides the his2img line; default a.his)
- *   RHIS_C   conv.bat file name (default conv.bat)
+ *   RHIS_H     his file name (overrides the his2img line; default a.his)
+ *   RHIS_C     conv.bat file name (default conv.bat)
+ *   RHIS_SCAN  Z scans: the file holds M scans of L frames each (L = the
+ *              highest frame number conv.bat uses, M = frames / L, the
+ *              layout his_spl_E splits into 001/raw .. 00M/raw) and
+ *              RHIS_SCAN = 1..M picks the scan.  Required when M > 1.
  */
 #ifndef RHIS_H
 #define RHIS_H
@@ -48,6 +52,15 @@ void	HisClose(HisSet *s);
 int	HisNx(const HisSet *s);		/* frame width  */
 int	HisNy(const HisSet *s);		/* frame height */
 int	HisNframes(const HisSet *s);	/* frames in the his file */
+int	HisScan(const HisSet *s);	/* selected scan (1..M), 1 for a single scan */
+int	HisNscan(const HisSet *s);	/* M, the number of scans in the file */
+/* "   % RHIS_SCAN=k" when the variable is set, else "" (for cmd-hst.log) */
+const char *HisScanNote(void);
+/* his header and conv.bat only, without the RHIS_SCAN check: frame size,
+   number of frames, frames per scan L (highest frame conv.bat names) and
+   number of scans M (frames / L when that is a whole number > 1, else 1).
+   Exits on error.  Used by his_info. */
+void	HisLayout(const char *dir,int *Nx,int *Ny,int *nframes,int *L,int *M);
 int	HisNq(const HisSet *s);		/* highest q number + 1 */
 int	HisHasQ(const HisSet *s,int q);	/* q<N>.img is defined by conv.bat */
 const char *HisPath(const HisSet *s);	/* path of the his file */

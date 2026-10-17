@@ -41,6 +41,8 @@ rem rotation-axis finder on a.his: hp2DO (180 deg) / ofct_DO (360 deg), chosen f
 %CC2% /openmp /DHIS_INPUT /DHIS_DO /DONLY_CT_VIEWS /Fehis_DO.exe his_main.c hp2DO.c ofct_DO.c rhis.c error.c msd.c his_rhis_hp_d.obj %SIF_F% %TIFFLIB%
 rem sinogram of one layer from a.his: sinog (180 deg) / of_sinog (360 deg)
 %CC2% /openmp /DHIS_INPUT /DHIS_SG /Fehis_sg.exe his_main.c sinog.c of_sinog.c rhis.c %SIF_F%
+rem "Nx Ny frames L M layer" of a.his + conv.bat (number of scans, check layer for rc-check-his)
+%CC2% /openmp /Fehis_info.exe his_info.c rhis.c
 
 rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_r.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Ramachandran
 rem %CC2% /openmp /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_t_s.exe hp_tg_ku.c error.c rtf.c sort_filter_omp.c %TIFFLIB% %CBP% /DFilter=Shepp

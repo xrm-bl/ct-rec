@@ -24,7 +24,7 @@ his/tif split -> axis search -> reconstruction (ring removal + FBP) -> 32bit tif
 |---|---|---|
 | Single-slice reconstruction (180°) | `ct_rec_G_F` | rotation-axis RMSD search built in |
 | Whole-volume reconstruction | `hp_tg_G_F`, `ct_rec_loop` (`.bat`/`.sh`) | memory-adaptive chunking |
-| Reconstruction directly from a.his | `his_rec_G_F`, `his_srec_G_F`, `his_DO(_g)`, `his_sg` | ct_rec / hp_tg (180°) or ofct_rec / ofct_srec (360° offset, chosen from the angles in output.log) reading a.his + conv.bat + output.log in memory; no his2img / img_ave stage, bit-identical results; `his_DO` = hp2DO / ofct_DO axis estimate; `his_sg` = sinog / of_sinog sinogram of one layer |
+| Reconstruction directly from a.his | `his_rec_G_F`, `his_srec_G_F`, `his_DO(_g)`, `his_sg` | ct_rec / hp_tg (180°) or ofct_rec / ofct_srec (360° offset, chosen from the angles in output.log) reading a.his + conv.bat + output.log in memory; no his2img / img_ave stage, bit-identical results; `his_DO` = hp2DO / ofct_DO axis estimate; `his_sg` = sinog / of_sinog sinogram of one layer; `RHIS_SCAN` selects one scan of a Z-scan file, scripted by `rc-check-his` / `gen-all-his` (`.bat`/`.sh`) with `his_info` (scans in the file, centre layer) |
 | Reconstruction from p-images | `p_rec_G_F`, `sf_rec_t_F` | |
 | Offset CT (360°, half-beam) | `ofct_DO(_g)`, `ofct_rec_G_F`, `ofct_srec_G_F` | axis finder + reconstruction |
 | Automatic-CT whole-volume reconstruction | `act_tg_g_F`, `ofact_srec_g_F` | hp_tg / ofct_srec with direct 16-bit + 8-bit output (two LAC ranges on the command line), no 32-bit stage |
@@ -61,7 +61,7 @@ makefileCPU.bat        (MSVC, OpenMP)
 makefileGPU.bat        (MSVC + CUDA Toolkit 13.2, requires sm_75/Turing or newer)
 ```
 
-libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/gen-all.sh).
+libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/gen-all.sh). Z-scan scripts for the `his_*` programs: [bin/rc-check-his.sh](bin/rc-check-his.sh), [bin/gen-all-his.sh](bin/gen-all-his.sh) (Windows: `exe/rc-check-his.bat`, `exe/gen-all-his.bat`).
 
 ## Documentation
 

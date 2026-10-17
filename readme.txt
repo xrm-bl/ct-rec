@@ -24,7 +24,10 @@
     と同じ階層で実行。center 省略時はそのレイヤーから回転軸を推定、オフセット
     では ofct_DO の探索の 1 レイヤー版)、his_srec = hp_tg / ofct_srec(全スライス、1 つ上で実行。
     引数はどちらも hp_tg 形式)、his_DO = hp2DO / ofct_DO(回転軸推定)、
-    his_sg = sinog / of_sinog(1 レイヤーのシノグラム、a.his と同じ階層で実行)。平均は
+    his_sg = sinog / of_sinog(1 レイヤーのシノグラム、a.his と同じ階層で実行)。
+    Z スキャン(1 つの a.his に複数スキャン)は環境変数 RHIS_SCAN=k でスキャンを選び、
+    rc-check-his / gen-all-his(exe/*.bat、bin/*.sh)が spl と conv.bat なしに全スキャン
+    の軸チェックと全体再構成を行う(スキャン数と中央レイヤーは his_info が報告)。平均は
     img_ave と同じ整数演算(切り捨て)なので、結果は従来の手順とビット一致する
     (CPU 版・GPU 版で検証済み。his_srec は TIFF の ARTIST タグのみ異なる)。
     16bit の his のみ対応。暗電流・入射光の枚数や入射光のタイミングは
@@ -468,10 +471,34 @@
       ARTIST タグのみ異なる)、his_DO の
       出力は hp2DO / ofct_DO と同一になる。his は 16bit(type 2)のみ対応。
       環境変数は RHIS_H(his ファイル名。his2img 行より優先)、RHIS_C(conv.bat
-      名、既定 conv.bat)、RHP_O(output.log のパス)、HIS_SREC_OY(上記)のほか、
+      名、既定 conv.bat)、RHP_O(output.log のパス)、RHIS_SCAN(Z スキャン、
+      後述)、HIS_SREC_OY(上記)のほか、
       元のプログラムのものがすべて有効。フレームは 1 つのファイルハンドルへの
       位置指定読み出しで読むので、hp_tg の並列読み込み(HPTG_READ_THREADS)と
       メモリ量に応じたチャンク分割はそのまま働く。
+
+      Z スキャン。a.his に L 枚のスキャンが M 本入っている場合(L は conv.bat が
+      参照する最大フレーム番号、M = 総フレーム数 / L。spl / his_spl_E が同じ
+      conv.bat・output.log とともに 001/raw～00M/raw に展開していた配置)、環境
+      変数 RHIS_SCAN = 1～M で his_* 全プログラムのスキャンを選ぶ。RHIS_SCAN なし
+      ではエラー停止し、誤って 1 本目を使うことはない。スクリプト rc-check-his
+      と gen-all-his(Windows は exe/*.bat、Linux は bin/*.sh)が 6m の spl +
+      conv.bat + ct_rec / hp_tg の手順を置き換える。
+        his_info {dir}
+            a.his + conv.bat の「Nx Ny frames L M layer」を 1 行で表示する: 画像
+            サイズ、総フレーム数、1 スキャンのフレーム数 L、スキャン数 M、中央
+            レイヤー Ny/2(標準エラーには読みやすい要約)。
+        rc-check-his {layer}
+            スキャン数 M と layer の既定値(中央行)は his_info から取る。全スキャン
+            についてその layer を his_rec で軸推定つきで再構成し、pid で軸を
+            center.log に追記、画像は目視確認用に rc-check/00k.tif。
+        gen-all-his center.log Dr {LACmin LACmax}
+            全スキャンを center.log の軸で his_srec により 00k/rec に再構成し、
+            tif_f2i(8bit、既定 -0.5 3.0)で 00k/ro_xy を作る(ro_zx は作らない)。
+            積層は従来どおり rec_stk(6f)。
+      スクリプトはどちらも a.his のあるディレクトリで実行する(his_srec は HiPic
+      に "." を取れる)。プログラム名は HIS_REC / HIS_SREC で変更できる(既定
+      his_rec_g_c / his_srec_g_c)。
 
       *) his_rec と his_sg は a.his・conv.bat・output.log のあるディレクトリで、
          his_srec と his_DO はその 1 つ上で実行する。
@@ -709,6 +736,13 @@
       call bbb.bat
       set-rc 11.31 > ccc.bat
       call ccc.bat
+      rec_stk 8 17 140 > ddd.bat
+      call ddd.bat
+
+      a.his から直接(2g)、spl と conv.bat なしで行う場合(スキャン数は a.his
+      から読む。layer を省けば中央行):
+      rc-check-his 75
+      gen-all-his center.log 11.31
       rec_stk 8 17 140 > ddd.bat
       call ddd.bat
 

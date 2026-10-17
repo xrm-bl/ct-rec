@@ -30,6 +30,10 @@ Uesugi
     his_srec = hp_tg / ofct_srec (whole volume, run one level up; hp_tg
     argument form for both), his_DO = hp2DO / ofct_DO (axis estimate),
     his_sg = sinog / of_sinog (sinogram of one layer, run beside a.his).
+    Z scans (several scans in one a.his): RHIS_SCAN=k selects the scan;
+    rc-check-his / gen-all-his (exe/*.bat, bin/*.sh) run the axis check
+    and the whole-volume reconstruction over all scans without spl and
+    conv.bat; his_info reports the number of scans and the centre layer.
   - ofct_srec / ofct_rec / of_sinog: the rotation axis position of an
     offset scan may be fractional, as for a 180-degree scan.  The opposing view is
     resampled by twice the fraction (linear interpolation) and the
@@ -563,11 +567,37 @@ Uesugi
       the TIFF), and his_DO prints exactly what hp2DO / ofct_DO print.  Only 16-bit his files
       (type 2) are accepted.  Environment variables: RHIS_H (his file
       name, overrides the his2img line), RHIS_C (conv.bat name, default
-      conv.bat), RHP_O (output.log path), HIS_SREC_OY (see above) and
+      conv.bat), RHP_O (output.log path), RHIS_SCAN (Z scans, see
+      below), HIS_SREC_OY (see above) and
       everything that applies to the underlying programs.  Frames are
       read with positional reads on one shared file handle, so the
       parallel projection reading of hp_tg (HPTG_READ_THREADS) and the
       memory-adaptive chunking work unchanged.
+
+      Z scans.  When a.his holds M scans of L frames each (L = the highest
+      frame number conv.bat names, M = frames / L; the layout spl /
+      his_spl_E split into 001/raw .. 00M/raw with the same conv.bat and
+      output.log), the environment variable RHIS_SCAN = 1..M selects the
+      scan for every his_* program; such a file is refused without it, so
+      the first scan is never used by mistake.  The scripts rc-check-his
+      and gen-all-his (exe/*.bat for Windows, bin/*.sh for Linux) replace
+      the spl + conv.bat + ct_rec / hp_tg chain of 6m:
+        his_info {dir}
+            prints "Nx Ny frames L M layer" of a.his + conv.bat: frame
+            size, frames in the file, frames per scan L, number of scans M
+            and the centre layer Ny/2 (readable summary on stderr).
+        rc-check-his {layer}
+            M and the default layer (centre row) come from his_info;
+            his_rec on that layer of every scan with its axis estimate;
+            pid appends the axis to center.log, the images go to
+            rc-check/00k.tif for a visual check.
+        gen-all-his center.log Dr {LACmin LACmax}
+            his_srec of every scan at the axis of center.log into 00k/rec,
+            then tif_f2i (8 bit, default -0.5 3.0) into 00k/ro_xy (no
+            ro_zx reslice); rec_stk (6f) stacks them as before.
+      Both scripts run in the directory of a.his (his_srec takes "." as
+      HiPic); HIS_REC / HIS_SREC override the program names (default
+      his_rec_g_c / his_srec_g_c).
 
       *) his_rec, his_sg: run in the directory containing a.his, conv.bat
          and output.log.  his_srec, his_DO: run one directory above it.
@@ -839,6 +869,13 @@ Uesugi
       call bbb.bat
       set-rc 11.31 > ccc.bat
       call ccc.bat
+      rec_stk 8 17 140 > ddd.bat
+      call ddd.bat
+
+      Directly from a.his (2g), without spl and conv.bat (the number of
+      scans is read from a.his; the layer defaults to the centre row):
+      rc-check-his 75
+      gen-all-his center.log 11.31
       rec_stk 8 17 140 > ddd.bat
       call ddd.bat
 

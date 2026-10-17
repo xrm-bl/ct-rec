@@ -789,6 +789,9 @@ char	**argv;
 	}
 	for(i=0;i<argc;++i) fprintf(ff,"%s ",argv[i]);
 	fprintf(ff, "   %% kernel_size %d", kernel_size);
+#ifdef HIS_INPUT
+	{ extern const char *HisScanNote(void); fprintf(ff,"%s",HisScanNote()); }
+#endif
 	fprintf(ff,"\n");
 	fclose(ff);
 

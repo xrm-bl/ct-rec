@@ -38,6 +38,13 @@
  *            extra arguments are ignored in this mode.
  *            360-degree scan: ofct_DO / ofct_DO_g.
  *   Both his_srec and his_DO print a ready-to-run suggestion to stderr.
+ *
+ * Z scans: when a.his holds M scans of L frames (L = the highest frame
+ *   conv.bat names, the layout his_spl_E splits into 001/raw .. 00M/raw)
+ *   the environment variable RHIS_SCAN = 1..M selects the scan for every
+ *   program here (rhis.c); the file is refused without it.  The scripts
+ *   rc-check-his / gen-all-his (exe/*.bat, bin/*.sh) loop over the scans
+ *   this way, replacing spl + conv.bat + ct_rec / hp_tg.
  *   his_sg   layer {center} {skip}                          (as sinog)
  *            Sinogram s%05d.tif of one layer.  A 180-degree
  *            scan is sinog (center, if given, is ignored); an offset scan
@@ -506,7 +513,7 @@ int	main(int argc,char **argv)
 	    FILE *f_log; int i_log;
 	    if ((f_log=fopen("cmd-hst.log","a"))!=NULL) {
 		for (i_log=0; i_log<argc; ++i_log) fprintf(f_log,"%s ",argv[i_log]);
-		fprintf(f_log,"   %% hp2DO axis %.3f / %.3f\n",c0,c1); fclose(f_log);
+		fprintf(f_log,"   %% hp2DO axis %.3f / %.3f%s\n",c0,c1,HisScanNote()); fclose(f_log);
 	    }
 	}
 	return 0;

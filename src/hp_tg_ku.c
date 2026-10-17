@@ -585,6 +585,9 @@ int	main(int argc,char **argv)
 	for(i=0;i<argc;++i) fprintf(f,"%s ",argv[i]);
 	fprintf(f,"   %% kernel_size %d",kernel_size);
 	fprintf(f,"   %% chunks %d",nchunks);
+#ifdef HIS_INPUT
+	{ extern const char *HisScanNote(void); fprintf(f,"%s",HisScanNote()); }
+#endif
 	fprintf(f,"\n");
 	fclose(f);
 
