@@ -496,7 +496,12 @@
             全スキャンを center.log の軸で his_srec により 00k/rec に再構成し、
             tif_f2i(8bit、既定 -0.5 3.0)で 00k/ro_xy を作る(ro_zx は作らない)。
             積層は従来どおり rec_stk(6f)。
-      スクリプトはどちらも a.his のあるディレクトリで実行する(his_srec は HiPic
+        his_zrec scan layer {center}
+            試し再構成 1 枚: そのスキャンの layer を his_rec で再構成し(center 省略
+            時は推定)、rc-check/SSS_LLLLL_C.tif(撮影番号 %03d、レイヤー %05d、C は
+            使った軸位置。例 003_01024_1023.5.tif)として保存する。レイヤーや軸位置を
+            変えた結果を並べて比較するためのもの。
+      スクリプトはいずれも a.his のあるディレクトリで実行する(his_srec は HiPic
       に "." を取れる)。プログラム名は HIS_REC / HIS_SREC で変更できる(既定
       his_rec_g_c / his_srec_g_c)。
 

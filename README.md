@@ -61,7 +61,7 @@ makefileCPU.bat        (MSVC, OpenMP)
 makefileGPU.bat        (MSVC + CUDA Toolkit 13.2, requires sm_75/Turing or newer)
 ```
 
-libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/gen-all.sh). Z-scan scripts for the `his_*` programs: [bin/rc-check-his.sh](bin/rc-check-his.sh), [bin/gen-all-his.sh](bin/gen-all-his.sh) (Windows: `exe/rc-check-his.bat`, `exe/gen-all-his.bat`).
+libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/gen-all.sh). Z-scan scripts for the `his_*` programs: [bin/rc-check-his.sh](bin/rc-check-his.sh), [bin/gen-all-his.sh](bin/gen-all-his.sh), [bin/his_zrec.sh](bin/his_zrec.sh) (Windows: `exe/rc-check-his.bat`, `exe/gen-all-his.bat`, `exe/his_zrec.bat`).
 
 ## Documentation
 

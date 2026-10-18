@@ -595,7 +595,12 @@ Uesugi
             his_srec of every scan at the axis of center.log into 00k/rec,
             then tif_f2i (8 bit, default -0.5 3.0) into 00k/ro_xy (no
             ro_zx reslice); rec_stk (6f) stacks them as before.
-      Both scripts run in the directory of a.his (his_srec takes "." as
+        his_zrec scan layer {center}
+            one trial slice: his_rec on layer of that scan (axis estimated
+            when center is omitted), kept as rc-check/SSS_LLLLL_C.tif
+            (scan %03d, layer %05d, C = the axis used, e.g.
+            003_01024_1023.5.tif) for comparing layers and axis positions.
+      The scripts run in the directory of a.his (his_srec takes "." as
       HiPic); HIS_REC / HIS_SREC override the program names (default
       his_rec_g_c / his_srec_g_c).
 
