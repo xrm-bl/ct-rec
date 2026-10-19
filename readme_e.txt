@@ -34,6 +34,9 @@ Uesugi
     rc-check-his / gen-all-his (exe/*.bat, bin/*.sh) run the axis check
     and the whole-volume reconstruction over all scans without spl and
     conv.bat; his_info reports the number of scans and the centre layer.
+    his_tb_rec_P_F / his_tb_srec_P_F (or RHIS_TB=1 with any his_*
+    program) use the integer mean of all sample views in place of the
+    I0 images.
   - ofct_srec / ofct_rec / of_sinog: the rotation axis position of an
     offset scan may be fractional, as for a 180-degree scan.  The opposing view is
     resampled by twice the fraction (linear interpolation) and the
@@ -505,6 +508,7 @@ Uesugi
       his_DO       HiPic {stride}                 (CPU)
       his_DO_g     HiPic {navg {stride}}          (GPU)
       his_sg       layer {center} {skip}          (CPU)
+      his_tb_rec_P_F / his_tb_srec_P_F            (arguments as above)
 
       The input is the data as it comes from the beamline: a.his (every
       frame of the scan), conv.bat and output.log in one directory.
@@ -576,11 +580,28 @@ Uesugi
       (type 2) are accepted.  Environment variables: RHIS_H (his file
       name, overrides the his2img line), RHIS_C (conv.bat name, default
       conv.bat), RHP_O (output.log path), RHIS_SCAN (Z scans, see
-      below), HIS_SREC_OY (see above) and
+      below), RHIS_TB (mean of the sample views as I0, see below),
+      HIS_SREC_OY (see above) and
       everything that applies to the underlying programs.  Frames are
       read with positional reads on one shared file handle, so the
       parallel projection reading of hp_tg (HPTG_READ_THREADS) and the
       memory-adaptive chunking work unchanged.
+
+      his_tb_rec and his_tb_srec are his_rec and his_srec with the
+      incident beam taken from the data themselves: every q that
+      output.log marks as an I0 view reads as the integer mean (as
+      img_ave) of all sample views listed before the first blank line of
+      output.log (the extra view after the blank lines is not included),
+      so the result equals a run of ct_rec / hp_tg / ofct_rec / ofct_srec
+      after img_ave of those frames has been copied over the I0 images.
+      Dark subtraction and everything else are unchanged; the I0 time
+      interpolation becomes constant.  his_tb_srec reads the whole file
+      once more to form the mean.  The same is obtained from any his_*
+      program (his_DO, his_sg, the Z-scan scripts with HIS_REC /
+      HIS_SREC) with the environment variable RHIS_TB=1; RHIS_TB=0 turns
+      it off in a his_tb_* program.  The start-up line reports
+      "I0 = mean of N sample views (RHIS_TB)" and cmd-hst.log carries
+      "% RHIS_TB".
 
       Z scans.  When a.his holds M scans of L frames each (L = the highest
       frame number conv.bat names, M = frames / L; the layout spl /

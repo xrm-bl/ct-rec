@@ -16,7 +16,7 @@ SIF_F   = sif_f_fast.c
 
 EXE_DIR = ../bin
 
-.PHONY: all clean ct_rec hp_tg his his_rec his_srec his_DO his_sg his_info ofct_srec ofct_rec \
+.PHONY: all clean ct_rec hp_tg his his_rec his_srec his_DO his_sg his_info his_tb his_tb_rec his_tb_srec ofct_srec ofct_rec \
         p_rec sf_rec misc si_tools filters
 
 all: ct_rec hp_tg his ofct_srec ofct_rec \
@@ -61,8 +61,10 @@ hp_tg_t_c:
 #   his_DO       : rotation-axis estimate          (hp2DO.c + ofct_DO.c)
 #   his_sg       : sinogram of one layer           (sinog.c + of_sinog.c)
 #   his_info     : frame size, scans in the file     (for rc-check-his)
+#   his_tb_rec_t_F, his_tb_srec_t_F : the same with -DHIS_TB, I0 = mean of
+#                  all sample views (RHIS_TB in rhis.h)
 # ---------------------------------------------------------------
-his: his_rec his_srec his_DO his_sg his_info
+his: his_rec his_srec his_DO his_sg his_info his_tb
 his_rec: his_rec_t_r his_rec_t_s his_rec_t_c
 HIS_REC_SRC = his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c
 his_rec_t_r:
@@ -95,6 +97,21 @@ his_srec_t_c: $(HIS_SREC_OBJS_T)
 # rotation-axis estimate from a.his: hp2DO (180 deg) / ofct_DO (360 deg)
 his_DO: his_rhis_hp_d.o
 	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_DO -DONLY_CT_VIEWS -o $(EXE_DIR)/his_DO his_main.c hp2DO.c ofct_DO.c rhis.c error.c msd.c his_rhis_hp_d.o $(SIF_F) $(TIFFLIB) $(LIBS)
+his_tb: his_tb_rec his_tb_srec
+his_tb_rec: his_tb_rec_t_r his_tb_rec_t_s his_tb_rec_t_c
+his_tb_rec_t_r:
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_REC -DHIS_TB -o $(EXE_DIR)/his_tb_rec_t_r $(HIS_REC_SRC) sort_filter_omp.c $(SIF_F) $(TIFFLIB) $(CBP) -DFilter=Ramachandran $(LIBS)
+his_tb_rec_t_s:
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_REC -DHIS_TB -o $(EXE_DIR)/his_tb_rec_t_s $(HIS_REC_SRC) sort_filter_omp.c $(SIF_F) $(TIFFLIB) $(CBP) -DFilter=Shepp $(LIBS)
+his_tb_rec_t_c:
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_REC -DHIS_TB -o $(EXE_DIR)/his_tb_rec_t_c $(HIS_REC_SRC) sort_filter_omp.c $(SIF_F) $(TIFFLIB) $(CBP) -DFilter=Chesler $(LIBS)
+his_tb_srec: his_tb_srec_t_r his_tb_srec_t_s his_tb_srec_t_c
+his_tb_srec_t_r: $(HIS_SREC_OBJS_T)
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_SREC -DHIS_TB -DFloat=float -o $(EXE_DIR)/his_tb_srec_t_r $(HIS_SREC_SRC) $(HIS_SREC_OBJS_T) $(TIFFLIB) $(CBP) -DFilter=Ramachandran $(LIBS)
+his_tb_srec_t_s: $(HIS_SREC_OBJS_T)
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_SREC -DHIS_TB -DFloat=float -o $(EXE_DIR)/his_tb_srec_t_s $(HIS_SREC_SRC) $(HIS_SREC_OBJS_T) $(TIFFLIB) $(CBP) -DFilter=Shepp $(LIBS)
+his_tb_srec_t_c: $(HIS_SREC_OBJS_T)
+	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_SREC -DHIS_TB -DFloat=float -o $(EXE_DIR)/his_tb_srec_t_c $(HIS_SREC_SRC) $(HIS_SREC_OBJS_T) $(TIFFLIB) $(CBP) -DFilter=Chesler $(LIBS)
 # sinogram of one layer from a.his: sinog (180 deg) / of_sinog (360 deg)
 his_sg:
 	$(CC) $(CFLAGS) $(OMPF) -DHIS_INPUT -DHIS_SG -o $(EXE_DIR)/his_sg his_main.c sinog.c of_sinog.c rhis.c $(SIF_F) $(LIBS)
@@ -309,6 +326,8 @@ clean:
 	$(EXE_DIR)/hp_tg_t_r $(EXE_DIR)/hp_tg_t_s $(EXE_DIR)/hp_tg_t_c \
 	$(EXE_DIR)/his_rec_t_r $(EXE_DIR)/his_rec_t_s $(EXE_DIR)/his_rec_t_c \
 	$(EXE_DIR)/his_srec_t_r $(EXE_DIR)/his_srec_t_s $(EXE_DIR)/his_srec_t_c $(EXE_DIR)/his_DO $(EXE_DIR)/his_sg $(EXE_DIR)/his_info \
+	$(EXE_DIR)/his_tb_rec_t_r $(EXE_DIR)/his_tb_rec_t_s $(EXE_DIR)/his_tb_rec_t_c \
+	$(EXE_DIR)/his_tb_srec_t_r $(EXE_DIR)/his_tb_srec_t_s $(EXE_DIR)/his_tb_srec_t_c \
 	$(EXE_DIR)/tf_tg_t_r $(EXE_DIR)/tf_tg_t_s $(EXE_DIR)/tf_tg_t_c \
 	$(EXE_DIR)/ofct_srec_t_r $(EXE_DIR)/ofct_srec_t_s $(EXE_DIR)/ofct_srec_t_c \
 	$(EXE_DIR)/otf_rec_t_r $(EXE_DIR)/otf_rec_t_s $(EXE_DIR)/otf_rec_t_c \

@@ -61,6 +61,9 @@ struct HisSet {
 	HisQ	dark,*Q;
 	int	n_avg,n_frame;		/* statistics for the start-up message */
 	int	frames_per_scan,nscan,scan,frame0;	/* Z scans, see HisScanLayout */
+	int	tb;			/* RHIS_TB: I0 = mean of the sample views, see HisSetupTB */
+	HisQ	tbq;			/* that mean (HQ_AVG over the sample frames) */
+	char	*isI0;			/* isI0[q]: q is an I0 view in output.log */
 	char	*hp2do[6];		/* image names of the hp2do line (his_DO) */
 	int	n_hp2do;
 };
@@ -550,6 +553,64 @@ static void	HisReadConv(HisSet *s)
 /* public: open / close                                                   */
 /* ---------------------------------------------------------------------- */
 
+/* ---- RHIS_TB: the mean of all sample views as the incident beam ----
+   Some data sets are reconstructed with the integer mean (img_ave) of
+   every sample view in place of the I0 images.  With RHIS_TB set (or in
+   the his_tb_* programs, built with -DHIS_TB), every q that output.log
+   marks as an I0 view (it == 0, including the two trailing lines) reads
+   as the mean of the sample views listed before the first blank line of
+   output.log (it == 1; the extra view after the blank lines is not
+   included), resolved through conv.bat to frames.  Dark subtraction and
+   everything else are unchanged; the I0 time interpolation becomes a
+   constant because both I0 groups are the same image.  RHIS_TB=0 turns
+   it off in a his_tb_* program. */
+static int	his_tb_active=0;	/* for HisScanNote */
+
+static void	HisSetupTB(HisSet *s)
+{
+	char	path[LEN],str[LEN],*env;
+	FILE	*f;
+	int	q,it,on,n=0,blank=0,*list,nlist=0,cap,i,k;
+	double	c,a;
+	HisQ	*Q;
+
+#ifdef HIS_TB
+	on=1;
+#else
+	on=0;
+#endif
+	if ((env=getenv("RHIS_TB"))!=NULL && *env!='\0') on=(strcmp(env,"0")!=0);
+	s->tb=0; s->isI0=NULL; memset(&s->tbq,0,sizeof(HisQ)); s->tbq.cy1=s->tbq.cy2=(-1);
+	if (!on) return;
+
+	s->isI0=(char *)HisMalloc((size_t)s->Nq,"I0 flags");
+	memset(s->isI0,0,(size_t)s->Nq);
+	cap=s->nframes; list=(int *)HisMalloc(sizeof(int)*(size_t)cap,"sample frame list");
+
+	if ((env=getenv("RHP_O"))!=NULL && *env!='\0') (void)snprintf(path,LEN,"%s",env);
+	else if (snprintf(path,LEN,"%s/output.log",s->dir)>=LEN) HisError(s->dir,"output.log : path too long.");
+	if ((f=fopen(path,"r"))==NULL) HisError(path,"file not open.");
+	while (fgets(str,LEN,f)!=NULL) {
+	    if (sscanf(str,"%d %lf %lf %d",&q,&c,&a,&it)!=4) { blank=1; continue; }
+	    n++;
+	    if (q<0 || q>=s->Nq || s->Q[q].kind==HQ_NONE) continue;
+	    if (it==0) { s->isI0[q]=1; continue; }
+	    if (blank) continue;			/* the extra view after the blank lines */
+	    Q=s->Q+q;
+	    if (Q->kind==HQ_FRAME) { if (nlist<cap) list[nlist++]=Q->frame; }
+	    else for (k=0; k<Q->nlist; k++) if (nlist<cap) list[nlist++]=Q->list[k];
+	}
+	(void)fclose(f);
+	if (n==0) HisError(path,"no view found.");
+	if (nlist==0) HisError(path,"RHIS_TB: no sample view to average.");
+	for (i=0; i<s->Nq && !s->isI0[i]; i++) ;
+	if (i==s->Nq) HisError(path,"RHIS_TB: no I0 view to replace.");
+
+	s->tbq.kind=HQ_AVG; s->tbq.nlist=nlist; s->tbq.list=list; s->tbq.frame=0;
+	s->tbq.cy1=s->tbq.cy2=(-1); s->tbq.cache=NULL;
+	s->tb=1; his_tb_active=1;
+}
+
 /* open the his file, read every frame header and the frame layout of
    conv.bat (frames per scan L, number of scans M); no RHIS_SCAN check */
 static HisSet	*HisOpenHeaders(const char *dir)
@@ -615,6 +676,7 @@ HisSet	*HisOpen(const char *dir)
 
 	HisScanLayout(s);
 	HisReadConv(s);
+	HisSetupTB(s);
 
 	ndark=(s->dark.kind==HQ_AVG)?s->dark.nlist:1;
 	(void)fprintf(stderr,
@@ -625,6 +687,8 @@ HisSet	*HisOpen(const char *dir)
 	if (s->nscan>1)
 	    (void)fprintf(stderr,"; scan %d / %d (frames %d-%d)",s->scan,s->nscan,
 			  s->frame0+1,s->frame0+s->frames_per_scan);
+	if (s->tb)
+	    (void)fprintf(stderr,"; I0 = mean of %d sample views (RHIS_TB)",s->tbq.nlist);
 	(void)fputc('\n',stderr);
 	return s;
 }
@@ -665,11 +729,12 @@ double	HisMaxSampleAngle(const char *dir)
 /* "   % RHIS_SCAN=k" for the cmd-hst.log line of the his_* programs, or "" */
 const char	*HisScanNote(void)
 {
-	static char	note[64];
+	static char	note[96];
 	const char	*env=getenv("RHIS_SCAN");
 
-	if (env==NULL || *env=='\0') return "";
-	(void)snprintf(note,sizeof(note),"   %% RHIS_SCAN=%.20s",env);
+	note[0]='\0';
+	if (env!=NULL && *env!='\0') (void)snprintf(note,sizeof(note),"   %% RHIS_SCAN=%.20s",env);
+	if (his_tb_active) (void)strcat(note,"   % RHIS_TB");
 	return note;
 }
 
@@ -683,6 +748,7 @@ void	HisClose(HisSet *s)
 	    free(s->Q);
 	}
 	free(s->dark.list); free(s->dark.cache);
+	free(s->tbq.list); free(s->tbq.cache); free(s->isI0);
 	for (q=0; q<s->n_hp2do; q++) free(s->hp2do[q]);
 	free(s->off);
 	if (s->fd!=HIS_BAD_FD) HisFileClose(s->fd);
@@ -795,5 +861,5 @@ void	HisReadQBand(HisSet *s,int q,int y1,int y2,WORD *dst)
 	    (void)fprintf(stderr,"rhis: q%04d.img is not defined by %s.\n",q,s->conv);
 	    exit(1);
 	}
-	HisReadEntryBand(s,s->Q+q,y1,y2,dst);
+	HisReadEntryBand(s,(s->tb && s->isI0[q])?&(s->tbq):s->Q+q,y1,y2,dst);
 }

@@ -37,6 +37,13 @@ rem hp_tg wants FOM=float and ofct_srec FOM=double, so those objects and rhis_hp
 %CC2% /openmp /DHIS_INPUT /DHIS_SREC /DFloat=float /Fehis_srec_t_r.exe his_main.c rhis.c error.c rl.c sort_filter_omp.c his_hp_tg_t.obj his_ofct_srec_t.obj his_rhis_hp_f.obj his_rhis_hp_d.obj %TIFFLIB% %CBP% /DFilter=Ramachandran
 %CC2% /openmp /DHIS_INPUT /DHIS_SREC /DFloat=float /Fehis_srec_t_s.exe his_main.c rhis.c error.c rl.c sort_filter_omp.c his_hp_tg_t.obj his_ofct_srec_t.obj his_rhis_hp_f.obj his_rhis_hp_d.obj %TIFFLIB% %CBP% /DFilter=Shepp
 %CC2% /openmp /DHIS_INPUT /DHIS_SREC /DFloat=float /Fehis_srec_t_c.exe his_main.c rhis.c error.c rl.c sort_filter_omp.c his_hp_tg_t.obj his_ofct_srec_t.obj his_rhis_hp_f.obj his_rhis_hp_d.obj %TIFFLIB% %CBP% /DFilter=Chesler
+rem his_tb_rec / his_tb_srec: the same with /DHIS_TB, I0 = mean of all sample views (RHIS_TB)
+%CC2% /openmp /DHIS_INPUT /DHIS_REC /DHIS_TB /Fehis_tb_rec_t_r.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_omp.c %SIF_F% %TIFFLIB% %CBP% /DFilter=Ramachandran
+%CC2% /openmp /DHIS_INPUT /DHIS_REC /DHIS_TB /Fehis_tb_rec_t_s.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_omp.c %SIF_F% %TIFFLIB% %CBP% /DFilter=Shepp
+%CC2% /openmp /DHIS_INPUT /DHIS_REC /DHIS_TB /Fehis_tb_rec_t_c.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_omp.c %SIF_F% %TIFFLIB% %CBP% /DFilter=Chesler
+%CC2% /openmp /DHIS_INPUT /DHIS_SREC /DHIS_TB /DFloat=float /Fehis_tb_srec_t_r.exe his_main.c rhis.c error.c rl.c sort_filter_omp.c his_hp_tg_t.obj his_ofct_srec_t.obj his_rhis_hp_f.obj his_rhis_hp_d.obj %TIFFLIB% %CBP% /DFilter=Ramachandran
+%CC2% /openmp /DHIS_INPUT /DHIS_SREC /DHIS_TB /DFloat=float /Fehis_tb_srec_t_s.exe his_main.c rhis.c error.c rl.c sort_filter_omp.c his_hp_tg_t.obj his_ofct_srec_t.obj his_rhis_hp_f.obj his_rhis_hp_d.obj %TIFFLIB% %CBP% /DFilter=Shepp
+%CC2% /openmp /DHIS_INPUT /DHIS_SREC /DHIS_TB /DFloat=float /Fehis_tb_srec_t_c.exe his_main.c rhis.c error.c rl.c sort_filter_omp.c his_hp_tg_t.obj his_ofct_srec_t.obj his_rhis_hp_f.obj his_rhis_hp_d.obj %TIFFLIB% %CBP% /DFilter=Chesler
 rem rotation-axis finder on a.his: hp2DO (180 deg) / ofct_DO (360 deg), chosen from the angles in output.log
 %CC2% /openmp /DHIS_INPUT /DHIS_DO /DONLY_CT_VIEWS /Fehis_DO.exe his_main.c hp2DO.c ofct_DO.c rhis.c error.c msd.c his_rhis_hp_d.obj %SIF_F% %TIFFLIB%
 rem sinogram of one layer from a.his: sinog (180 deg) / of_sinog (360 deg)

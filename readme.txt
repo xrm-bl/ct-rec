@@ -27,7 +27,9 @@
     his_sg = sinog / of_sinog(1 レイヤーのシノグラム、a.his と同じ階層で実行)。
     Z スキャン(1 つの a.his に複数スキャン)は環境変数 RHIS_SCAN=k でスキャンを選び、
     rc-check-his / gen-all-his(exe/*.bat、bin/*.sh)が spl と conv.bat なしに全スキャン
-    の軸チェックと全体再構成を行う(スキャン数と中央レイヤーは his_info が報告)。平均は
+    の軸チェックと全体再構成を行う(スキャン数と中央レイヤーは his_info が報告)。
+    his_tb_rec_P_F / his_tb_srec_P_F(または his_* 全般で RHIS_TB=1)は、入射光画像の
+    代わりに全試料像の整数平均を使う。平均は
     img_ave と同じ整数演算(切り捨て)なので、結果は従来の手順とビット一致する
     (CPU 版・GPU 版で検証済み。his_srec は TIFF の ARTIST タグのみ異なる)。
     16bit の his のみ対応。暗電流・入射光の枚数や入射光のタイミングは
@@ -416,6 +418,7 @@
       his_DO       HiPic {stride}                 (CPU)
       his_DO_g     HiPic {navg {stride}}          (GPU)
       his_sg       layer {center} {skip}          (CPU)
+      his_tb_rec_P_F / his_tb_srec_P_F            (引数は上と同じ)
 
       入力はビームラインから持ち帰ったままの a.his(全撮影フレーム)・conv.bat・
       output.log が置かれた 1 つのディレクトリ。his_rec と his_sg はそのディレ
@@ -477,10 +480,22 @@
       出力は hp2DO / ofct_DO と同一になる。his は 16bit(type 2)のみ対応。
       環境変数は RHIS_H(his ファイル名。his2img 行より優先)、RHIS_C(conv.bat
       名、既定 conv.bat)、RHP_O(output.log のパス)、RHIS_SCAN(Z スキャン、
-      後述)、HIS_SREC_OY(上記)のほか、
+      後述)、RHIS_TB(試料像の平均を入射光にする。後述)、HIS_SREC_OY(上記)のほか、
       元のプログラムのものがすべて有効。フレームは 1 つのファイルハンドルへの
       位置指定読み出しで読むので、hp_tg の並列読み込み(HPTG_READ_THREADS)と
       メモリ量に応じたチャンク分割はそのまま働く。
+
+      his_tb_rec と his_tb_srec は、入射光をデータ自身から取る his_rec / his_srec。
+      output.log で入射光(it = 0)とされた q はすべて、output.log の最初の空行より
+      前に並ぶ試料像(it = 1。空行の後の末尾の 1 枚は含まない)の整数平均(img_ave と
+      同じ)として読まれる。したがって結果は、それらのフレームを img_ave で平均して
+      入射光画像に上書きしてから ct_rec / hp_tg / ofct_rec / ofct_srec を実行した
+      場合と一致する。暗電流の差し引きなど他は不変で、入射光の時間内挿は定数になる。
+      his_tb_srec は平均を作るために a.his をもう 1 回全読みする。his_* のどの
+      プログラム(his_DO、his_sg、HIS_REC / HIS_SREC で指定した Z スキャンのスクリ
+      プト)でも環境変数 RHIS_TB=1 で同じ動作になり、his_tb_* では RHIS_TB=0 で
+      切れる。起動時の要約行に「I0 = mean of N sample views (RHIS_TB)」、
+      cmd-hst.log に「% RHIS_TB」が付く。
 
       Z スキャン。a.his に L 枚のスキャンが M 本入っている場合(L は conv.bat が
       参照する最大フレーム番号、M = 総フレーム数 / L。spl / his_spl_E が同じ

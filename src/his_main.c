@@ -1,5 +1,8 @@
 /*
- * his_main.c - entry point of his_rec / his_srec / his_DO / his_sg.
+ * his_main.c - entry point of his_rec / his_srec / his_DO / his_sg
+ *              (and his_tb_rec / his_tb_srec: the same, built with -DHIS_TB,
+ *              where the mean of all sample views replaces the I0 images;
+ *              see RHIS_TB in rhis.h).
  *
  * All of them work on the data set as it comes from the beamline: a.his,
  * conv.bat and output.log in one directory (read by rhis.c / rhis_hp.c).

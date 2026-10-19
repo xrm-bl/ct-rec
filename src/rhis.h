@@ -35,6 +35,10 @@
  *              highest frame number conv.bat uses, M = frames / L, the
  *              layout his_spl_E splits into 001/raw .. 00M/raw) and
  *              RHIS_SCAN = 1..M picks the scan.  Required when M > 1.
+ *   RHIS_TB    I0 = integer mean (as img_ave) of all sample views listed
+ *              before the first blank line of output.log, in place of the
+ *              I0 images (his_tb_rec / his_tb_srec, built with -DHIS_TB,
+ *              have it on by default; RHIS_TB=0 turns it off there).
  */
 #ifndef RHIS_H
 #define RHIS_H
@@ -54,7 +58,7 @@ int	HisNy(const HisSet *s);		/* frame height */
 int	HisNframes(const HisSet *s);	/* frames in the his file */
 int	HisScan(const HisSet *s);	/* selected scan (1..M), 1 for a single scan */
 int	HisNscan(const HisSet *s);	/* M, the number of scans in the file */
-/* "   % RHIS_SCAN=k" when the variable is set, else "" (for cmd-hst.log) */
+/* "   % RHIS_SCAN=k" / "   % RHIS_TB" when active, else "" (for cmd-hst.log) */
 const char *HisScanNote(void);
 /* his header and conv.bat only, without the RHIS_SCAN check: frame size,
    number of frames, frames per scan L (highest frame conv.bat names) and
