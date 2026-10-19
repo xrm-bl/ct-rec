@@ -640,6 +640,28 @@ void	HisLayout(const char *dir,int *Nx,int *Ny,int *nframes,int *L,int *M)
 	HisClose(s);
 }
 
+/* largest angle of a sample view (it == 1) in <dir>/output.log (or RHP_O);
+   the his_* programs call a scan with 350 degrees or more an offset scan */
+double	HisMaxSampleAngle(const char *dir)
+{
+	char	path[LEN],str[LEN],*env;
+	FILE	*f;
+	int	q,it,n=0;
+	double	c,a,amax=-1.0e300;
+
+	if ((env=getenv("RHP_O"))!=NULL && *env!='\0') (void)snprintf(path,LEN,"%s",env);
+	else if (snprintf(path,LEN,"%s/output.log",dir)>=LEN) HisError(dir,"output.log : path too long.");
+	if ((f=fopen(path,"r"))==NULL) HisError(path,"file not open.");
+	while (fgets(str,LEN,f)!=NULL)
+	    if (sscanf(str,"%d %lf %lf %d",&q,&c,&a,&it)==4) {
+		if (it==1 && a>amax) amax=a;
+		n++;
+	    }
+	(void)fclose(f);
+	if (n==0) HisError(path,"no view found.");
+	return amax;
+}
+
 /* "   % RHIS_SCAN=k" for the cmd-hst.log line of the his_* programs, or "" */
 const char	*HisScanNote(void)
 {

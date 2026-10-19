@@ -77,7 +77,7 @@ libtiff 4.6.0 is bundled. Linux builds of selected tools: [bin/gen-all.sh](bin/g
 | [20260909_paganin_phase_retrieval.md](20260909_paganin_phase_retrieval.md) | technical note: Paganin phase retrieval in `ct_prj_f` (Japanese) |
 | [20260909_tif2zar.md](20260909_tif2zar.md) | `tif2zar`: TIFF series to OME-Zarr converter (Japanese) |
 | [20260919_ct_rec_gpu_memory.md](20260919_ct_rec_gpu_memory.md) | technical note: GPU memory usage of `ct_rec_g_*` and how many instances fit on one GPU (Japanese) |
-| [20261016_his_rec.md](20261016_his_rec.md) | `his_rec` / `his_srec` / `his_DO` / `his_sg` / `his_info`, reconstruction directly from a.his: part I usage (command list, Z-scan scripts), part II design, conv.bat interpretation, 180/360 detection, verification (Japanese) |
+| [20261016_his_rec.md](20261016_his_rec.md) | `his_rec` / `his_srec` / `his_DO` / `his_sg` / `his_info`, reconstruction directly from a.his: part I usage (command list, Z-scan scripts), part II design, conv.bat interpretation, 180/360 detection, verification; CPU CBP overflow fix for widths above 5792 px (Japanese) |
 | [20260815_corrections.md](20260815_corrections.md) | the three corrections applied on top of plain CBP, with references (Japanese) |
 | [20260815_corrections_EN.md](20260815_corrections_EN.md) | same, English |
 | [imagej-plugins/readme.txt](imagej-plugins/readme.txt) | ImageJ plugin build/install |

@@ -153,7 +153,18 @@ static IPair		**QI;
 #else
 static Int		**QI;
 #endif
-static Int		*SI,*CI;
+/* Detector positions are fixed-point numbers with R_BITS+S_BITS (18)
+   fraction bits.  They were Int (32 bit): the row start
+   rv = (N1*(s-c)+1)/2 - blo*s - R0g reaches N*sqrt(2)*2^18, which exceeds
+   2^31 for N > 5792 - never hit by 180-degree scans (N = Nx <= 4096) but
+   by ofct_srec, whose stitched width is up to 2*Nx (found 2026-10-19 with
+   Nx = 4096, Rc = 3809, N = 7618: the CPU result was geometrically wrong
+   while the GPU build, which uses float, was fine).  The positions are
+   now 64-bit; the projection accumulators stay Int, since they alias the
+   Float result buffer (same size).  For N <= 5792 the results are
+   bit-identical to before. */
+typedef long long	Pos;
+static Pos		*SI,*CI;
 
 #define POW2(N)		(1<<(int)ceil(log((double)(N))/log(2.0)))
 #define ALLOC(type,noe)	(type *)malloc(sizeof(type)*(size_t)(noe))
@@ -255,8 +266,8 @@ int	Ni,Mi;
 	    (QI	    =ALLOC(Int *     ,Mi   ))==NULL ||
 	    (QI[0]  =ALLOC(Int	     ,(size_t)Mi*(Ni+2)))==NULL ||
 #endif
-	    (SI	    =ALLOC(Int	     ,Mi   ))==NULL ||
-	    (CI	    =ALLOC(Int	     ,Mi   ))==NULL ||
+	    (SI	    =ALLOC(Pos	     ,Mi   ))==NULL ||
+	    (CI	    =ALLOC(Pos	     ,Mi   ))==NULL ||
 	    (H0	    =ALLOC(int	     ,Ni   ))==NULL ||
 	    (dH	    =ALLOC(int	     ,Ni   ))==NULL ||
 	    (F	    =ALLOC(Float *   ,Ni   ))==NULL ||
@@ -286,7 +297,7 @@ int	Ni,Mi;
 
 static double	dr,r0,t0,dt,qf;
 static int	L,L2,N1,v1,v2;
-static Int	R0g;
+static Pos	R0g;
 
 /* フェーズA: 投影を K 本で分担してフィルタ畳み込み (FFT)。
    Q[m] を作り、スレッドごとの最大絶対値を Qmax[k] へ。 */
@@ -332,8 +343,8 @@ THREAD_ARG		ki;
 		blo=v1+(int)(((long long)span*(long long)k)/(long long)K),
 		bhi=v1+(int)(((long long)span*(long long)(k+1))/(long long)K)-1,
 		v,h,m,n;
-	Int	s,c,rv,**fv,rh,*fh,
-		**fi=(Int **)F;
+	Pos	s,c,rv,rh;
+	Int	**fv,*fh,**fi=(Int **)F;
 #ifndef	__64BIT_DATABUS
 	Int	*qi;
 	int	n1;
@@ -423,10 +434,10 @@ double	dri,r0i,t0i;
 	    qi[-1].y=qi[0].x;
 #endif
 	    t=t0+dt*(double)m;
-	    SI[m]=(Int)floor(ldexp(sin(t),R_BITS+S_BITS)+0.5);
-	    CI[m]=(Int)floor(ldexp(cos(t),R_BITS+S_BITS)+0.5);
+	    SI[m]=(Pos)floor(ldexp(sin(t),R_BITS+S_BITS)+0.5);
+	    CI[m]=(Pos)floor(ldexp(cos(t),R_BITS+S_BITS)+0.5);
 	}
-	R0g=(Int)floor(ldexp(r0-1.0,R_BITS+S_BITS)+0.5);
+	R0g=(Pos)floor(ldexp(r0-1.0,R_BITS+S_BITS)+0.5);
 	qf=ldexp(dt*Q0/(dr*(double)L2),-(Q_BITS+R_BITS));
 
 	(void)memset(F[0],0,sizeof(Float)*(size_t)N*(size_t)N);

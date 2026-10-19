@@ -44,6 +44,11 @@
     端の値)、ImageDescription の 2 列目にそのスライスの Rc+0.5 を記録する
     (ofct_rec と同じ規約)。his_srec の L1 C1 L2 C2 形式はオフセット時にこれを使う。
     C1 = C2 なら出力は従来と同一。
+  ・CPU 版(cbp_thread_int.c): 逆投影の検出器座標の固定小数点が 32bit で、再構成幅が
+    5792 画素を超えると桁あふれしていた。これに達するのはオフセット系(ofct_srec /
+    ofct_rec / his_* の 360° スキャン)で 4096 画素の検出器を使った場合だけ(例 Rc 3809
+    → 幅 7618)で、CPU 版の画像の幾何が崩れていた(GPU 版は正常)。座標を 64bit にし、
+    それ以下の幅では従来とビット一致。GPU 版はもともと影響なし。
 
 【ver 2.7 の変更点】
   ・act_tg_g_F(2f)と ofact_srec_g_F(3d)を新設。16bit + 8bit を直接出力する
@@ -485,13 +490,18 @@
       と gen-all-his(Windows は exe/*.bat、Linux は bin/*.sh)が 6m の spl +
       conv.bat + ct_rec / hp_tg の手順を置き換える。
         his_info {dir}
-            a.his + conv.bat の「Nx Ny frames L M layer」を 1 行で表示する: 画像
-            サイズ、総フレーム数、1 スキャンのフレーム数 L、スキャン数 M、中央
-            レイヤー Ny/2(標準エラーには読みやすい要約)。
+            a.his + conv.bat + output.log の「Nx Ny frames L M layer kind」を 1 行で
+            表示する: 画像サイズ、総フレーム数、1 スキャンのフレーム数 L、スキャン
+            数 M、中央レイヤー Ny/2、スキャン種別 180 / 360(標準エラーには読みやすい
+            要約)。
         rc-check-his {layer}
-            スキャン数 M と layer の既定値(中央行)は his_info から取る。全スキャン
-            についてその layer を his_rec で軸推定つきで再構成し、pid で軸を
-            center.log に追記、画像は目視確認用に rc-check/00k.tif。
+            スキャン数 M、layer の既定値(中央行)、スキャン種別は his_info から取る。
+            全スキャンについてその layer を his_rec で軸推定つきで再構成し、軸を
+            center.log(2 列目)に、画像を目視確認用に rc-check/00k.tif に書く。
+            center.log の値は his_srec に渡す値で、360° スキャンでは
+            ImageDescription から 0.5 を引く(ofct_rec は画像中心 dcnt+0.5 を記録し、
+            ofct_srec は検出器上の軸位置 Rc = dcnt を取るため。ct_rec / hp_tg は
+            規約が同じなので 180° では補正なし)。
         gen-all-his center.log Dr {LACmin LACmax}
             全スキャンを center.log の軸で his_srec により 00k/rec に再構成し、
             tif_f2i(8bit、既定 -0.5 3.0)で 00k/ro_xy を作る(ro_zx は作らない)。
@@ -499,7 +509,8 @@
         his_zrec scan layer {center}
             試し再構成 1 枚: そのスキャンの layer を his_rec で再構成し(center 省略
             時は推定)、rc-check/SSS_LLLLL_C.tif(撮影番号 %03d、レイヤー %05d、C は
-            使った軸位置。例 003_01024_1023.5.tif)として保存する。レイヤーや軸位置を
+            使った軸位置を his_srec に渡す値で表したもの。例 003_01024_1023.5.tif)
+            として保存する。レイヤーや軸位置を
             変えた結果を並べて比較するためのもの。
       スクリプトはいずれも a.his のあるディレクトリで実行する(his_srec は HiPic
       に "." を取れる)。プログラム名は HIS_REC / HIS_SREC で変更できる(既定

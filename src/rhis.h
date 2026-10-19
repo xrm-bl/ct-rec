@@ -61,6 +61,9 @@ const char *HisScanNote(void);
    number of scans M (frames / L when that is a whole number > 1, else 1).
    Exits on error.  Used by his_info. */
 void	HisLayout(const char *dir,int *Nx,int *Ny,int *nframes,int *L,int *M);
+/* largest angle of a sample view in <dir>/output.log (RHP_O honoured);
+   >= 350 means a 360-degree offset scan for every his_* program */
+double	HisMaxSampleAngle(const char *dir);
 int	HisNq(const HisSet *s);		/* highest q number + 1 */
 int	HisHasQ(const HisSet *s,int q);	/* q<N>.img is defined by conv.bat */
 const char *HisPath(const HisSet *s);	/* path of the his file */

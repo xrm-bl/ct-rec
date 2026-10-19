@@ -49,6 +49,14 @@ Uesugi
     slice (field 2, the convention of ofct_rec).  his_srec's L1 C1 L2 C2 form
     on an offset scan uses it.  With C1 == C2 the output is identical to
     before.
+  - CPU builds (cbp_thread_int.c): the fixed-point detector positions
+    of the back-projection were 32-bit and overflowed for reconstruction
+    widths above 5792 pixels, which only the offset programs reach
+    (ofct_srec / ofct_rec / his_* on a 360-degree scan with a 4096-pixel
+    detector, e.g. Rc 3809 -> 7618 pixels): the CPU image was
+    geometrically wrong while the GPU build was fine.  The positions are
+    now 64-bit; results for smaller widths are bit-identical to before.
+    The GPU builds were never affected.
     The averages are computed exactly like img_ave (integer sum,
     truncating division), so the results are bit-identical to the
     existing chains (verified on the CPU and GPU builds; only the ARTIST
@@ -583,14 +591,20 @@ Uesugi
       and gen-all-his (exe/*.bat for Windows, bin/*.sh for Linux) replace
       the spl + conv.bat + ct_rec / hp_tg chain of 6m:
         his_info {dir}
-            prints "Nx Ny frames L M layer" of a.his + conv.bat: frame
-            size, frames in the file, frames per scan L, number of scans M
-            and the centre layer Ny/2 (readable summary on stderr).
+            prints "Nx Ny frames L M layer kind" of a.his + conv.bat +
+            output.log: frame size, frames in the file, frames per scan L,
+            number of scans M, the centre layer Ny/2 and the scan kind 180
+            or 360 (readable summary on stderr).
         rc-check-his {layer}
-            M and the default layer (centre row) come from his_info;
-            his_rec on that layer of every scan with its axis estimate;
-            pid appends the axis to center.log, the images go to
-            rc-check/00k.tif for a visual check.
+            M, the default layer (centre row) and the kind come from
+            his_info; his_rec on that layer of every scan with its axis
+            estimate; the axis goes to center.log (column 2) and the
+            images to rc-check/00k.tif for a visual check.  center.log
+            holds the value to pass to his_srec: for a 360-degree scan 0.5
+            is subtracted from the ImageDescription, because ofct_rec
+            records the image centre dcnt+0.5 while ofct_srec takes the
+            detector axis position Rc = dcnt (ct_rec / hp_tg agree, so a
+            180-degree scan needs no correction).
         gen-all-his center.log Dr {LACmin LACmax}
             his_srec of every scan at the axis of center.log into 00k/rec,
             then tif_f2i (8 bit, default -0.5 3.0) into 00k/ro_xy (no
@@ -598,8 +612,9 @@ Uesugi
         his_zrec scan layer {center}
             one trial slice: his_rec on layer of that scan (axis estimated
             when center is omitted), kept as rc-check/SSS_LLLLL_C.tif
-            (scan %03d, layer %05d, C = the axis used, e.g.
-            003_01024_1023.5.tif) for comparing layers and axis positions.
+            (scan %03d, layer %05d, C = the axis used as the his_srec
+            value, e.g. 003_01024_1023.5.tif) for comparing layers and
+            axis positions.
       The scripts run in the directory of a.his (his_srec takes "." as
       HiPic); HIS_REC / HIS_SREC override the program names (default
       his_rec_g_c / his_srec_g_c).
