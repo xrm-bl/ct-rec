@@ -250,10 +250,11 @@ ct_prj_fc:
 tif2hst:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/tif2hst tif2hst.c $(TIFFLIB) $(LIBS)
 # numbered TIFF series -> OME-Zarr v0.4 for Fiji/BigDataViewer.
-# Needs c-blosc (with lz4/snappy/zstd/zlib); link it statically on shared
-# systems: -l:libblosc.a etc.
+# Needs c-blosc; the shared libblosc pulls in its own codecs (lz4, snappy,
+# zstd, zlib), so only -lblosc -lz are linked here (2026-10-20).  Add
+# -lzstd -llz4 -lsnappy if a static libblosc.a is used instead.
 tif2zar:
-	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tif2zar tif2zar.c -lblosc -lzstd -llz4 -lsnappy -lz $(TIFFLIB) $(LIBS)
+	$(CC) $(CFLAGS) $(OMPF) -o $(EXE_DIR)/tif2zar tif2zar.c -lblosc -lz $(TIFFLIB) $(LIBS)
 rec_gf:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/rec_gf fft.c rec_gf.c rif_f.c $(TIFFLIB) $(LIBS)
 hp2DO:
