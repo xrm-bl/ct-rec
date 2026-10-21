@@ -55,6 +55,7 @@ xrm-bl/ct-rec `src/` の getenv 横断調査に基づく / **2026-09-09 版**（
 | `HIS_SREC_OY` | his_srec が 360° オフセットスキャンを ofct_srec で再構成するときの Oy | 0 | his_main.c | 180° スキャンでは無関係。his_DO が推定した Oy が 0 でないときの逃げ道 |
 | `RHIS_SCAN` | Z スキャン: 1 つの a.his に入った M 本のスキャンのうち使うスキャン番号 1..M | なし(M > 1 なら必須、M = 1 なら不要) | rhis.c | L = conv.bat が参照する最大フレーム番号、M = 総フレーム数 / L。conv.bat のフレーム番号に (k−1)·L を加える。M > 1 で未設定はエラー停止、L の倍数でないファイルに設定してもエラー。rc-check-his / gen-all-his が for ループ内で設定する。cmd-hst.log の行末に `% RHIS_SCAN=k` を記録 |
 | `RHIS_TB` | 入射光画像の代わりに全試料像の整数平均(img_ave と同じ)を使う | なし(his_tb_rec / his_tb_srec では有効が既定、`0` で無効) | rhis.c | output.log で it = 0 の q をすべて、最初の空行より前の it = 1 の q(conv.bat でフレームに解決)の平均に差し替える。暗電流などは不変、入射光の時間内挿は定数になる。his_* 全プログラムに効く。cmd-hst.log の行末に `% RHIS_TB` |
+| `RHIS_VIEWS` | his_srec が読む試料像の組 `k/K`(角度順に k, k+K, … だけ) | なし(全ビュー) | rhis_hp.c | Noise2Inverse 用。his_srec_g_F_n2i が子プロセスごとに設定し、RA0 に組の先頭ビューの角度を加えて渡す。試料像の枚数が K の倍数でなければエラー。入射光・暗電流はそのまま。cmd-hst.log の行末に `% RHIS_VIEWS=k/K` |
 
 ## GPU
 

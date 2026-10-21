@@ -34,7 +34,7 @@ NVCCFLAGS = -O3 -I$(CUDAINCL) $(CUDA_ARCH) -use_fast_math -Xcompiler "-Wno-unuse
 
 EXE_DIR = ../bin
 
-.PHONY: all clean ct_rec_g hp_tg_g his_g his_rec_g his_srec_g his_DO_g his_tb_g his_tb_rec_g his_tb_srec_g \
+.PHONY: all clean ct_rec_g hp_tg_g his_g his_rec_g his_srec_g his_DO_g his_tb_g his_tb_rec_g his_tb_srec_g his_n2i_g \
         ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g act_tg_g ofact_srec_g filters_g
 
 all: ct_rec_g hp_tg_g his_g \
@@ -97,8 +97,10 @@ hp_tg_g_c: sort_filter_g.o
 #   his_DO_g     : rotation-axis estimate          (hp2DO.c + ofct_DO.cu)
 #   his_tb_rec_g_F, his_tb_srec_g_F : the same with -DHIS_TB, I0 = mean of
 #                  all sample views (RHIS_TB in rhis.h)
+#   his_srec_g_F_n2i : his_srec with -DHIS_N2I: Noise2Inverse, K interleaved
+#                  view subsets reconstructed into rec/0 .. rec/K-1
 # ---------------------------------------------------------------
-his_g: his_rec_g his_srec_g his_DO_g his_tb_g
+his_g: his_rec_g his_srec_g his_DO_g his_tb_g his_n2i_g
 his_rec_g: his_rec_g_r his_rec_g_s his_rec_g_c
 his_srec_g: his_srec_g_r his_srec_g_s his_srec_g_c
 
@@ -156,6 +158,17 @@ his_tb_srec_g_s: sort_filter_g.o $(HIS_SREC_OBJS_G)
 his_tb_srec_g_c: sort_filter_g.o $(HIS_SREC_OBJS_G)
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DHIS_INPUT -DHIS_SREC -DHIS_TB -o $(EXE_DIR)/his_tb_srec_g_c $(HIS_SREC_SRC) $(HIS_SREC_OBJS_G) sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+
+his_n2i_g: his_srec_g_r_n2i his_srec_g_s_n2i his_srec_g_c_n2i
+his_srec_g_r_n2i: sort_filter_g.o $(HIS_SREC_OBJS_G)
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DHIS_INPUT -DHIS_N2I -o $(EXE_DIR)/his_srec_g_r_n2i $(HIS_SREC_SRC) $(HIS_SREC_OBJS_G) sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+his_srec_g_s_n2i: sort_filter_g.o $(HIS_SREC_OBJS_G)
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DHIS_INPUT -DHIS_N2I -o $(EXE_DIR)/his_srec_g_s_n2i $(HIS_SREC_SRC) $(HIS_SREC_OBJS_G) sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+his_srec_g_c_n2i: sort_filter_g.o $(HIS_SREC_OBJS_G)
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DHIS_INPUT -DHIS_N2I -o $(EXE_DIR)/his_srec_g_c_n2i $(HIS_SREC_SRC) $(HIS_SREC_OBJS_G) sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 
 # rotation-axis estimate from a.his: hp2DO (180 deg) / ofct_DO_g (360 deg)
 his_DO_g: his_rhis_hp_d.o
@@ -260,6 +273,7 @@ clean:
 	$(EXE_DIR)/his_srec_g_r $(EXE_DIR)/his_srec_g_s $(EXE_DIR)/his_srec_g_c $(EXE_DIR)/his_DO_g \
 	$(EXE_DIR)/his_tb_rec_g_r $(EXE_DIR)/his_tb_rec_g_s $(EXE_DIR)/his_tb_rec_g_c \
 	$(EXE_DIR)/his_tb_srec_g_r $(EXE_DIR)/his_tb_srec_g_s $(EXE_DIR)/his_tb_srec_g_c \
+	$(EXE_DIR)/his_srec_g_r_n2i $(EXE_DIR)/his_srec_g_s_n2i $(EXE_DIR)/his_srec_g_c_n2i \
 	$(EXE_DIR)/tf_tg_g_r  $(EXE_DIR)/tf_tg_g_s  $(EXE_DIR)/tf_tg_g_c \
 	$(EXE_DIR)/ofct_srec_g_r $(EXE_DIR)/ofct_srec_g_s $(EXE_DIR)/ofct_srec_g_c \
 	$(EXE_DIR)/ofct_rec_g_r  $(EXE_DIR)/ofct_rec_g_s  $(EXE_DIR)/ofct_rec_g_c \

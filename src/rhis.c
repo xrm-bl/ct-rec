@@ -735,6 +735,8 @@ const char	*HisScanNote(void)
 	note[0]='\0';
 	if (env!=NULL && *env!='\0') (void)snprintf(note,sizeof(note),"   %% RHIS_SCAN=%.20s",env);
 	if (his_tb_active) (void)strcat(note,"   % RHIS_TB");
+	if ((env=getenv("RHIS_VIEWS"))!=NULL && *env!='\0' && strlen(note)<60)
+	    (void)snprintf(note+strlen(note),sizeof(note)-strlen(note),"   %% RHIS_VIEWS=%.12s",env);
 	return note;
 }
 

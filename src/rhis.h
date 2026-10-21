@@ -39,6 +39,9 @@
  *              before the first blank line of output.log, in place of the
  *              I0 images (his_tb_rec / his_tb_srec, built with -DHIS_TB,
  *              have it on by default; RHIS_TB=0 turns it off there).
+ *   RHIS_VIEWS k/K: his_srec reads only every K-th sample view starting
+ *              at the k-th one in angle order (rhis_hp.c; Noise2Inverse,
+ *              his_srec_g_F_n2i runs the K subsets).
  */
 #ifndef RHIS_H
 #define RHIS_H

@@ -36,7 +36,8 @@ Uesugi
     conv.bat; his_info reports the number of scans and the centre layer.
     his_tb_rec_P_F / his_tb_srec_P_F (or RHIS_TB=1 with any his_*
     program) use the integer mean of all sample views in place of the
-    I0 images.
+    I0 images.  his_srec_g_F_n2i reconstructs K = 2 or 4 interleaved
+    view subsets into rec/0 .. rec/K-1 for Noise2Inverse (GPU only).
   - ofct_srec / ofct_rec / of_sinog: the rotation axis position of an
     offset scan may be fractional, as for a 180-degree scan.  The opposing view is
     resampled by twice the fraction (linear interpolation) and the
@@ -509,6 +510,7 @@ Uesugi
       his_DO_g     HiPic {navg {stride}}          (GPU)
       his_sg       layer {center} {skip}          (CPU)
       his_tb_rec_P_F / his_tb_srec_P_F            (arguments as above)
+      his_srec_g_F_n2i HiPic Dr RC RA0 rec K      (GPU; also the L1 C1 L2 C2 form)
 
       The input is the data as it comes from the beamline: a.his (every
       frame of the scan), conv.bat and output.log in one directory.
@@ -581,7 +583,8 @@ Uesugi
       name, overrides the his2img line), RHIS_C (conv.bat name, default
       conv.bat), RHP_O (output.log path), RHIS_SCAN (Z scans, see
       below), RHIS_TB (mean of the sample views as I0, see below),
-      HIS_SREC_OY (see above) and
+      RHIS_VIEWS (view subset k/K of his_srec, see below), HIS_SREC_OY
+      (see above) and
       everything that applies to the underlying programs.  Frames are
       read with positional reads on one shared file handle, so the
       parallel projection reading of hp_tg (HPTG_READ_THREADS) and the
@@ -602,6 +605,20 @@ Uesugi
       it off in a his_tb_* program.  The start-up line reports
       "I0 = mean of N sample views (RHIS_TB)" and cmd-hst.log carries
       "% RHIS_TB".
+
+      his_srec_g_F_n2i is his_srec for Noise2Inverse: the sample views
+      (in angle order) are split into K = 2 or 4 interleaved subsets
+      (k, k+K, k+2K, ...) and each subset is reconstructed as his_srec into
+      rec/k, with RA0 shifted by the angle of the subset's first view
+      (taken from output.log) so that the K volumes share one geometry;
+      RC and Dr are the same for every subset, so give the rotation axis
+      explicitly.  The number of sample views must be a multiple of K and
+      the scan must be a 180-degree scan (an offset scan is refused).
+      The subsets run one after another as child processes of the
+      program; each child is an ordinary his_srec run with the
+      environment variable RHIS_VIEWS=k/K, which can also be set by hand
+      with his_srec to reconstruct a single subset.  cmd-hst.log carries
+      "% RHIS_VIEWS=k/K".  RHIS_SCAN and RHIS_TB apply to every subset.
 
       Z scans.  When a.his holds M scans of L frames each (L = the highest
       frame number conv.bat names, M = frames / L; the layout spl /

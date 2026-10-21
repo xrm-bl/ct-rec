@@ -29,7 +29,9 @@
     rc-check-his / gen-all-his(exe/*.bat、bin/*.sh)が spl と conv.bat なしに全スキャン
     の軸チェックと全体再構成を行う(スキャン数と中央レイヤーは his_info が報告)。
     his_tb_rec_P_F / his_tb_srec_P_F(または his_* 全般で RHIS_TB=1)は、入射光画像の
-    代わりに全試料像の整数平均を使う。平均は
+    代わりに全試料像の整数平均を使う。his_srec_g_F_n2i は Noise2Inverse 用に
+    ビューを K = 2 または 4 組に交互分割して rec/0～rec/K-1 に再構成する(GPU のみ)。
+    平均は
     img_ave と同じ整数演算(切り捨て)なので、結果は従来の手順とビット一致する
     (CPU 版・GPU 版で検証済み。his_srec は TIFF の ARTIST タグのみ異なる)。
     16bit の his のみ対応。暗電流・入射光の枚数や入射光のタイミングは
@@ -419,6 +421,7 @@
       his_DO_g     HiPic {navg {stride}}          (GPU)
       his_sg       layer {center} {skip}          (CPU)
       his_tb_rec_P_F / his_tb_srec_P_F            (引数は上と同じ)
+      his_srec_g_F_n2i HiPic Dr RC RA0 rec K      (GPU。L1 C1 L2 C2 形式も可)
 
       入力はビームラインから持ち帰ったままの a.his(全撮影フレーム)・conv.bat・
       output.log が置かれた 1 つのディレクトリ。his_rec と his_sg はそのディレ
@@ -480,7 +483,8 @@
       出力は hp2DO / ofct_DO と同一になる。his は 16bit(type 2)のみ対応。
       環境変数は RHIS_H(his ファイル名。his2img 行より優先)、RHIS_C(conv.bat
       名、既定 conv.bat)、RHP_O(output.log のパス)、RHIS_SCAN(Z スキャン、
-      後述)、RHIS_TB(試料像の平均を入射光にする。後述)、HIS_SREC_OY(上記)のほか、
+      後述)、RHIS_TB(試料像の平均を入射光にする。後述)、RHIS_VIEWS(his_srec の
+      ビューの組 k/K。後述)、HIS_SREC_OY(上記)のほか、
       元のプログラムのものがすべて有効。フレームは 1 つのファイルハンドルへの
       位置指定読み出しで読むので、hp_tg の並列読み込み(HPTG_READ_THREADS)と
       メモリ量に応じたチャンク分割はそのまま働く。
@@ -496,6 +500,16 @@
       プト)でも環境変数 RHIS_TB=1 で同じ動作になり、his_tb_* では RHIS_TB=0 で
       切れる。起動時の要約行に「I0 = mean of N sample views (RHIS_TB)」、
       cmd-hst.log に「% RHIS_TB」が付く。
+
+      his_srec_g_F_n2i は Noise2Inverse 用の his_srec。試料像を角度順に K = 2 または
+      4 組に交互分割し(k, k+K, k+2K, …)、各組を his_srec として rec/k に再構成する。
+      RA0 には組の最初のビューの角度(output.log から取る)を加えるので、K 枚の像は
+      同じ幾何になる。RC と Dr は全組共通なので回転軸は明示的に与えること。試料像の
+      枚数は K の倍数でなければならず、180° スキャンのみ(オフセットスキャンは
+      エラー)。各組はこのプログラムの子プロセスとして順に実行され、子は環境変数
+      RHIS_VIEWS=k/K を持つ通常の his_srec なので、手で RHIS_VIEWS を設定して
+      his_srec を実行すれば 1 組だけ再構成できる。cmd-hst.log に「% RHIS_VIEWS=k/K」
+      が付く。RHIS_SCAN と RHIS_TB は全組に効く。
 
       Z スキャン。a.his に L 枚のスキャンが M 本入っている場合(L は conv.bat が
       参照する最大フレーム番号、M = 総フレーム数 / L。spl / his_spl_E が同じ
