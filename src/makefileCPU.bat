@@ -127,8 +127,9 @@ rem spl
 %CC2% /Fehis_spl_E.exe his_spl_E.c
 %CC2% /Fehis_spl_tif.exe his_spl_tif.c %TIFFLIB%
 
-rem rec_stk
+rem rec_stk / rhro_stk (rec_stk for the rh / ro output of act_tg and ofact_srec)
 %CC2% /Ferec_stk.exe rec_stk.c
+%CC2% /Ferhro_stk.exe rhro_stk.c
 %CC2% /Fechk-rc.exe chk-rc.c
 %CC2% /Feset-rc.exe set-rc.c
 

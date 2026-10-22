@@ -369,7 +369,9 @@ int	main(int argc,char **argv)
 		if (z1<0) z1=0;
 		if (z2>Ny) z2=Ny-1;
 		RC=atof(argv[4]);
-		Ct = (atof(argv[6])-atof(argv[4]))/(double)(z2-z1);
+		/* L1 == L2 (a one-layer block, e.g. the last block of a split run):
+		   constant centre instead of 0/0 = NaN */
+		Ct = (z2>z1)?(atof(argv[6])-atof(argv[4]))/(double)(z2-z1):0.0;
 	}
 
 //	RC=RC-1.0;

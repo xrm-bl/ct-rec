@@ -572,6 +572,10 @@
    b. 再構成
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
       ofct_srec_P_F HiPic L1 C1 L2 C2 Oy rangeList Dr RA0 rec
+      ofct_srec_P_F HiPic Rc Oy
+           (第 3 の形式は再構成せず、貼り合わせ幅 N、パディング後の長さ L、
+            対向ビュー対の数 M と投影バッファの大きさ 4*N*L*M を GB で表示する。
+            大きな計算の前の確認用)
       
       HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
       Rc: 回転軸の位置(左端からの画素数)。小数も可(ver 2.8)。貼り合わせの枠は
@@ -692,6 +696,12 @@
    f. rec 連番振りなおし。
       rec_stk num_stack start end
       Zスキャンをしたときに使う。rec の連番を振りなおして1つのスタックにする。
+      rhro_stk num_stack start end {name ...}
+      act_tg / ofact_srec の 16/8bit 出力用。各スキャンの rh/rh%05d.tif と
+      ro/ro%05d.tif(レイヤー start～end)を whole/rh、whole/ro に 1 本の連番
+      (スキャン j のレイヤー i → i + j*(end-start+1)、rec_stk と同じ)で移動する
+      コマンドを出力する。name を省略すると rh と ro、指定すればその組だけ。
+      例: rhro_stk 8 17 140 > ddd.bat
 
    g. his ファイルを連番の img に変換。
       his2img his-file (x1 x2 y1 y2)

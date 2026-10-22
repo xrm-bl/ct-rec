@@ -33,7 +33,7 @@ his/tif split -> axis search -> reconstruction (ring removal + FBP) -> 32bit tif
 | 8/16-bit normalization | `tif_f2i` | min/max recorded in TIFF tags |
 | 2D/3D filters for 32-bit volumes | `tif_mgf(_g)`, `tif_mdf(_g)`, `tif_gsf(_g)`, `tif_blf(_g)`, `tif_adf_g`, `tif_nlm_g`, `tif_tvd_g`, `tif_wvd_g`, `tif_bm4d_g`, `rec_gf` | median, gaussian, bilateral, anisotropic diffusion, NLM, TV, wavelet, BM4D |
 | Acquisition-data utilities | `his_spl_*`, `act_spl(2)`, `his2img`, `his2tif6`, `*_ave` | split / convert / average |
-| Volume utilities | `rec_crop`, `rec_sir` (3D binning), `rec_stk`, `tif2hst` | |
+| Volume utilities | `rec_crop`, `rec_sir` (3D binning), `rec_stk`, `rhro_stk` (16/8-bit stacks of act_tg / ofact_srec), `tif2hst` | |
 | OME-Zarr export | `tif2zar` | multiscale pyramid + blosc-zstd for Fiji/BigDataViewer/MoBIE |
 | ImageJ plugins | `imagej-plugins/SP8CT_Plugins.jar` | HIS/IMG opener, 2D/3D filters, stack crop, cylinder unwrap |
 

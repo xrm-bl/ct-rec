@@ -685,6 +685,11 @@ Uesugi
    b. Reconstruction
       ofct_srec_P_F HiPic Rc Oy rangeList Dr RA0 rec
       ofct_srec_P_F HiPic L1 C1 L2 C2 Oy rangeList Dr RA0 rec
+      ofct_srec_P_F HiPic Rc Oy
+           (the third form reconstructs nothing: it prints the stitched
+            width N, the padded length L, the number of view pairs M and
+            the size of the projection buffer 4*N*L*M in GB, as a check
+            before a large run)
 
       HiPic: Directory containing q????.img or q????.tif files (no trailing /)
       Rc: Rotation axis position (pixels from left edge).  May be
@@ -829,6 +834,13 @@ Uesugi
    f. Renumber rec Sequence
       rec_stk num_stack start end
       Used for Z-scans. Renumbers rec files into a single stack.
+      rhro_stk num_stack start end {name ...}
+      The same for the 16/8-bit output of act_tg / ofact_srec: prints the
+      commands that move <scan>/rh/rh%05d.tif and <scan>/ro/ro%05d.tif,
+      layers start..end of scans 001..num_stack, into whole/rh and
+      whole/ro with one continuous numbering (layer i of scan j becomes
+      i + j*(end-start+1), as rec_stk).  Default names rh ro; give names
+      to do only some of them.  Example: rhro_stk 8 17 140 > ddd.sh
 
    g. Convert his File to Sequential img Files
       his2img his-file (x1 x2 y1 y2)
