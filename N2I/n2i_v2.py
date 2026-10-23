@@ -19,9 +19,16 @@ Artifact countermeasures built in:
   * replicate padding in convolutions
   * BatchNorm (fixed statistics at inference -> output does not depend on tile contents)
   * tiled inference with overlap and cosine cross-fade; 3D slabs read with z-margins
+Large volumes:
+  * train --cache stores only the slices used for training. Without --start/--stop the
+    central slices are selected automatically: at most --max-train-slices (500), and few
+    enough that the cache fits in --mem-frac (0.7) of the RAM and in the free disk space.
+  * a cache is verified against its source files (<cache>.json) and rebuilt if stale;
+    infer uses a cache only if it covers exactly the whole stack, otherwise reads TIFFs.
+  * CUDA out-of-memory: training splits the batch into micro-batches, inference halves the tile.
 Requires: torch, numpy, tifffile
 """
-import argparse, functools, glob, itertools, math, os
+import argparse, functools, glob, itertools, json, math, os, shutil, time
 import numpy as np
 import tifffile
 import torch
@@ -41,34 +48,112 @@ def ceil_to(v, m):
 
 
 # ---------------------------------------------------------------- data
-class Volume:
-    """K split volumes. get() returns (K, len(zs), h, w) float32; z indices are clamped."""
+def scan_splits(dirs):
+    lists = [sorted(glob.glob(os.path.join(d, "*.tif*"))) for d in dirs]
+    n = len(lists[0])
+    if n == 0:
+        raise SystemExit(f"no tif files in {dirs[0]}")
+    if any(len(l) != n for l in lists):
+        raise SystemExit("slice counts differ between split directories")
+    H, W = tifffile.imread(lists[0][0]).shape
+    return lists, n, H, W
 
-    def __init__(s, dirs, cache=None, lru=0):
-        s.lists = [sorted(glob.glob(os.path.join(d, "*.tif*"))) for d in dirs]
-        s.K, s.N = len(s.lists), len(s.lists[0])
-        if s.N == 0:
-            raise SystemExit(f"no tif files in {dirs[0]}")
-        if any(len(l) != s.N for l in s.lists):
-            raise SystemExit("slice counts differ between split directories")
-        s.H, s.W = tifffile.imread(s.lists[0][0]).shape
-        s.cache_path, s.lru = cache, lru
-        s.mm = None
+
+def file_sig(lists):
+    """Identifies the exact source files of a cache: (path, size, mtime) of every slice."""
+    return [[os.path.abspath(f), os.path.getsize(f), int(os.path.getmtime(f))] for l in lists for f in l]
+
+
+def total_ram():
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class MemStat(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong)] + \
+                           [(n, ctypes.c_ulonglong) for n in ("tot", "av", "totpf", "avpf", "totv", "avv", "avx")]
+            st = MemStat()
+            st.dwLength = ctypes.sizeof(MemStat)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):
+                return int(st.tot)
+        else:
+            return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+    except Exception:
+        pass
+    return None
+
+
+class Volume:
+    """K split volumes restricted to slices [z0, z1) of the stack (default: all).
+    get() returns (K, len(zs), h, w) float32 with indices relative to z0, clamped."""
+
+    def __init__(s, dirs, cache=None, lru=0, zr=None, build=False):
+        lists, ntot, s.H, s.W = scan_splits(dirs)
+        s.z0, z1 = zr if zr else (0, ntot)
+        s.lists = [l[s.z0:z1] for l in lists]
+        s.K, s.N, s.Ntot = len(s.lists), z1 - s.z0, ntot
+        s.cache_path, s.lru, s.mm = None, lru, None
         if cache:
             shape = (s.K, s.N, s.H, s.W)
-            if not os.path.exists(cache):
-                print(f"building cache {cache} ({np.prod(shape) * 4 / 1e9:.1f} GB)", flush=True)
-                mm = np.lib.format.open_memmap(cache + ".tmp", mode="w+", dtype=np.float32, shape=shape)
-                for k in range(s.K):
-                    for z in range(s.N):
-                        mm[k, z] = tifffile.imread(s.lists[k][z])
-                mm.flush()
-                del mm
-                os.replace(cache + ".tmp", cache)
-            s.mm = np.load(cache, mmap_mode="r")
-            if s.mm.shape != shape:
-                raise SystemExit("cache shape mismatch -- delete the cache file")
+            sig = file_sig(s.lists)
+            ok = s._cache_ok(cache, shape, sig)
+            if not ok and build:
+                s._build_cache(cache, shape, sig)
+                ok = True
+            if ok:
+                s.cache_path = cache
+                s.mm = np.load(cache, mmap_mode="r")
+            else:
+                print(f"cache {cache} does not cover exactly these slices -- reading TIFF files instead",
+                      flush=True)
         s._read = functools.lru_cache(maxsize=lru)(s._read_raw) if lru > 0 else s._read_raw
+
+    @staticmethod
+    def _cache_ok(cache, shape, sig):
+        if not os.path.exists(cache):
+            return False
+        try:
+            if tuple(np.load(cache, mmap_mode="r").shape) != shape:
+                return False
+        except Exception:
+            return False
+        meta = cache + ".json"
+        if not os.path.exists(meta):
+            print(f"warning: {cache} has no metadata (older version) and cannot be verified; "
+                  f"delete it if the data has changed", flush=True)
+            return True
+        try:
+            with open(meta, encoding="utf-8") as f:
+                return json.load(f).get("sig") == sig
+        except Exception:
+            return False
+
+    def _build_cache(s, cache, shape, sig):
+        need = int(np.prod(shape)) * 4
+        d = os.path.dirname(os.path.abspath(cache))
+        free = shutil.disk_usage(d).free + (os.path.getsize(cache) if os.path.exists(cache) else 0)
+        if need > free:
+            raise SystemExit(f"not enough disk space for the cache: need {need / 1e9:.1f} GB, "
+                             f"free {free / 1e9:.1f} GB in {d}")
+        for f in (cache, cache + ".json"):
+            if os.path.exists(f):
+                os.remove(f)
+        print(f"building cache {cache} ({need / 1e9:.1f} GB, slices {s.z0}-{s.z0 + s.N - 1})", flush=True)
+        mm = np.lib.format.open_memmap(cache + ".tmp", mode="w+", dtype=np.float32, shape=shape)
+        for k in range(s.K):
+            for z in range(s.N):
+                mm[k, z] = tifffile.imread(s.lists[k][z])
+                if (z + 1) % 200 == 0:
+                    print(f"  split {k}: {z + 1}/{s.N}", flush=True)
+        print(f"  writing cache to disk ({need / 1e9:.1f} GB) -- this can take a while, please wait ...",
+              flush=True)
+        t0 = time.time()
+        mm.flush()
+        del mm
+        os.replace(cache + ".tmp", cache)
+        print(f"  cache written ({time.time() - t0:.0f} s)", flush=True)
+        with open(cache + ".json", "w", encoding="utf-8") as f:
+            json.dump({"z0": s.z0, "shape": list(shape), "sig": sig}, f)
 
     # Windows spawns DataLoader workers and pickles the dataset: never pickle the
     # memmap (it would be copied in full); reopen it in each worker instead.
@@ -94,6 +179,35 @@ class Volume:
             return np.asarray(s.mm[:, zs, ys, xs], dtype=np.float32)
         return np.stack([np.stack([s._read(k, int(z))[ys, xs] for z in zs])
                          for k in range(s.K)]).astype(np.float32)
+
+
+def train_range(a, K, N, H, W):
+    """Slice range [lo, hi) used for training (and stored in the cache)."""
+    if a.start is not None or a.stop is not None:
+        lo, hi = slice(a.start, a.stop).indices(N)[:2]
+        return lo, hi, "--start/--stop"
+    if not a.cache:
+        return 0, N, "all slices"
+    per = K * H * W * 4                       # cache bytes per slice
+    n, why = N, "all slices"
+    if a.train_slices:
+        n, why = a.train_slices, "--train-slices"
+    else:
+        if a.max_train_slices and a.max_train_slices < n:
+            n, why = a.max_train_slices, f"central {a.max_train_slices} slices (--max-train-slices)"
+        ram = total_ram()
+        if ram:
+            n_ram = int(a.mem_frac * ram // per)
+            if n_ram < n:
+                n, why = n_ram, f"cache limited to {a.mem_frac:.0%} of RAM ({ram / 1e9:.0f} GB)"
+        d = os.path.dirname(os.path.abspath(a.cache))
+        free = shutil.disk_usage(d).free + (os.path.getsize(a.cache) if os.path.exists(a.cache) else 0)
+        n_disk = int(0.9 * free // per)
+        if n_disk < n:
+            n, why = n_disk, f"cache limited by free disk space ({free / 1e9:.0f} GB)"
+    n = max(0, min(n, N))
+    lo = (N - n) // 2
+    return lo, lo + n, why
 
 
 def footprint(mode, s, pz):
@@ -245,18 +359,23 @@ def train(a):
     for k, v in DEFAULTS[a.mode].items():
         if getattr(a, k, None) is None:
             setattr(a, k, v)
-    vol = Volume(a.splits, a.cache)
-    K, N, H, W = vol.K, vol.N, vol.H, vol.W
+    lists, Ntot, H, W = scan_splits(a.splits)
+    K = len(lists)
+    z0, z1, why = train_range(a, K, Ntot, H, W)
+    print(f"training slices {z0}-{z1 - 1} of {Ntot} ({why})", flush=True)
     nd, cin, m = (3 if a.mode == "3d" else 2), (2 * a.s + 1 if a.mode == "25d" else 1), 2 ** a.depth
     a.patch = min(a.patch, H, W) // m * m
     if a.mode == "3d" and a.pz % m:
         raise SystemExit(f"--pz must be a multiple of {m}")
     L = footprint(a.mode, a.s, a.pz)
-
-    lo, hi = slice(a.start, a.stop).indices(N)[:2]
     vb = max(L, a.nval)                       # contiguous held-out z block
-    if hi - lo < vb + L + 1:
-        raise SystemExit("slice range too small for this mode")
+    if z1 - z0 < vb + L + 1:
+        raise SystemExit(f"training range too small ({z1 - z0} slices, need >= {vb + L + 1}); "
+                         f"free memory/disk, raise --mem-frac or set --train-slices")
+
+    vol = Volume(a.splits, a.cache, zr=(z0, z1), build=True)
+    N = vol.N
+    lo, hi = 0, N                              # indices relative to the training range
     v0 = (lo + hi - vb) // 2
     v1 = v0 + vb
     starts = [z for z in range(lo, hi - L + 1) if z + L <= v0 or z >= v1]
@@ -267,6 +386,9 @@ def train(a):
     mean, std = float(v.mean()), float(v.std())
     print(f"mode={a.mode} K={K} N={N} {H}x{W} train-starts={len(starts)} "
           f"val=[{v0},{v1}) mean={mean:.4g} std={std:.4g}", flush=True)
+    if z0:
+        print(f"  (val is indexed within the training range / cache: slices {z0 + v0}-{z0 + v1 - 1} of the stack)",
+              flush=True)
 
     vs = min(2 * a.patch, H, W) // m * m
     vy, vx = (H - vs) // 2, (W - vs) // 2
@@ -294,19 +416,33 @@ def train(a):
         torch.save({"model": model.state_dict(), "mean": mean, "std": std, "mode": a.mode,
                     "s": a.s, "nd": nd, "cin": cin, "ch": a.ch, "depth": a.depth, "up": a.up}, path)
 
-    best, run, it = math.inf, 0.0, 0
+    best, run, it, micro = math.inf, 0.0, 0, 1
     model.train()
     for inp, tgt in dl:
         inp = inp.flatten(0, 1).to(dev, non_blocking=True)
         tgt = tgt.flatten(0, 1).to(dev, non_blocking=True)
-        with torch.autocast(**amp):
-            pred = model(inp)
-        loss = F.mse_loss(pred.float(), tgt)   # L2, as required by N2I
-        opt.zero_grad(set_to_none=True)
-        loss.backward()
+        while True:   # on CUDA OOM: split the batch into micro-batches (gradient accumulation)
+            try:
+                opt.zero_grad(set_to_none=True)
+                loss_v = 0.0
+                for ci, ct in zip(inp.chunk(micro), tgt.chunk(micro)):
+                    with torch.autocast(**amp):
+                        pred = model(ci)
+                    loss = F.mse_loss(pred.float(), ct) * (ci.shape[0] / inp.shape[0])   # L2 (N2I)
+                    loss.backward()
+                    loss_v += loss.item()
+                break
+            except torch.cuda.OutOfMemoryError:
+                opt.zero_grad(set_to_none=True)
+                pred = loss = None
+                torch.cuda.empty_cache()
+                if micro >= inp.shape[0]:
+                    raise SystemExit("CUDA out of memory even with one patch per step; reduce --patch")
+                micro *= 2
+                print(f"CUDA out of memory: splitting each batch into {micro} micro-batches", flush=True)
         opt.step()
         sched.step()
-        run += loss.item()
+        run += loss_v
         it += 1
         if it % a.log == 0 or it == a.iters:
             model.eval()
@@ -334,13 +470,13 @@ def infer(a):
     model.load_state_dict(ck["model"])
     model.to(dev).eval()
     mode, s, mean, std, m = ck["mode"], ck["s"], ck["mean"], ck["std"], 2 ** ck["depth"]
-    tile = a.tile or DEFAULTS[mode]["tile"]
+    tile = list(a.tile or DEFAULTS[mode]["tile"])
     ov = a.ov or DEFAULTS[mode]["ov"]
     nsp = 3 if mode == "3d" else 2
     if len(tile) != nsp or len(ov) != nsp:
         raise SystemExit(f"--tile/--ov need {nsp} values for mode {mode}")
     lru = 4 * (2 * s + 1) if mode == "25d" else 0
-    vol = Volume(a.splits, a.cache, lru=lru * len(a.splits))
+    vol = Volume(a.splits, a.cache, lru=lru * len(a.splits), build=False)
     lo, hi = slice(a.start, a.stop).indices(vol.N)[:2]
     os.makedirs(a.outdir, exist_ok=True)
 
@@ -348,7 +484,17 @@ def infer(a):
         acc = None
         for k in range(vol.K):
             inp, _ = make_pair(blk, k, mode, s)
-            y = predict(model, torch.from_numpy(np.ascontiguousarray(inp)), tile, ov, m, dev, a.fp16)
+            x = torch.from_numpy(np.ascontiguousarray(inp))
+            while True:   # on CUDA OOM: halve the tile and retry
+                try:
+                    y = predict(model, x, tile, ov, m, dev, a.fp16)
+                    break
+                except torch.cuda.OutOfMemoryError:
+                    torch.cuda.empty_cache()
+                    if max(tile[-2:]) <= 128:
+                        raise SystemExit("CUDA out of memory even with small tiles")
+                    tile[-2:] = [max(128, t // 2) for t in tile[-2:]]
+                    print(f"CUDA out of memory: tile reduced to {tile}", flush=True)
             acc = y if acc is None else acc + y
         return (acc / vol.K).numpy() * std + mean
 
@@ -379,7 +525,7 @@ if __name__ == "__main__":
     for name in ("train", "infer"):
         q = sp.add_parser(name)
         q.add_argument("--splits", nargs="+", required=True)
-        q.add_argument("--cache", default=None, help="raw float32 memmap (.npy) of all splits")
+        q.add_argument("--cache", default=None, help="raw float32 memmap (.npy) of the splits (train: training range only)")
         q.add_argument("--start", type=int, default=None)
         q.add_argument("--stop", type=int, default=None)
     t = sp.choices["train"]
@@ -399,6 +545,13 @@ if __name__ == "__main__":
     t.add_argument("--workers", type=int, default=8)
     t.add_argument("--log", type=int, default=500)
     t.add_argument("--amp", action="store_true", help="bf16 autocast for training")
+    t.add_argument("--mem-frac", type=float, default=0.7,
+                   help="with --cache and no --start/--stop: limit the cache to this fraction of RAM")
+    t.add_argument("--train-slices", type=int, default=None,
+                   help="with --cache and no --start/--stop: number of central slices to train on")
+    t.add_argument("--max-train-slices", type=int, default=500,
+                   help="with --cache and no --start/--stop: upper limit of the automatically "
+                        "selected central slices (0 = no limit)")
     f = sp.choices["infer"]
     f.add_argument("--model", required=True)
     f.add_argument("--outdir", required=True)
