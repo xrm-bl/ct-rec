@@ -26,6 +26,9 @@ Large volumes:
   * a cache is verified against its source files (<cache>.json) and rebuilt if stale;
     infer uses a cache only if it covers exactly the whole stack, otherwise reads TIFFs.
   * CUDA out-of-memory: training splits the batch into micro-batches, inference halves the tile.
+Output: each denoised slice inherits the TIFF tags of the corresponding slice of the first
+  split. A ct-rec ImageDescription ("pixel_size\tcenter\tM\ttheta0\tmin\tmax") is kept with
+  min/max replaced by those of the denoised slice.
 Logging: every run is appended to n2i.log in the current directory (command line,
   environment, all output, Python tracebacks, and native crash tracebacks via
   faulthandler). --log-file sets another file, --no-log disables it.
@@ -249,6 +252,70 @@ def train_range(a, K, N, H, W):
 
 def footprint(mode, s, pz):
     return {"2d": 1, "25d": 2 * s + 1, "3d": pz}[mode]
+
+
+# ---------------------------------------------------------------- output (ct-rec compatible tags)
+# Tags written by the TIFF writer itself; everything else is copied from the source slice.
+_STRUCT_TAGS = {254, 255, 256, 257, 258, 259, 262, 270, 273, 274, 277, 278, 279, 282, 283, 284, 296, 305,
+                317, 322, 323, 324, 325, 338, 339, 340, 341}
+
+
+def ctrec_description(desc, vmin, vmax):
+    """ct-rec ImageDescription: "pixel_size\tcenter\tM\ttheta0\tmin\tmax" (printf %f).
+    Replace min/max with the values of the denoised image; keep the other fields as they are.
+    Returns (description, recognised)."""
+    if not desc or desc.lstrip().startswith("{"):          # none, or tifffile's own JSON
+        return None, False
+    f = desc.split("\t")
+    if len(f) == 6:
+        try:
+            float(f[4]), float(f[5])
+            f[4], f[5] = f"{vmin:f}", f"{vmax:f}"
+            return "\t".join(f), True
+        except ValueError:
+            pass
+    return desc, False
+
+
+def write_like(src, dst, img):
+    """Write img (float32) to dst, inheriting the tags of the source slice src."""
+    img = np.ascontiguousarray(img, dtype=np.float32)
+    kw = dict(photometric="minisblack", metadata=None, rowsperstrip=img.shape[0])
+    recognised = False
+    try:
+        with tifffile.TiffFile(src) as t:
+            pg = t.pages[0]
+            tags = pg.tags
+            desc, recognised = ctrec_description(pg.description, float(img.min()), float(img.max()))
+            if desc is not None:
+                kw["description"] = desc
+            if pg.rowsperstrip:
+                kw["rowsperstrip"] = min(int(pg.rowsperstrip), img.shape[0])
+            if "XResolution" in tags and "YResolution" in tags:
+                kw["resolution"] = (tags["XResolution"].value, tags["YResolution"].value)
+                if "ResolutionUnit" in tags:
+                    kw["resolutionunit"] = int(tags["ResolutionUnit"].value)
+            if "Software" in tags:
+                kw["software"] = tags["Software"].value
+            else:
+                kw["software"] = False
+            extra = []
+            for tg in tags.values():
+                if tg.code in _STRUCT_TAGS or tg.code < 254:
+                    continue
+                extra.append((tg.code, int(tg.dtype), tg.count, tg.value, True))
+            if extra:
+                kw["extratags"] = extra
+    except Exception as e:
+        print(f"warning: could not read tags of {src} ({e}); writing plain TIFF", flush=True)
+        kw = dict(photometric="minisblack", metadata=None, rowsperstrip=img.shape[0])
+    try:
+        tifffile.imwrite(dst, img, **kw)
+    except Exception as e:          # an exotic tag could not be copied: retry without the extra tags
+        kw.pop("extratags", None)
+        print(f"warning: extra tags of {src} not copied ({e})", flush=True)
+        tifffile.imwrite(dst, img, **kw)
+    return recognised
 
 
 def make_pair(im, k, mode, s):
@@ -535,9 +602,14 @@ def infer(a):
             acc = y if acc is None else acc + y
         return (acc / vol.K).numpy() * std + mean
 
+    warned = []
+
     def write(z, img):
-        tifffile.imwrite(os.path.join(a.outdir, os.path.basename(vol.lists[0][z])),
-                         img.astype(np.float32))
+        ok = write_like(vol.lists[0][z], os.path.join(a.outdir, os.path.basename(vol.lists[0][z])), img)
+        if not ok and not warned:
+            warned.append(True)
+            print("note: source ImageDescription is not in the ct-rec format "
+                  "(pixel_size, center, M, theta0, min, max); it was copied unchanged", flush=True)
 
     if mode in ("2d", "25d"):
         for z in range(lo, hi):
