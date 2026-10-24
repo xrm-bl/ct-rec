@@ -42,13 +42,15 @@
  *            360-degree scan: ofct_DO / ofct_DO_g.
  *   Both his_srec and his_DO print a ready-to-run suggestion to stderr.
  *   his_srec_g_F_n2i HiPic Dr RC RA0 rec K   (-DHIS_N2I; K = 2 or 4;
- *            also the L1 C1 L2 C2 form; 180-degree scans only)
+ *            also the L1 C1 L2 C2 form; 180-degree and offset scans)
  *            Noise2Inverse: the sample views are split into K interleaved
  *            subsets (k, k+K, ...) and each is reconstructed as his_srec
  *            into rec/k with RA0 shifted by the angle of its first view,
  *            so the K volumes share one geometry.  Every subset runs in a
  *            child process of this program (RHIS_VIEWS=k/K, see rhis_hp.c),
- *            because hp_tg keeps static state for one run.
+ *            because hp_tg keeps static state for one run.  On an offset
+ *            scan the number of views must be a multiple of 2K, so that
+ *            the opposing views (m, m+Nt/2) fall into the same subset.
  *
  * Z scans: when a.his holds M scans of L frames (L = the highest frame
  *   conv.bat names, the layout his_spl_E splits into 001/raw .. 00M/raw)
@@ -472,7 +474,7 @@ static int	N2iParent(int argc,char **argv)
 	char	views[32],ra[32],rec[LEN],*args[12];
 	const char	*prog=BaseName(argv[0]);
 	double	*a,ra0;
-	int	K,k,Nt,i,n,ira,irec,st;
+	int	K,k,Nt,i,n,ira,irec,st,offset;
 
 	if (argc!=7 && argc!=10) {
 	    (void)fprintf(stderr,
@@ -481,18 +483,20 @@ static int	N2iParent(int argc,char **argv)
 		"        Noise2Inverse: the sample views are split into K (2 or 4)\n"
 		"        interleaved subsets and each is reconstructed as his_srec into\n"
 		"        rec/0 .. rec/K-1, RA0 shifted by the angle of the subset's first\n"
-		"        view so that the K volumes share one geometry.  180-degree scans\n"
-		"        only; the number of sample views must be a multiple of K.\n",
+		"        view so that the K volumes share one geometry.  The number of\n"
+		"        sample views must be a multiple of K (of 2K on a 360-degree offset\n"
+		"        scan, so that opposing views fall into the same subset).\n",
 		argv[0],argv[0]);
 	    return 1;
 	}
 	K=atoi(argv[argc-1]);
 	if (K!=2 && K!=4) Fail("K must be 2 or 4.");
-	if (IsOffsetScan(argv[1],prog)) Fail("his_srec_n2i: 360-degree offset scans are not supported.");
+	offset=IsOffsetScan(argv[1],prog);
 	ira=argc-3; irec=argc-2;		/* RA0 and rec are the two arguments before K */
 	Nt=SampleAngles(argv[1],&a);
-	if (Nt%K!=0) {
-	    (void)fprintf(stderr,"%s: %d sample views are not a multiple of K=%d.\n",prog,Nt,K);
+	if (Nt%K!=0 || (offset && Nt%(2*K)!=0)) {
+	    (void)fprintf(stderr,"%s: %d sample views are not a multiple of %d%s.\n",prog,Nt,
+			  offset?2*K:K,offset?" (2K: the opposing views of an offset scan must fall into the same subset)":"");
 	    return 1;
 	}
 	ra0=atof(argv[ira]);

@@ -612,8 +612,10 @@ Uesugi
       rec/k, with RA0 shifted by the angle of the subset's first view
       (taken from output.log) so that the K volumes share one geometry;
       RC and Dr are the same for every subset, so give the rotation axis
-      explicitly.  The number of sample views must be a multiple of K and
-      the scan must be a 180-degree scan (an offset scan is refused).
+      explicitly.  The number of sample views must be a multiple of K; on
+      a 360-degree offset scan (reconstructed as ofct_srec, as his_srec
+      does) of 2K, so that the opposing views m and m+Nt/2 fall into the
+      same subset.
       The subsets run one after another as child processes of the
       program; each child is an ordinary his_srec run with the
       environment variable RHIS_VIEWS=k/K, which can also be set by hand
@@ -718,7 +720,9 @@ Uesugi
       Oy: Vertical shift (always specify 0)
       rangeList: Specify layers to reconstruct.
       Dr: Pixel size
-      RA0: Rotation axis origin offset
+      RA0: Rotation axis origin offset (degrees, as in hp_tg / ofct_rec;
+           ofct_srec and ofact_srec used to take this value as radians -
+           corrected 2026-10-24, only runs with RA0 != 0 are affected)
       rec: Output directory for reconstructed images (must be created
            before execution)
 

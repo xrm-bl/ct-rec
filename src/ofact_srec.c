@@ -367,7 +367,8 @@ int	main(int argc,char **argv)
 
 	Dr=atof(argv[5])/10000.;
 	DO=-(double)(N+1)/2.0;	/* rotation center = -(N+1)/2, matching ofct_rec's r0=-(dcnt+0.5); was -(N-1)/2 (1 px off) */
-	RA=atof(argv[6]);
+	/* RA0 in degrees, as in ofct_srec and every other program (2026-10-24; was radians) */
+	RA=atof(argv[6])*M_PI/180.0;
 
 	/* ---- 8/16bit 直接出力の規格化範囲とバッファ ---- */
 	LAC16lo=atof(argv[8]);  LAC16hi=atof(argv[9]);

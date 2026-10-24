@@ -431,7 +431,9 @@ int	main(int argc,char **argv)
 	Dr=atof(a_dr)/10000.;
 	DO=-(double)(N+1)/2.0;	/* rotation center = -(N+1)/2, matching ofct_rec's r0=-(dcnt+0.5); was -(N-1)/2 (1 px off) */
 	for (i=0; i<nsel; i++) DOS[i]=DO-fS[i];	/* fractional part of the axis: centre moves by f */
-	RA=atof(a_ra);
+	/* RA0 is given in degrees like every other program (hp_tg, ct_rec,
+	   ofct_rec); until 2026-10-24 it was passed to the CBP as radians */
+	RA=atof(a_ra)*M_PI/180.0;
 
 	P=InitCBP(N,M);
 	CBP_PIPE_INIT(P,N,M);
