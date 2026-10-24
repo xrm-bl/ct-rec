@@ -26,9 +26,12 @@ Large volumes:
   * a cache is verified against its source files (<cache>.json) and rebuilt if stale;
     infer uses a cache only if it covers exactly the whole stack, otherwise reads TIFFs.
   * CUDA out-of-memory: training splits the batch into micro-batches, inference halves the tile.
+Logging: every run is appended to n2i.log in the current directory (command line,
+  environment, all output, Python tracebacks, and native crash tracebacks via
+  faulthandler). --log-file sets another file, --no-log disables it.
 Requires: torch, numpy, tifffile
 """
-import argparse, functools, glob, itertools, json, math, os, shutil, time
+import argparse, faulthandler, functools, glob, itertools, json, math, os, shutil, subprocess, sys, time
 import numpy as np
 import tifffile
 import torch
@@ -81,6 +84,40 @@ def total_ram():
     except Exception:
         pass
     return None
+
+
+def avail_ram():
+    try:
+        if os.name == "nt":
+            import ctypes
+
+            class MemStat(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong)] + \
+                           [(n, ctypes.c_ulonglong) for n in ("tot", "av", "totpf", "avpf", "totv", "avv", "avx")]
+            st = MemStat()
+            st.dwLength = ctypes.sizeof(MemStat)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):
+                return int(st.av)
+        else:
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    if line.startswith("MemAvailable:"):
+                        return int(line.split()[1]) * 1024
+    except Exception:
+        pass
+    return None
+
+
+def status():
+    """Short resource status for the progress lines: GPU memory peak, free RAM, elapsed time."""
+    parts = []
+    if torch.cuda.is_available():
+        parts.append(f"gpu {torch.cuda.max_memory_allocated() / 1e9:.1f}GB")
+    ram = avail_ram()
+    if ram is not None:
+        parts.append(f"ram_free {ram / 1e9:.0f}GB")
+    parts.append(f"{(time.time() - T_START) / 60:.1f}min")
+    return "  ".join(parts)
 
 
 class Volume:
@@ -455,7 +492,7 @@ def train(a):
                 best = vl
                 save(a.out)
                 tag = " *saved"
-            print(f"it {it:6d}  train {run / a.log:.5f}  val {vl:.5f}{tag}", flush=True)
+            print(f"it {it:6d}  train {run / a.log:.5f}  val {vl:.5f}  [{status()}]{tag}", flush=True)
             run = 0.0
         if it >= a.iters:
             break
@@ -507,7 +544,7 @@ def infer(a):
             zs = [z] if mode == "2d" else range(z - s, z + s + 1)
             write(z, run((vol.get(zs) - mean) / std))
             if z % 50 == 0:
-                print(f"slice {z}/{hi}", flush=True)
+                print(f"slice {z}/{hi}  [{status()}]", flush=True)
     else:
         S, M = a.slab, ov[0]   # slab thickness, z-margin on each side
         for z in range(lo, hi, S):
@@ -515,7 +552,54 @@ def infer(a):
             out = run((vol.get(range(z - M, z1 + M)) - mean) / std)
             for j, zz in enumerate(range(z, z1)):
                 write(zz, out[M + j])
-            print(f"slices {z}-{z1 - 1}/{hi}", flush=True)
+            print(f"slices {z}-{z1 - 1}/{hi}  [{status()}]", flush=True)
+
+
+# ---------------------------------------------------------------- logging
+T_START = time.time()
+_LOG_FILES = []
+
+
+class _Tee:
+    def __init__(s, stream, f):
+        s.stream, s.f = stream, f
+
+    def write(s, x):
+        s.stream.write(x)
+        s.f.write(x)
+        return len(x)
+
+    def flush(s):
+        s.stream.flush()
+        s.f.flush()
+
+    def isatty(s):
+        return s.stream.isatty()
+
+
+def setup_log(a):
+    if a.no_log:
+        return None
+    path = a.log_file or "n2i.log"
+    f = open(path, "a", encoding="utf-8", buffering=1)
+    fh = open(path, "a")                      # separate raw handle for native crash dumps
+    _LOG_FILES.extend([f, fh])
+    faulthandler.enable(file=fh, all_threads=True)
+    sys.stdout, sys.stderr = _Tee(sys.stdout, f), _Tee(sys.stderr, f)
+    f.write("\n" + "=" * 78 + "\n")             # separator between runs (log file only)
+    print(f"=== n2i_v2.py {a.cmd}  {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"command : {subprocess.list2cmdline(sys.argv)}")
+    print(f"cwd     : {os.getcwd()}")
+    print(f"python {sys.version.split()[0]} | torch {torch.__version__} (CUDA {torch.version.cuda}) | "
+          f"numpy {np.__version__} | tifffile {tifffile.__version__}")
+    if torch.cuda.is_available():
+        pr = torch.cuda.get_device_properties(0)
+        print(f"gpu     : {pr.name}, {pr.total_memory / 1e9:.1f} GB")
+    ram = total_ram()
+    if ram:
+        print(f"ram     : {ram / 1e9:.0f} GB")
+    print(f"args    : {vars(a)}", flush=True)
+    return path
 
 
 # ---------------------------------------------------------------- cli
@@ -528,6 +612,8 @@ if __name__ == "__main__":
         q.add_argument("--cache", default=None, help="raw float32 memmap (.npy) of the splits (train: training range only)")
         q.add_argument("--start", type=int, default=None)
         q.add_argument("--stop", type=int, default=None)
+        q.add_argument("--log-file", default=None, help="log file, appended to (default: n2i.log in the current directory)")
+        q.add_argument("--no-log", action="store_true", help="do not write a log file")
     t = sp.choices["train"]
     t.add_argument("--mode", choices=["2d", "25d", "3d"], default="2d")
     t.add_argument("--s", type=int, default=2, help="2.5D half width (2s+1 slices)")
@@ -560,4 +646,19 @@ if __name__ == "__main__":
     f.add_argument("--slab", type=int, default=64, help="3D: output slices per slab")
     f.add_argument("--fp16", action="store_true")
     a = ap.parse_args()
-    train(a) if a.cmd == "train" else infer(a)
+    log = setup_log(a)
+    try:
+        train(a) if a.cmd == "train" else infer(a)
+        print(f"=== finished normally ({(time.time() - T_START) / 60:.1f} min)", flush=True)
+    except KeyboardInterrupt:
+        print("=== interrupted by user (Ctrl+C)", flush=True)
+        sys.exit(130)
+    except SystemExit as e:
+        if e.code not in (None, 0):
+            print(f"=== stopped: {e.code}", flush=True)
+        raise
+    except BaseException:
+        import traceback
+        traceback.print_exc()
+        print("=== terminated by an error (traceback above)", flush=True)
+        sys.exit(1)
