@@ -1,0 +1,24 @@
+Bootstrap: docker
+# PyTorch official image. The CUDA version must not exceed the driver's
+# "CUDA Version" on the GPU nodes (here 12.8). Check the tag on Docker Hub.
+From: pytorch/pytorch:2.7.0-cuda12.8-cudnn9-runtime
+
+%files
+    n2i_v3.py /opt/n2i/n2i_v3.py
+
+%post
+    pip install --no-cache-dir tifffile
+    chmod 755 /opt/n2i/n2i_v3.py
+
+%environment
+    # do not pick up packages from ~/.local on the host
+    export PYTHONNOUSERSITE=1
+
+%runscript
+    exec python /opt/n2i/n2i_v3.py "$@"
+
+%test
+    python -c "import torch, numpy, tifffile; print('torch', torch.__version__, 'CUDA', torch.version.cuda)"
+
+%labels
+    Name n2i (Noise2Inverse denoising, n2i_v3.py)

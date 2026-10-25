@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Sets up a Python venv with CUDA-enabled PyTorch for n2i_v2.py (Noise2Inverse) on Windows.
+  Sets up a Python venv with CUDA-enabled PyTorch for n2i_v3.py (Noise2Inverse) on Windows.
 
 .DESCRIPTION
   1. Checks the NVIDIA driver (nvidia-smi) and the highest CUDA version it supports.
@@ -8,7 +8,7 @@
   3. Creates <InstallDir>\venv.
   4. Installs PyTorch, trying the newest CUDA build the driver supports first and
      falling back to older builds if the GPU test fails (e.g. older GPU generations).
-  5. Installs numpy and tifffile, copies n2i_v2.py, and writes the launcher n2i.bat.
+  5. Installs numpy and tifffile, copies n2i_v3.py, and writes the launcher n2i.bat.
   Safe to re-run: an existing working installation is detected and kept.
 
 .EXAMPLE
@@ -132,7 +132,7 @@ except Exception as e:
     print("GPU kernel test failed:", e); sys.exit(3)
 cap = torch.cuda.get_device_capability(0)
 print("GPU OK:", torch.cuda.get_device_name(0), "| sm_%d%d" % cap,
-      "| bf16 (--amp):", "yes" if torch.cuda.is_bf16_supported() else "no")
+      "| training precision (auto):", "bf16" if torch.cuda.get_device_capability(0)[0] >= 8 else "fp16")
 '@ | Set-Content -Path $check -Encoding ASCII
 
 $chkArgs = @($check)
@@ -169,24 +169,24 @@ Info "Installing numpy, tifffile ..."
 & $vpy -m pip install --upgrade numpy tifffile --quiet
 if ($LASTEXITCODE -ne 0) { Fail "numpy/tifffile installation failed." }
 
-$src = Join-Path $PSScriptRoot "n2i_v2.py"
-$dst = Join-Path $InstallDir "n2i_v2.py"
+$src = Join-Path $PSScriptRoot "n2i_v3.py"
+$dst = Join-Path $InstallDir "n2i_v3.py"
 if (Test-Path $src) {
     if ((Resolve-Path $src).Path -ne [IO.Path]::GetFullPath($dst)) { Copy-Item $src $dst -Force }
-    Info "n2i_v2.py -> $dst"
+    Info "n2i_v3.py -> $dst"
 } elseif (-not (Test-Path $dst)) {
-    Warn "n2i_v2.py not found next to this script. Copy it to $InstallDir manually."
+    Warn "n2i_v3.py not found next to this script. Copy it to $InstallDir manually."
 }
 
 $bat = Join-Path $InstallDir "n2i.bat"
 @'
 @echo off
-"%~dp0venv\Scripts\python.exe" "%~dp0n2i_v2.py" %*
+"%~dp0venv\Scripts\python.exe" "%~dp0n2i_v3.py" %*
 '@ | Set-Content -Path $bat -Encoding ASCII
 
 Write-Host ""
 Info "Setup complete."
 Write-Host "  Launcher : $bat"
-Write-Host "  Example  :"
-Write-Host "    $bat train --mode 25d --splits D:\ct\rec0 D:\ct\rec1 D:\ct\rec2 D:\ct\rec3 --out D:\ct\n2i_25d.pt --workers 4"
-Write-Host "    $bat infer --splits D:\ct\rec0 D:\ct\rec1 D:\ct\rec2 D:\ct\rec3 --model D:\ct\n2i_25d.pt --outdir D:\ct\denoised --fp16"
+Write-Host "  Example (in a data directory with rec\0, rec\1 ...):"
+Write-Host "    $bat train"
+Write-Host "    $bat infer"

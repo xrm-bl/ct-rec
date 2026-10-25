@@ -8,8 +8,8 @@ a.his から投影を分割して再構成し、Noise2Inverse（N2I）で学習�
 
 1. 回転軸の決定（`his_rec_g_c`）
 2. 分割再構成（`his_srec_g_c_n2i`）
-3. 学習（n2i.bat train）
-4. 統計情報の確認と推論（n2i.bat infer）
+3. 学習（`n2i.bat train`）
+4. 統計情報の確認と推論（`n2i.bat infer`）
 
 ## 準備（初回のみ）
 
@@ -23,8 +23,9 @@ setup_n2i.bat -InstallPython
 ```
 
 - PyTorch は 2〜3 GB あるので、初回は時間がかかる。最後に `Setup complete.` と出れば完了。
-- `n2i_v2.py` は、この名前のまま `setup_n2i.bat` と同じフォルダに置いておくこと。名前が変わっているとコピーされない。
-- オプションや注意点は、[n2i_v2_usage.md](n2i_v2_usage.md) の「インストール」の節を参照。
+- `n2i_v3.py` は、この名前のまま `setup_n2i.bat` と同じフォルダに置いておくこと。名前が変わっているとコピーされない。
+- v2 の環境がある場合も、同じコマンドを実行し直せば v3 に切り替わる。
+- オプションや注意点は、[n2i_v3_usage.md](n2i_v3_usage.md) の「インストール」の節を参照。
 
 ## 手順 1　回転軸の決定
 
@@ -75,29 +76,29 @@ his_srec_g_c_n2i raw Dr Rc 0.0 rec 4
 手順 2 と同じディレクトリで学習を実行する。学習ログが表示され始めれば OK。
 
 ```
-C:\n2i\n2i.bat train --mode 25d --splits .\rec\0 .\rec\1 .\rec\2 .\rec\3 --cache .\n2i.npy --out .\n2i_25d.pt --workers 4
+C:\n2i\n2i.bat train
 ```
 
-- 2 分割の場合は `--splits .\rec\0 .\rec\1` にする（以降のコマンドも同じ）。
-- 学習には中央付近の最大 500 枚が自動で使われ、その分だけのキャッシュ `n2i.npy` が作られる（サイズは「分割数 × 500 × 画像サイズ × 4 バイト」程度で、RAM の 70% 以内に自動で制限される）。枚数は `--train-slices 300` のように指定できる。
+- 分割数（`rec\0`、`rec\1` …）は自動で判定される。開始時に `splits : rec\0 rec\1  (K=2, auto-detected in rec)` のように表示されるので確認する。
+- 学習には中央付近の最大 512 枚と、その中央の最大 1024×1024 の範囲が使われ、その分だけのキャッシュ `image_cache.npy` が作られる（2 分割で最大約 4.3 GB）。試料が画像の中央にない場合は `--crop-center y,x` で位置を指定する。
 - 再構成し直した場合は、古いキャッシュが自動で検出されて作り直される。
 - 学習開始時に表示される `val=[...]` と `std=...` の値を控えておく。手順 4 の統計情報の確認で使う。
-- 学習回数は既定で 2000 回。増やすときは `--iters 5000` のようにして実行し直す（続きからの学習はできない）。
+- 学習回数は既定で 2000 回。モデルは `training` に `000500.pt`、`001000.pt` … と `best.pt`（val が最も小さかったモデル）として保存される。回数を増やすときは `--iters 5000` のようにして実行し直す（続きからの学習はできない）。
 - 実行の記録は、同じディレクトリの `n2i.log` に追記される。
 
 ## 手順 4　統計情報の確認と推論
 
-学習が終わったら、[n2i_v2_usage.md](n2i_v2_usage.md) の「基本の流れ」の手順 2・3 のとおりに進める。要点は次のとおり。
+学習が終わったら、[n2i_v3_usage.md](n2i_v3_usage.md) の「基本の流れ」の手順 2・3 のとおりに進める。要点は次のとおり。
 
-1. 統計情報の確認：先頭の `z0,z1,s=246,254,3.944` を、手順 3 で控えた `val=[z0,z1)` と `std` の値に置き換えて実行する。出てきた値（ノイズ分散の下限）を学習ログの最良の val と比べ、差が下限の数 % 程度まで小さければ学習は十分。
-
-   ```
-   C:\n2i\venv\Scripts\python.exe -c "import numpy as np; z0,z1,s=246,254,3.944; m=np.load(r'.\n2i.npy',mmap_mode='r'); H,W=m.shape[2:]; y,x=(H-512)//2,(W-512)//2; d=(m[0,z0:z1,y:y+512,x:x+512]-m[1,z0:z1,y:y+512,x:x+512])/s; print(d.var()/2)"
-   ```
-2. 推論：ノイズ除去した像が `denoised` に書き出される。ファイル名と TIFF タグは入力を引き継ぎ、ImageDescription の最小値・最大値はノイズ除去後の値に更新されるので、いつもの 8bit 化がそのまま使える。
+1. 統計情報の確認：先頭の `z0,z1,s=252,260,55.58` を、手順 3 で控えた `val=[z0,z1)` と `std` の値に置き換えて実行する。出てきた値（ノイズ分散の下限）を学習ログの最良の val と比べ、差が下限の数 % 程度まで小さければ学習は十分。
 
    ```
-   C:\n2i\n2i.bat infer --splits .\rec\0 .\rec\1 .\rec\2 .\rec\3 --model .\n2i_25d.pt --outdir .\denoised --fp16
+   C:\n2i\venv\Scripts\python.exe -c "import numpy as np; z0,z1,s=252,260,55.58; m=np.load(r'.\image_cache.npy',mmap_mode='r'); H,W=m.shape[2:]; y,x=(H-512)//2,(W-512)//2; d=(m[0,z0:z1,y:y+512,x:x+512]-m[1,z0:z1,y:y+512,x:x+512])/s; print(d.var()/2)"
+   ```
+2. 推論：`training\best.pt` で全スライスをノイズ除去し、`denoised` に書き出す。ファイル名と TIFF タグは入力を引き継ぎ、ImageDescription の最小値・最大値はノイズ除去後の値に更新されるので、いつもの 8bit 化がそのまま使える。
+
+   ```
+   C:\n2i\n2i.bat infer
    ```
 3. 結果の確認：分割の単純平均とノイズ除去後の像を Fiji で並べ、差分画像（単純平均 − ノイズ除去後）がノイズだけに見えるか確認する。
 
@@ -106,10 +107,12 @@ C:\n2i\n2i.bat train --mode 25d --splits .\rec\0 .\rec\1 .\rec\2 .\rec\3 --cache
 - **学習に時間がかかりすぎる**：学習回数を減らすか、学習に使うスライスを減らす（`--train-slices 200` など）。範囲を直接指定するときは `--start 200 --stop 600`（200〜599 番、600 は含まない）。
 
   ```
-  C:\n2i\n2i.bat train --mode 25d --splits .\rec\0 .\rec\1 .\rec\2 .\rec\3 --cache .\n2i.npy --out .\test.pt --iters 1000 --start 200 --stop 600 --workers 4
+  C:\n2i\n2i.bat train --iters 1000 --train-slices 200 --out training_test
   ```
-- **`can't open file 'C:\n2i\n2i_v2.py'` と出る**：`C:\n2i` で `dir` を実行し、ファイル名が正確に `n2i_v2.py` か確認する。違っていれば `ren` で直す。
+- **途中のモデルで結果を比べたい**：`training` の `000500.pt` などを `--model` で指定し、`--crop 512` で中心部だけを推論して比べる（[n2i_v3_usage.md](n2i_v3_usage.md) の「よく使う例」を参照）。
+- **`splits` の判定で止まる**：`rec` の中に `0`、`1` … があるか、古い分割（例：`0`、`1`、`3`）が残っていないか確認する。
+- **`can't open file 'C:\n2i\n2i_v3.py'` と出る**：`C:\n2i` で `dir` を実行し、ファイル名が正確に `n2i_v3.py` か確認する。違っていれば `ren` で直す。
 - **GPU が使われているか確認したい**：別のコマンドプロンプトで `nvidia-smi -l 1` を実行し、GPU-Util を見る（タスクマネージャーの GPU グラフは CUDA の計算を表示しない）。
-- **エラー表示なしで止まる**：`n2i.log` の最後の数行と、止まった直後の `echo %ERRORLEVEL%` の値を確認する。調べ方は [n2i_v2_usage.md](n2i_v2_usage.md) の「トラブル対応」を参照。
+- **エラー表示なしで止まる**：`n2i.log` の最後の数行と、止まった直後の `echo %ERRORLEVEL%` の値を確認する。調べ方は [n2i_v3_usage.md](n2i_v3_usage.md) の「トラブル対応」を参照。
 - **大きなデータ（4k × 4k 級）**：[n2i_large_volume.md](n2i_large_volume.md) を参照。
-- **その他のオプションやトラブル対応**：[n2i_v2_usage.md](n2i_v2_usage.md) を参照。
+- **その他のオプションやトラブル対応**：[n2i_v3_usage.md](n2i_v3_usage.md) を参照。
