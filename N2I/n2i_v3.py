@@ -20,8 +20,10 @@ Changes from n2i_v2.py (models trained with v2 can be used for inference):
   * channels_last memory format and cudnn.benchmark for faster convolutions
   * inference overlaps reading (prefetch thread), GPU computation and writing (writer
     threads); tile blending is accumulated on the GPU
-  * train writes the models to a directory (--out, default training/): 000500.pt, 001000.pt ...
-    every --save-every iterations (default: every --log) and best.pt (lowest val); infer --crop processes
+  * train writes the models to a directory (--out, default training/): 000100.pt, 000200.pt ...
+    at every --log (default 100) and best.pt (lowest val); at the same interval one untrained
+    slice is denoised into infer_check/%06d.tif (average.tif = mean of the splits);
+    infer --crop processes
     only a central (or --crop-center) region, e.g. to compare models quickly
 
 Artifact countermeasures: resize-conv upsampling (no checkerboard), replicate padding,
@@ -533,10 +535,8 @@ def train(a):
             setattr(a, k, v)
     if a.no_cache:
         a.cache = None
-    if a.save_every is None:
-        a.save_every = a.log
     os.makedirs(a.out, exist_ok=True)
-    print(f"model output: {os.path.join(a.out, '%06d.pt')} every {a.save_every or a.iters} iterations, "
+    print(f"model output: {os.path.join(a.out, '%06d.pt')} every {a.log} iterations (--log), "
           f"{os.path.join(a.out, 'best.pt')} (lowest val)", flush=True)
     lists, Ntot, Hf, Wf = scan_splits(a.splits)
     K = len(lists)
@@ -606,6 +606,57 @@ def train(a):
                     "s": a.s, "nd": nd, "cin": cin, "ch": a.ch, "depth": a.depth, "up": a.up,
                     "version": 3, "crop": box, "slices": [z0, z1]}, path)
 
+    # ---- inference check: one untrained slice (centre of the validation block) at every --log
+    check = None
+    if not a.no_check:
+        zc = a.check_slice if a.check_slice is not None else z0 + (v0 + v1) // 2
+        zc = min(max(int(zc), 0), Ntot - 1)
+        if a.mode == "2d":
+            zs = [zc]
+        elif a.mode == "25d":
+            zs = list(range(zc - a.s, zc + a.s + 1))
+        else:
+            zs = list(range(zc - 16, zc + 17))
+        ci = zs.index(zc)
+        zs = [min(max(z, 0), Ntot - 1) for z in zs]
+        cy0, cy1, cx0, cx1 = box if a.mode == "3d" else (0, Hf, 0, Wf)   # 3D: training crop only
+        blk = np.stack([np.stack([tifffile.imread(lists[k][z])[cy0:cy1, cx0:cx1] for z in zs])
+                        for k in range(K)]).astype(np.float32)
+        os.makedirs(a.check_dir, exist_ok=True)
+        write_like(lists[0][zc], os.path.join(a.check_dir, "average.tif"), blk[:, ci].mean(0))
+        check = ((blk - mean) / std).astype(np.float32)
+        del blk
+        ctile = list(DEFAULTS[a.mode]["tile"])
+        cov = DEFAULTS[a.mode]["ov"]
+        print(f"inference check: slice {zc} -> {os.path.join(a.check_dir, '%06d.tif')} every {a.log} iterations "
+              f"(reference: average.tif = mean of the {K} splits)", flush=True)
+
+    def run_check(it):
+        model.eval()
+        try:
+            acc = None
+            for k in range(K):
+                inp, _ = make_pair(check, k, a.mode, a.s)
+                x = torch.from_numpy(np.ascontiguousarray(inp))
+                while True:
+                    try:
+                        y = predict(model, x, ctile, cov, m, dev, True, mf)
+                        break
+                    except torch.cuda.OutOfMemoryError:
+                        torch.cuda.empty_cache()
+                        if max(ctile[-2:]) <= 128:
+                            raise
+                        ctile[-2:] = [max(128, t // 2) for t in ctile[-2:]]
+                acc = y if acc is None else acc + y
+            out = (acc / K).numpy() * std + mean
+            write_like(lists[0][zc], os.path.join(a.check_dir, f"{it:06d}.tif"), out if a.mode != "3d" else out[ci])
+            return f"  [check {it:06d}.tif]"
+        except Exception as e:
+            torch.cuda.empty_cache() if dev.type == "cuda" else None
+            return f"  [check skipped: {type(e).__name__}]"
+        finally:
+            model.train()
+
     best, run, it, micro = math.inf, 0.0, 0, 1
     model.train()
     for inp, tgt in dl:
@@ -646,9 +697,10 @@ def train(a):
                 best = vl
                 save(os.path.join(a.out, "best.pt"))
                 tag = " *best"
-            if (a.save_every and it % a.save_every == 0) or it == a.iters:
-                save(os.path.join(a.out, f"{it:06d}.pt"))
-                tag += f"  -> {it:06d}.pt"
+            save(os.path.join(a.out, f"{it:06d}.pt"))      # every --log (and the last iteration)
+            tag += f"  -> {it:06d}.pt"
+            if check is not None:
+                tag += run_check(it)
             print(f"it {it:6d}  train {run / a.log:.5f}  val {vl:.5f}  [{status()}]{tag}", flush=True)
             run = 0.0
         if it >= a.iters:
@@ -833,7 +885,7 @@ if __name__ == "__main__":
         prog=os.path.basename(__file__), formatter_class=argparse.RawDescriptionHelpFormatter,
         description="Noise2Inverse denoising of CT reconstructions (2D / 2.5D / 3D U-Net).",
         epilog="""typical use (in the data directory, splits in rec\\0, rec\\1 (, rec\\2, rec\\3)):
-  %(prog)s train          train; models are written to training\\ (000500.pt ..., best.pt)
+  %(prog)s train          train; models are written to training\\ (000100.pt ..., best.pt)
   %(prog)s infer          denoise all slices with training\\best.pt into denoised\\
 
 details of each command:
@@ -869,16 +921,19 @@ details of each command:
     t.add_argument("--lr", type=float, default=5e-4)
     t.add_argument("--nval", type=int, default=8)
     t.add_argument("--workers", type=int, default=4)
-    t.add_argument("--log", type=int, default=500)
+    t.add_argument("--log", type=int, default=100,
+                   help="interval of loss/validation output, model saving (%%06d.pt) and the inference check")
     t.add_argument("--precision", choices=["auto", "bf16", "fp16", "fp32"], default="auto",
                    help="mixed precision for training (auto: bf16 on Ampere or newer, else fp16 + loss scaling)")
     t.add_argument("--amp", action="store_true", help=argparse.SUPPRESS)   # v2 option, now the default
     t.add_argument("--crop", type=int, default=1024,
                    help="train on a full-resolution crop of at most this many pixels (0 = full frame)")
     t.add_argument("--crop-center", default=None, help="crop centre 'y,x' in pixels (default: image centre)")
-    t.add_argument("--save-every", type=int, default=None,
-                   help="save <out>/%%06d.pt every N iterations (multiple of --log; default: --log; "
-                        "0 = only the last iteration)")
+    t.add_argument("--check-dir", default="infer_check",
+                   help="at every --log, denoise one slice and write it here as %%06d.tif (default: infer_check)")
+    t.add_argument("--check-slice", type=int, default=None,
+                   help="stack index of the check slice (default: centre of the validation block)")
+    t.add_argument("--no-check", action="store_true", help="disable the inference check")
     t.add_argument("--mem-frac", type=float, default=0.7,
                    help="with --cache and no --start/--stop: limit the cache to this fraction of RAM")
     t.add_argument("--train-slices", type=int, default=None,

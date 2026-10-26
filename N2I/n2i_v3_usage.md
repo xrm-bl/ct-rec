@@ -35,16 +35,19 @@ C:\n2i\n2i.bat train
 
 ```
 splits : rec\0 rec\1  (K=2, auto-detected in rec)
-model output: training\%06d.pt every 500 iterations, training\best.pt (lowest val)
+model output: training\%06d.pt every 100 iterations (--log), training\best.pt (lowest val)
 training slices 261-772 of 1034 (central 512 slices (--max-train-slices))
 training crop  y 340-1363, x 340-1363 of 1704x1704 (full resolution, cropped)
 mode=25d K=2 N=512 1024x1024 train-starts=496 val=[252,260) mean=0.4627 std=55.58
   (val is indexed within the training range / cache: slices 513-520 of the stack)
 precision: float16 mixed (fp32 weights/loss) + loss scaling
-it    500  train 1.63678  val 1.58446  [gpu 6.5GB  ram_free 246GB  6.7min] *best  -> 000500.pt
+inference check: slice 516 -> infer_check\%06d.tif every 100 iterations (reference: average.tif = mean of the 2 splits)
+it    100  train 1.70512  val 1.61234  [gpu 6.5GB  ram_free 246GB  1.5min] *best  -> 000100.pt  [check 000100.tif]
 ```
 
 学習に使うのは中央付近の最大 512 枚と、その中央の最大 1024×1024 の範囲（縮小はせず、画素はそのまま切り出す）。`val=[...]` は学習範囲（＝キャッシュ）の中での番号。
+
+100 回ごと（`--log`）に、モデルが `training\000100.pt`、`000200.pt` … として保存され、同時に学習していないスライス 1 枚を推論した結果が `infer_check\000100.tif`、`000200.tif` … として保存される（「推論チェック」を参照）。
 
 **2. 統計情報の確認（ノイズ分散の下限）**
 
@@ -94,11 +97,11 @@ Ubuntu では次のように読み替える。ランチャーは `~/n2i/n2i`（�
 
 ## 開始と終了
 
-**開始**：学習のコマンド（`train`）を実行する。最初に分割の判定結果、モデルの保存先、学習範囲と切り出し範囲、設定確認の行（`mode=... K=... N=... val=[...]`）、計算精度が表示される。キャッシュを作る場合は、その進み具合が表示される。その後、`--log` 間隔（既定 500 回）ごとに train／val の損失と、`[gpu 6.5GB  ram_free 246GB  6.7min]`（GPU メモリの最大使用量、空き RAM、経過時間）が表示される。
+**開始**：学習のコマンド（`train`）を実行する。最初に分割の判定結果、モデルの保存先、学習範囲と切り出し範囲、設定確認の行（`mode=... K=... N=... val=[...]`）、計算精度が表示される。キャッシュを作る場合は、その進み具合が表示される。その後、`--log` 間隔（既定 100 回）ごとに train／val の損失と、`[gpu 6.5GB  ram_free 246GB  6.7min]`（GPU メモリの最大使用量、空き RAM、経過時間）が表示される。
 
 **終了**：`--iters` 回（既定 2000 回）に達すると自動で終了する。途中で止めるときは Ctrl+C。
 
-- 途中のモデルは `training\000500.pt`、`training\001000.pt` … として保存され、val が最小値を更新するたびに `training\best.pt` も更新される（表示に `*best`）。中断しても、それまでに保存されたモデルは使える。
+- 途中のモデルは `--log` ごとに `training\000100.pt`、`training\000200.pt` … として保存され、val が最小値を更新するたびに `training\best.pt` も更新される（表示に `*best`）。中断しても、それまでに保存されたモデルは使える。
 - 途中から再開する機能はない。中断した場合は最初からやり直し。
 - val が下がらなくなったあたりが打ち切りの目安。
 - 学習回数を増やしたいときは、`--iters` を大きくして最初から実行し直す（学習率は `--iters` に合わせて減衰するため、続きから学習することはできない）。キャッシュは再利用される。同じ `training` に上書きされるので、前の結果を残すなら `--out training2` のように別のディレクトリを指定する。
@@ -133,9 +136,11 @@ Ubuntu では次のように読み替える。ランチャーは `~/n2i/n2i`（�
 |---|---|---|
 | `--mode` | 25d | `2d`／`25d`／`3d` |
 | `--out` | training | モデルの保存先ディレクトリ（`%06d.pt` と `best.pt`） |
-| `--save-every` | `--log` と同じ（500） | `%06d.pt` を保存する間隔（`--log` の倍数）。`0` で最後の回だけ |
 | `--iters` | 2000 | 学習回数 |
-| `--log` | 500 | 損失表示・検証の間隔 |
+| `--log` | 100 | 損失表示・検証、モデルの保存（`%06d.pt`）、推論チェックの間隔 |
+| `--check-dir` | infer_check | 推論チェックの出力先 |
+| `--check-slice` | 検証範囲の中央 | 推論チェックに使うスライス（スタック全体での番号） |
+| `--no-check` | なし | 推論チェックを行わない |
 | `--no-cache` | なし | キャッシュを使わず TIFF から読んで学習する |
 | `--crop` | 1024 | 学習に使う切り出しの大きさ（画素）。`0` で切り出さない |
 | `--crop-center` | 画像の中心 | 切り出しの中心 `y,x`（画素） |
@@ -190,9 +195,27 @@ Ubuntu では次のように読み替える。ランチャーは `~/n2i/n2i`（�
 
 ## モデルの保存と選択
 
-- 学習すると、`training` に `000500.pt`、`001000.pt`、`001500.pt`、`002000.pt`（6 桁のゼロ埋め、`--save-every` ごと。最後の回は必ず保存）と、`best.pt`（val が最も小さかったモデル）ができる。
+- 学習すると、`training` に `000100.pt`、`000200.pt` … `002000.pt`（6 桁のゼロ埋め、`--log` ごと。最後の回は必ず保存）と、`best.pt`（val が最も小さかったモデル）ができる。既定の 2000 回では 20 個（1 個 30 MB 程度）になる。数を減らしたい場合は `--log 500` のように間隔を広げる（損失の表示と推論チェックも同じ間隔になる）。
 - 推論は既定で `best.pt` を使う。`best.pt` がない場合（学習を途中で止めた場合など）は、最も新しい `%06d.pt` を使う。使ったモデルは画面とログに `model  : training\best.pt` のように表示される。
 - 特定のモデルを使うときは `--model .\training\001000.pt` のように指定する。
+
+## 推論チェック
+
+学習中、`--log` ごとにその時点のモデルで 1 枚だけ推論し、`infer_check` に保存する。学習の進み具合を画像で確認できる。
+
+```
+infer_check\average.tif     … 分割の単純平均（比較用。学習開始時に 1 回だけ作成）
+infer_check\000100.tif
+infer_check\000200.tif
+  …
+```
+
+- **使うスライス**：既定では、検証用に学習から除いた範囲の中央の 1 枚（学習していないスライス）。学習開始時に `inference check: slice 516 -> ...` のように表示される。別のスライスにするには `--check-slice` でスタック全体での番号を指定する。
+- **範囲**：2D／2.5D はスライス全体。3D は計算が重いため、学習の切り出し範囲（最大 1024×1024）だけ。
+- **書式**：通常の推論と同じく 16 ビットで計算し、TIFF タグも引き継ぐ（ct-rec 形式の最小値・最大値も更新）。
+- **見方**：Fiji で `infer_check` を連番として開くと、学習が進むにつれて画像がどう変わるかを順に見られる。`average.tif` との差分画像も作れる。ノイズが減らなくなった回、または細部が削られ始めた回が、学習を打ち切る目安になる。
+- **表示**：ログの行の末尾に `[check 000100.tif]` と出る。GPU メモリ不足などで推論できなかった場合は `[check skipped: ...]` と出て、学習はそのまま続く。
+- **時間**：1 枚の推論は数秒程度で、学習全体の時間はわずかに増えるだけ。不要なら `--no-check` で無効にする。
 
 ## 計算精度
 
@@ -212,7 +235,7 @@ rem 一部スライスだけ推論して確認
 C:\n2i\n2i.bat infer --train-dir training_test --outdir test_out --start 400 --stop 410
 ```
 
-途中のモデルで結果を比べる（検証用スライスの中心 512×512 だけを推論）：
+途中のモデルで結果を比べる：まずは学習中に作られる `infer_check` の画像を見る（「推論チェック」を参照）。複数のスライスで比べたい場合は、検証用スライスの中心 512×512 だけを推論する：
 
 ```
 for %m in (000500 001000 001500 002000) do C:\n2i\n2i.bat infer --model .\training\%m.pt --outdir chk_%m --crop 512 --start 513 --stop 521
@@ -284,7 +307,9 @@ C:\n2i\n2i.bat infer --train-dir training_3d --outdir denoised_3d
 | 入力 | `--splits` で指定（必須） | `rec` の中の `0`、`1` … を自動判定 |
 | モード | 2d | 25d |
 | キャッシュ | 指定時のみ | 既定で `image_cache.npy` |
-| モデルの保存 | `--out` で指定したファイル（val 更新時）と `_last.pt` | `training` ディレクトリに `%06d.pt` と `best.pt` |
+| モデルの保存 | `--out` で指定したファイル（val 更新時）と `_last.pt` | `training` ディレクトリに `%06d.pt`（`--log` ごと）と `best.pt` |
+| `--log` | 500 | 100 |
+| 推論チェック | なし | `--log` ごとに 1 枚推論して `infer_check` に保存 |
 | 推論のモデル・出力 | 必須 | `training\best.pt`、`denoised` |
 | 学習の精度 | 32 ビット（`--amp` で bf16） | 混合精度（GPU に合わせて bf16／fp16 を自動選択） |
 | 推論の精度 | 32 ビット（`--fp16` で 16 ビット） | 16 ビット（`--fp32` で 32 ビット） |
