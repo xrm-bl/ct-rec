@@ -518,7 +518,8 @@ Uesugi
       his_DO run one level above it with the directory name as HiPic (like hp_tg
       / ofct_DO).  his2img and conv.bat are not run and no .img file is
       written: conv.bat is interpreted in memory.
-        his2img <his>                 name of the his file (default a.his)
+        his2img <his>                 name of the his file (default a.his;
+                                      his2img_g and other his2img_* too)
         img_ave <frames>... dark.img  dark = average of the listed frames
         img_ave <frames>... q<N>.img  q<N> = average of the listed frames
         ren <frame> q<N>.img          q<N> = that frame

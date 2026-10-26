@@ -429,7 +429,8 @@
       HiPic に指定して(hp_tg / ofct_DO と同様)実行する。his2img と conv.bat は
       実行せず、.img ファイルも作られない。conv.bat はメモリ上で次のように
       解釈する。
-        his2img <his>                 his ファイル名(既定 a.his)
+        his2img <his>                 his ファイル名(既定 a.his。his2img_g などの
+                                      his2img_* も同じ)
         img_ave <frames>... dark.img  暗電流 = 列挙フレームの平均
         img_ave <frames>... q<N>.img  q<N> = 列挙フレームの平均
         ren <frame> q<N>.img          q<N> = そのフレーム

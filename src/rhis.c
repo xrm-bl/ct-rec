@@ -247,6 +247,17 @@ static int	StrCaseEq(const char *a,const char *b)
 	return *a=='\0' && *b=='\0';
 }
 
+/* the his2img command of conv.bat, in any of its variants: his2img,
+   his2img_g, his2img.exe, ... (a suffix after "his2img" may only start
+   with '_' or '.'; 2026-10-26, some conv.bat generators write his2img_g) */
+static int	IsHis2img(const char *tok)
+{
+	const char	*p="his2img";
+
+	while (*p && tolower((unsigned char)*tok)==*p) { tok++; p++; }
+	return *p=='\0' && (*tok=='\0' || *tok=='_' || *tok=='.');
+}
+
 static int	EndsWithImg(const char *tok,size_t *stem_len)
 {
 	size_t	l=strlen(tok);
@@ -447,7 +458,7 @@ static void	HisReadConv(HisSet *s)
 		    continue;
 		}
 
-		if (StrCaseEq(tok[0],"his2img")) continue;	/* handled in HisOpen */
+		if (IsHis2img(tok[0])) continue;	/* his2img / his2img_g ...: handled in HisOpen */
 		if (StrCaseEq(tok[0],"img_ave")) {
 		    if (ntok<3) {
 			(void)fprintf(stderr,"rhis: %s line %d : img_ave needs at least "
@@ -532,7 +543,7 @@ static void	HisReadConv(HisSet *s)
 		    continue;
 		}
 		(void)fprintf(stderr,"rhis: %s line %d : unknown command '%s' "
-			      "(accepted: his2img img_ave ren copy hp2do rem echo).\n",
+			      "(accepted: his2img / his2img_g img_ave ren copy hp2do rem echo).\n",
 			      s->conv,lineno,tok[0]);
 		exit(1);
 	    }
@@ -646,7 +657,7 @@ static HisSet	*HisOpenHeaders(const char *dir)
 		if ((f=fopen(path,"r"))==NULL) HisError(path,"file not open.");
 		while (fgets(line,LEN,f)!=NULL) {
 		    line[strcspn(line,"\r\n")]='\0';
-		    if ((ntok=Tokenize(line,tok,LEN/2))>=2 && StrCaseEq(tok[0],"his2img")) {
+		    if ((ntok=Tokenize(line,tok,LEN/2))>=2 && IsHis2img(tok[0])) {
 			(void)snprintf(his_name,LEN,"%s",tok[1]); break;
 		    }
 		}

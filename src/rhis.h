@@ -19,7 +19,8 @@
  * dark / I0 data are bit-identical to the files conv.bat would produce.
  *
  * conv.bat grammar understood (case-insensitive command word):
- *   his2img <his>                      name of the his file (default a.his)
+ *   his2img <his>                      name of the his file (default a.his);
+ *                                      also his2img_g, his2img.exe, ...
  *   img_ave <frame>... dark.img        dark = average of the listed frames
  *   img_ave <frame>... q<N>.img        q<N> = average of the listed frames
  *   ren|rename <frame> q<N>.img        q<N> = that frame

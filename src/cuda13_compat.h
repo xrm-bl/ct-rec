@@ -35,9 +35,12 @@
  * cudaMemPrefetchAsync compatibility wrapper.
  *
  * API evolution:
- *   CUDA <= 12.1 : (ptr, count, int device,    cudaStream_t)        4 args
- *   CUDA 12.2+   : (ptr, count, cudaMemLocation, cudaStream_t)      4 args (device->location)
+ *   CUDA 12.x    : (ptr, count, int device, cudaStream_t)                      4 args
+ *                  (12.2 added cudaMemPrefetchAsync_v2 with cudaMemLocation as
+ *                   a separate function; the old form stayed)
  *   CUDA 13.0+   : (ptr, count, cudaMemLocation, unsigned flags, cudaStream_t)  5 args
+ * (2026-10-26: the former "12.2+: cudaMemLocation, 4 args" branch did not
+ *  compile with CUDA 12.2 - no such overload exists there.)
  */
 static inline cudaError_t safe_prefetch(const void *devPtr, size_t count,
                                         int dstDevice, cudaStream_t stream)
@@ -48,14 +51,8 @@ static inline cudaError_t safe_prefetch(const void *devPtr, size_t count,
     loc.type = cudaMemLocationTypeDevice;
     loc.id   = dstDevice;
     return cudaMemPrefetchAsync(devPtr, count, loc, 0, stream);
-#elif CUDART_VERSION >= 12020
-    /* CUDA 12.2-12.x: 4-argument form with cudaMemLocation */
-    cudaMemLocation loc;
-    loc.type = cudaMemLocationTypeDevice;
-    loc.id   = dstDevice;
-    return cudaMemPrefetchAsync(devPtr, count, loc, stream);
 #else
-    /* CUDA <= 12.1: 4-argument form with int device */
+    /* CUDA 12.x and earlier: 4-argument form with int device */
     return cudaMemPrefetchAsync(devPtr, count, dstDevice, stream);
 #endif
 }
