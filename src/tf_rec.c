@@ -213,10 +213,11 @@ long		ln;
 	char		ffi01[15], ffi02[15], fii[15];
 	double		I01, I02;
 
-	double		*poa;
 	double		p_sum,p_ave;
 	double		black_thresh, black_frac;
 	int			nclip, nclip_max;
+	double		bsum;
+	char		bnote[64];
 	FILE		*fi;
 	char		fname[1024];
 
@@ -230,8 +231,6 @@ long		ln;
 	ilp=(int *)malloc(M*sizeof(int));
 	iplc=0;
 
-	poa = (double *)malloc(N*sizeof(double));
-	for(j=0;j<N;++j) *(poa+j)=0.0;
 
 // counting for number of projections (M = nshot)
 	nshot = 0;
@@ -283,18 +282,19 @@ long		ln;
 			/* Per-pixel floor: a pixel whose signal is at or below
 			   black_thresh is treated as opaque, so no +Inf/NaN can
 			   enter the sinogram.  nclip counts how many needed it. */
-			nclip = 0;
+			nclip = 0; bsum = 0.0;
 			for (jx = 0; jx < N; ++jx){
 				*(po+N*nshot+jx)= BlackLog((double)(I0[jx]),
 					(double)(I[jx]-dark[jx]), black_thresh, &nclip);
+				bsum += (double)(I[jx]-dark[jx]);
 			}
 			/* black (missing-angle) projection: most of the line is
 			   below the floor, so there is nothing to reconstruct from */
-			if (nclip > nclip_max){
+			if (nclip > nclip_max || BlackMeanHit(bsum, (double)N)){
 				printf("Warning \t");
-				printf("  %d\t black \t clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
+				printf("  %d\t black \t clipped=%d/%d (%.1f%%, thresh=%.4g)%s\n",
 					k, nclip, (int)N, 100.0*(double)nclip/(double)N,
-					black_thresh);
+					black_thresh, BlackMeanNote(bsum, (double)N, bnote, sizeof bnote));
 				*(ilp+nshot)=1;
 				BlackCountProjection();
 				for(jx=0;jx<N;++jx){
@@ -319,7 +319,6 @@ long		ln;
 				for (jx=0; jx<N; ++jx){
 				//	*(po+N*nshot+jx) = *(po+N*nshot+jx) - p_ave; /* comment out here */
 					TA = TA + *(po+N*nshot+jx);
-					*(poa+jx)=*(poa+jx)+*(po+N*nshot+jx);
 				}
 				TA1=TA1+TA;
 				TA2=TA2+TA*TA;
@@ -331,21 +330,14 @@ long		ln;
 	} // end of j loop
 
 
-// correcion for black projection
+/* black projections stay 0 (2026-10-27).  They used to be replaced by
+   the mean of the good projections; now every sinogram builder (ofct_rec,
+   hp_tg, sinog, ...) treats a black projection the same way. */
 	if (iplc == 0){
 		fprintf(stderr,
-			"every projection was judged black: no good projection is left "
-			"to build the replacement from.\n"
+			"every projection was judged black: nothing is left to reconstruct.\n"
 			"Lower CT_REC_BLACK_THRESH or raise CT_REC_BLACK_FRAC.\n");
 		return (1);
-	}
-	for(k=0;k<M;++k){
-		if(*(ilp+k)==1){
-//			printf("%d\t%d\n",k,*(ilp+k) );
-			for(j=0;j<N;++j){
-				*(po+N*k+j)=*(poa+j)/(double)iplc;
-			}
-		}
 	}
 
 	BlackReport();

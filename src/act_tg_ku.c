@@ -265,60 +265,11 @@ static int	PrepareSlice(int z,Float **Pb,Float ***W,int cy1,int cy2,
 	    }
 	}
 
-/* ----------------  black projection correction start ---------------- */
-	{
-		int		blk_t, blk_r, blk_good=0, blk_black=0;
-		int		*blk_flag;
-		double	*blk_avg;
-
-		blk_flag = (int *)malloc((size_t)Nt * sizeof(int));
-		blk_avg  = (double *)malloc((size_t)Nx * sizeof(double));
-		if (blk_flag==NULL || blk_avg==NULL)
-			Error("memory allocation error for black projection check.");
-
-		/* detect black projections: all pixels == 0
-		   (投影ごとの和は従来と同じ r 昇順の double 加算 -> 同じ判定) */
-		#pragma omp parallel for
-		for (blk_t = 0; blk_t < Nt; blk_t++){
-			double	s=0.0;
-			int	r;
-
-			for (r = 0; r < Nx; r++) s += Pb[blk_t][r];
-			blk_flag[blk_t] = (s == 0.0);
-		}
-		for (blk_t = 0; blk_t < Nt; blk_t++){
-			if (blk_flag[blk_t]) {
-				(void)fprintf(stderr, "Warning\t black\t z=%d t=%d\n", z, blk_t);
-				blk_black++;
-			} else blk_good++;
-		}
-
-		/* replace black projections with average profile
-		   (平均は黒投影があるときだけ計算。列ごとに t 昇順で加算するので
-		    従来の加算順と同一 -> 同じ値) */
-		if (blk_black > 0 && blk_good > 0){
-			#pragma omp parallel for
-			for (blk_r = 0; blk_r < Nx; blk_r++){
-				double	s=0.0;
-				int	tt;
-
-				for (tt = 0; tt < Nt; tt++)
-					if (!blk_flag[tt]) s += Pb[tt][blk_r];
-				blk_avg[blk_r] = s / (double)blk_good;
-			}
-			for (blk_t = 0; blk_t < Nt; blk_t++){
-				if (blk_flag[blk_t] == 1){
-					for (blk_r = 0; blk_r < Nx; blk_r++){
-						Pb[blk_t][blk_r] = blk_avg[blk_r];
-					}
-				}
-			}
-		}
-
-		free(blk_flag);
-		free(blk_avg);
-	}
-/* ----------------  black projection correction finish --------------- */
+/* black projections stay 0 (2026-10-27).  The reader (rhp_c.c / rhis_hp.c)
+   zeroes a frame whose clipped fraction exceeds CT_REC_BLACK_FRAC; the
+   average-profile replacement that used to follow here was removed so that
+   every builder (ct_rec, ofct_rec, sinog, ...) treats a black projection
+   the same way. */
 
 /* ----------------  ring removal (in place on Pb) ---------------- */
 	*kernel_size = get_kernel_size_from_env();

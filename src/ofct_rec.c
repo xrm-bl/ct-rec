@@ -359,6 +359,8 @@ long		ln;
 	double		p_sum, p_ave, ddv, dva, dvb;
 	double		black_thresh, black_frac;
 	int			nclip, nclip_max;
+	double		bsum;
+	char		bnote[64];
 	FILE		*fi;
 
 	black_thresh = BlackThresh();
@@ -427,18 +429,19 @@ long		ln;
 			/* Per-pixel floor: a pixel whose signal is at or below
 			   black_thresh is treated as opaque, so no +Inf/NaN can
 			   enter the sinogram.  nclip counts how many needed it. */
-			nclip = 0;
+			nclip = 0; bsum = 0.0;
 			for (jx = 0; jx < N; ++jx){
 				*(po+nshot*N+jx)= BlackLog((double)(I0[jx]),
 					(double)(I[jx]-dark[jx]), black_thresh, &nclip);
+				bsum += (double)(I[jx]-dark[jx]);
 			}
 			/* black (missing-angle) projection: most of the line is
 			   below the floor, so there is nothing to reconstruct from */
-			if (nclip > nclip_max){
+			if (nclip > nclip_max || BlackMeanHit(bsum, (double)N)){
 				printf("Warning \t");
-				printf("  %d\t black \t clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
+				printf("  %d\t black \t clipped=%d/%d (%.1f%%, thresh=%.4g)%s\n",
 					k, nclip, (int)N, 100.0*(double)nclip/(double)N,
-					black_thresh);
+					black_thresh, BlackMeanNote(bsum, (double)N, bnote, sizeof bnote));
 				ilp=1;
 				nblack++;
 				BlackCountProjection();

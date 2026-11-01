@@ -47,7 +47,10 @@ Example: `ct_rec_g_c` = GPU, Chesler.
 - Truncation (cupping) correction in the shared CBP layer when the sample
   overfills the field of view (`PAD_THRESH`, auto by default).
 - Per-pixel low-transmission guard: opaque pixels are floored instead of
-  producing Inf/NaN (`CT_REC_BLACK_THRESH` / `CT_REC_BLACK_FRAC`); clipping
+  producing Inf/NaN (`CT_REC_BLACK_THRESH` / `CT_REC_BLACK_FRAC`); a
+  projection judged black is set to 0 in every program, and the
+  pre-2026-08 line/frame-average test is available as `CT_REC_BLACK_MEAN`;
+  clipping
   statistics are reported after each run. See
   [20260806_low_transmission_guard.md](20260806_low_transmission_guard.md).
 

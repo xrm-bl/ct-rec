@@ -292,6 +292,8 @@ long		ln;
 	double		p_sum,p_ave;
 	double		black_thresh, black_frac;
 	int			nclip, nclip_max;
+	double		bsum;
+	char		bnote[64];
 	FILE		*fi;
 
 	black_thresh = BlackThresh();
@@ -347,17 +349,18 @@ long		ln;
 			   projection", which throws away every projection of a dense
 			   sample and still let log(x/0) through.  Now the pixel is
 			   clamped and only a mostly-clipped line is discarded. */
-			nclip = 0;
+			nclip = 0; bsum = 0.0;
 			for (jx = 0; jx < N; ++jx){
 				I0[jx]    = a[jx] * shottime[k] + b[jx];
 				*(po+N*nshot+jx)= BlackLog((double)(I0[jx]),
 					(double)(I[jx]-dark[jx]), black_thresh, &nclip);
+				bsum += (double)(I[jx]-dark[jx]);
 			}
-			if (nclip > nclip_max){
+			if (nclip > nclip_max || BlackMeanHit(bsum, (double)N)){
 				printf("Warning \t");
-				printf("  %d\t black \t clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
+				printf("  %d\t black \t clipped=%d/%d (%.1f%%, thresh=%.4g)%s\n",
 					k, nclip, (int)N, 100.0*(double)nclip/(double)N,
-					black_thresh);
+					black_thresh, BlackMeanNote(bsum, (double)N, bnote, sizeof bnote));
 				*(ilp+nshot)=1;
 				BlackCountProjection();
 				for(jx=0;jx<N;++jx){

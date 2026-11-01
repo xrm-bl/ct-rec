@@ -83,8 +83,9 @@ counts above dark) and `CT_REC_BLACK_FRAC` (default 0.5). Technical note:
 zero or below, which happens for thick or dense samples. The guard imposes a
 per-pixel floor on the signal, capping the absorbance at log(I0/threshold). In
 addition, when the fraction of clipped pixels in one projection exceeds
-`CT_REC_BLACK_FRAC`, that projection is judged black and replaced by the mean of
-the good projections (the missing-angle case).
+`CT_REC_BLACK_FRAC`, that projection is judged black and set to 0 (the
+missing-angle case; unified across all programs on 2026-10-27, before which
+ct_rec and the hp_tg family replaced it by the mean of the good projections).
 
 **References**: the physical background is photon starvation. Hsieh, "Adaptive
 streak artifact reduction in computed tomography resulting from excessive x-ray

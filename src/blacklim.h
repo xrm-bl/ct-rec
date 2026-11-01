@@ -24,7 +24,8 @@
 /*                                                                      */
 /* CT_REC_BLACK_FRAC is the fraction of clipped pixels above which a     */
 /* whole projection is judged black (the "missing angle" case) and       */
-/* replaced by the mean of the good projections.  It replaces the older  */
+/* set to 0 (in every builder since 2026-10-27; ct_rec and the hp_tg     */
+/* family used to substitute the mean).  It replaces the older           */
 /* test on the line average, which could not work here: with open-beam   */
 /* margins in the field of view - which the air reference at both ends   */
 /* of the line requires anyway - the average has a hard floor of         */
@@ -33,7 +34,16 @@
 /* line (a plate seen edge-on) the two criteria fire at the same         */
 /* transmission, so plate-like samples keep behaving as before.          */
 /*                                                                      */
-/* Both variables are read once per process and validated.  A normal run */
+/* CT_REC_BLACK_MEAN (2026-10-27) brings the old average test back as an  */
+/* additional criterion: a projection whose mean (I - dark) over the line */
+/* (ct_rec, ofct_rec, sinog, ...) or over the whole frame (the HiPic      */
+/* readers used by hp_tg, ofct_srec, ...) is below it is black as well.   */
+/* It is off unless set; it does not touch the per-pixel floor, and a     */
+/* black projection is set to 0 whichever test fired.  The value is in    */
+/* counts above dark, exactly like CT_REC_BLACK_THRESH before 2026-08-06, */
+/* so an old "CT_REC_BLACK_THRESH=2000" becomes "CT_REC_BLACK_MEAN=2000". */
+/*                                                                      */
+/* All variables are read once per process and validated.  A normal run  */
 /* prints nothing: the values in effect are echoed only when BOTH        */
 /* thresholds have been exceeded (a projection was judged black), and    */
 /* the end-of-run summary appears only when at least one pixel actually  */
@@ -51,9 +61,12 @@
 #define BLACK_THRESH_DEFAULT	2.0
 /* clipped fraction that makes a projection "black" */
 #define BLACK_FRAC_DEFAULT	0.5
+/* line/frame average below which a projection is black; 0 = test off */
+#define BLACK_MEAN_DEFAULT	0.0
 
 static double	blackThresh	= -1.0;	/* <0 = not read yet */
 static double	blackFrac	= -1.0;
+static double	blackMean	= -1.0;
 static double	blackMinSignal	= 1.0e300;	/* smallest (I-dark) seen */
 static double	blackMaxP	= 0.0;	/* largest absorbance emitted */
 static long	blackClipped	= 0;	/* pixels that hit the floor */
@@ -108,6 +121,53 @@ static double BlackFrac(void)
 }
 
 /*----------------------------------------------------------------------*/
+/* Average (I - dark) below which the projection is black; 0 = off.      */
+/* Unlike the two guards above this one may be switched off, because it  */
+/* only discards projections and never lets Inf/NaN through.             */
+static double BlackMean(void)
+{
+	char	*e, *end;
+	double	v;
+
+	if (blackMean >= 0.0) return blackMean;
+
+	blackMean = BLACK_MEAN_DEFAULT;
+	if ((e = getenv("CT_REC_BLACK_MEAN")) != NULL && *e != '\0') {
+		v = strtod(e, &end);
+		if (end == e) {
+			(void)fprintf(stderr,
+			    "CT_REC_BLACK_MEAN: '%s' is not a number, "
+			    "the average test stays off\n", e);
+		} else if (v > 0.0) {
+			blackMean = v;
+		}
+	}
+	return blackMean;
+}
+
+/* True when the average test is on and sum/n (the mean (I - dark) of the */
+/* line or frame, n pixels) is below it.                                 */
+static int BlackMeanHit(double sum, double n)
+{
+	double	m = BlackMean();
+
+	return m > 0.0 && sum/n < m;
+}
+
+/* Suffix for the "black" warning: the average and its limit when the    */
+/* test is on, an empty string otherwise.                                */
+static const char *BlackMeanNote(double sum, double n, char *buf, size_t len)
+{
+	double	m = BlackMean();
+
+	if (m > 0.0)
+		(void)snprintf(buf, len, " avg=%.1f (mean=%.4g)", sum/n, m);
+	else
+		buf[0] = '\0';
+	return buf;
+}
+
+/*----------------------------------------------------------------------*/
 /* Absorbance of one pixel with the floor applied.                       */
 /*   num  = I0                     (counts above dark)                   */
 /*   den  = I - dark               (counts above dark, may be <= 0)      */
@@ -155,6 +215,10 @@ static void BlackCountProjection(void)
 		    "max absorbance = log(I0/%.4g))\n", BlackThresh(), BlackThresh());
 		(void)fprintf(stderr,
 		    "CT_REC_BLACK_FRAC   = %.4g of the line\n", BlackFrac());
+		if (BlackMean() > 0.0)
+			(void)fprintf(stderr,
+			    "CT_REC_BLACK_MEAN   = %.4g counts above dark "
+			    "(line/frame average)\n", BlackMean());
 	}
 	++blackProj;
 }

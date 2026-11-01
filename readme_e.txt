@@ -69,6 +69,26 @@ Uesugi
     conv.bat and output.log, never assumed.  The existing programs are
     unchanged (their file-scope names were made static so that two of
     them can be linked into one his_* program).
+  - Black (missing-angle) projections are now handled the same way by every
+    program: the projection is set to 0 (2026-10-27).  ct_rec / his_rec
+    (180 degrees) and hp_tg / act_tg / ofct_srec / ofact_srec / his_srec used
+    to replace a black projection by the mean of the good projections;
+    ofct_rec, sinog, of_sinog, his_sg and the others already zeroed it.
+    The decision (CT_REC_BLACK_THRESH / FRAC) is unchanged and data without
+    black projections reconstruct bit-identically.
+  - New environment variable CT_REC_BLACK_MEAN (2026-10-27): a projection
+    whose mean (I-dark) - over the line for ct_rec and friends, over the
+    whole frame for the hp_tg family - is below it is judged black.  This
+    is the test CT_REC_BLACK_THRESH applied before 2026-08, added back
+    independently of the per-pixel floor and OR'ed with the clipped
+    fraction test (CT_REC_BLACK_FRAC).  Off unless set, so results are
+    unchanged; an old "CT_REC_BLACK_THRESH=2000" becomes
+    "CT_REC_BLACK_MEAN=2000".
+  - makefileGPU.bat / cccc.bat call nvcc from the CUDAVER directory, so the
+    single line "set CUDAVER=" in the batch file selects the 12.x / 13.x
+    toolkit regardless of the PATH order.  N2I/ is updated to n2i_v4.py
+    (about 3x faster training and inference at the same accuracy, a bench
+    command; v2 / v3 models still work for inference).
 
 [ver 2.7 changes]
   - New act_tg_g_F (2f) and ofact_srec_g_F (3d): whole-volume
@@ -345,10 +365,20 @@ Uesugi
 
       For plate-like samples, transmittance can drop drastically at certain
       angles (the missing-angle case). A projection whose clipped fraction
-      exceeds CT_REC_BLACK_FRAC (default 0.5) is judged black and replaced by
-      the mean of the good projections. Change CT_REC_BLACK_THRESH to 1, 10,
+      exceeds CT_REC_BLACK_FRAC (default 0.5) is judged black and set to 0
+      (before 2026-10-27, ct_rec and the hp_tg family replaced it by the mean
+      of the good projections). Change CT_REC_BLACK_THRESH to 1, 10,
       100, 1000, etc. as before to adjust how readily that happens: for a
       uniformly attenuated line the trigger point is the same as it was.
+
+      The pre-2026-08 test "mean (I-dark) below a threshold" is available
+      as CT_REC_BLACK_MEAN (off unless set; counts above dark).  The mean
+      is taken over the line in ct_rec / ofct_rec / sinog and over the
+      whole frame in the HiPic readers of hp_tg / ofct_srec; a projection
+      is black when either this or the fraction test fires.  The floor is
+      not affected.  An old "CT_REC_BLACK_THRESH=2000" corresponds to
+      "CT_REC_BLACK_MEAN=2000" (the black projection is set to 0, not
+      replaced by the mean as before 2026-08).
 
       Note that the threshold now also caps the absorbance of projections that
       are kept, so a large value visibly flattens a dense sample. Prefer the

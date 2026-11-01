@@ -70,7 +70,8 @@ to extend the CT scan field-of-view", *Med. Phys.* 31(9), 2385-2391 (2004)。
 **原理**: p = log(I0/(I - dark)) は、厚い/重い試料で I - dark が 0 以下になると +Inf や
 NaN を生む。本ガードは画素ごとに信号の下限(フロア)を設け、吸収を log(I0/threshold) で
 頭打ちにする。さらに 1 投影のうちクリップ画素の割合が `CT_REC_BLACK_FRAC` を超えた場合は
-その投影を「黒」と判定し、良好投影の平均で置換する(欠測角の扱い)。
+その投影を「黒」と判定し、投影値を 0 にする(欠測角の扱い。2026-10-27 に全プログラムで統一、
+それまで ct_rec / hp_tg 系は良好投影の平均で置換していた)。
 
 **文献**: 物理的背景は photon starvation である。Hsieh, "Adaptive streak artifact
 reduction in computed tomography resulting from excessive x-ray photon noise",

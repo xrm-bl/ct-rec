@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# setup_n2i.sh -- set up a Python venv with CUDA-enabled PyTorch for n2i_v3.py on Ubuntu.
+# setup_n2i.sh -- set up a Python venv with CUDA-enabled PyTorch for n2i_v4.py on Ubuntu.
 #
 #   1. checks the NVIDIA driver (nvidia-smi) and the highest CUDA version it supports
 #   2. checks python3 (>= 3.10, 64-bit); optionally installs python3-venv with apt
 #   3. creates <dir>/venv
 #   4. installs PyTorch, newest CUDA build the driver supports first, falling back to
 #      older builds if the GPU test fails (e.g. older GPU generations)
-#   5. installs numpy + tifffile, copies n2i_v3.py, writes the launcher <dir>/n2i
+#   5. installs numpy + tifffile, copies n2i_v4.py, writes the launcher <dir>/n2i
 # Safe to re-run: a working PyTorch is detected and kept.
 #
 # Usage:
@@ -150,13 +150,13 @@ rm -f "$CHECK"
 info "Installing numpy, tifffile ..."
 "$VPY" -m pip install --upgrade numpy tifffile --quiet || fail "numpy/tifffile installation failed."
 
-SRC="$SCRIPT_DIR/n2i_v3.py"
-DST="$INSTALL_DIR/n2i_v3.py"
+SRC="$SCRIPT_DIR/n2i_v4.py"
+DST="$INSTALL_DIR/n2i_v4.py"
 if [ -f "$SRC" ]; then
     [ "$(readlink -f "$SRC")" != "$(readlink -f "$DST")" ] && cp -f "$SRC" "$DST"
-    info "n2i_v3.py -> $DST"
+    info "n2i_v4.py -> $DST"
 elif [ ! -f "$DST" ]; then
-    warn "n2i_v3.py not found next to this script. Copy it to $INSTALL_DIR manually."
+    warn "n2i_v4.py not found next to this script. Copy it to $INSTALL_DIR manually."
     ls "$SCRIPT_DIR"/n2i*.py 2>/dev/null | sed 's/^/        similar file: /'
 fi
 
@@ -164,7 +164,7 @@ LAUNCHER="$INSTALL_DIR/n2i"
 cat > "$LAUNCHER" <<'EOF'
 #!/usr/bin/env bash
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-exec "$DIR/venv/bin/python" "$DIR/n2i_v3.py" "$@"
+exec "$DIR/venv/bin/python" "$DIR/n2i_v4.py" "$@"
 EOF
 chmod +x "$LAUNCHER"
 

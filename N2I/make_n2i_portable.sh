@@ -2,7 +2,7 @@
 # make_n2i_portable.sh -- build a portable n2i bundle on an internet-connected Linux PC.
 #
 # The bundle contains a relocatable Python (python-build-standalone), PyTorch (CUDA build),
-# numpy, tifffile and n2i_v3.py. Copy n2i_portable.tar.gz to the target machine, extract it
+# numpy, tifffile and n2i_v4.py. Copy n2i_portable.tar.gz to the target machine, extract it
 # anywhere and run ./n2i_portable/n2i -- nothing is installed there.
 #
 # Requirements: build PC = Linux x86_64 with internet, curl, python3 (any version, only to
@@ -34,7 +34,7 @@ while [ $# -gt 0 ]; do
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-[ -f "$SCRIPT_DIR/n2i_v3.py" ] || fail "n2i_v3.py not found next to this script."
+[ -f "$SCRIPT_DIR/n2i_v4.py" ] || fail "n2i_v4.py not found next to this script."
 [ "$(uname -m)" = "x86_64" ] || fail "this script builds an x86_64 bundle; run it on an x86_64 PC."
 command -v curl >/dev/null || fail "curl not found (sudo apt install curl)."
 command -v python3 >/dev/null || fail "python3 not found (needed only to read the release list)."
@@ -68,14 +68,14 @@ info "Installing numpy, tifffile ..."
 "$PY" -m pip install --no-cache-dir numpy tifffile --quiet || fail "numpy/tifffile installation failed."
 
 # ------------------------------------------------------------------ 3. script + launcher
-cp "$SCRIPT_DIR/n2i_v3.py" "$OUT/n2i_v3.py"
+cp "$SCRIPT_DIR/n2i_v4.py" "$OUT/n2i_v4.py"
 cat > "$OUT/n2i" <<'EOF'
 #!/usr/bin/env bash
 # portable n2i launcher: uses only the Python inside this folder
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 export PYTHONNOUSERSITE=1
 unset PYTHONPATH PYTHONHOME
-exec "$DIR/python/bin/python3" "$DIR/n2i_v3.py" "$@"
+exec "$DIR/python/bin/python3" "$DIR/n2i_v4.py" "$@"
 EOF
 chmod +x "$OUT/n2i"
 

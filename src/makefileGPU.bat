@@ -10,7 +10,10 @@ set    CUFFT="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\lib\x
 set CUDAINCL="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\include"
 rem CUDA 13.x minimum: Turing (sm_75).  Change to sm_89 (Ada) or sm_100 (Blackwell) as needed.
 set CUDA_ARCH=-arch=all-major
-set NVCC=nvcc -O3 -I%CUDAINCL% %CUDA_ARCH% -use_fast_math -Xcompiler "/wd 4819"
+rem nvcc is taken from the CUDAVER directory, so the line "set CUDAVER=..." above
+rem alone selects the toolkit (the one first on PATH is not used).
+set NVCC="C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\%CUDAVER%\bin\nvcc" -O3 -I%CUDAINCL% %CUDA_ARCH% -use_fast_math -Xcompiler "/wd 4819"
+vcc" -O3 -I%CUDAINCL% %CUDA_ARCH% -use_fast_math -Xcompiler "/wd 4819"
 
 rem GPU ring removal object (pure CUDA C replacement for sort_filter_omp.c).
 rem Built once; linked into the reconstruction programs compiled with /DUSE_GPU.

@@ -276,7 +276,9 @@ void	ReadHiPic(HiPic *hp,int t)
 	WORD		*D,*I1,*I2,*T;
 	double		r1,r2,I_D,T_D;
 	double		black_thresh, black_frac;
-	int		nclip;
+	int	nclip;
+	double	bsum;
+	char	bnote[64];
 
 	if (t<0 || t>=hp->Nt) {
 	    (void)sprintf(str,"%d",t); Error("",str,"bad sequence number.");
@@ -297,11 +299,11 @@ void	ReadHiPic(HiPic *hp,int t)
 	T=(WORD *)*(hp->T)+(size_t)hp->Ny*hp->Nx;
 	r1=1.0-(r2=(ol->c-OL[i].c)/(OL[i+1].c-OL[i].c));
 
-	nclip = 0;
+	nclip = 0; bsum = 0.0;
 	for (y=hp->Ny-1; y>=0; y--)
 	for (x=hp->Nx-1; x>=0; x--) {
 	    --D; --I1; --I2; --T;
-	    T_D=(double)*T-(double)*D;
+	    T_D=(double)*T-(double)*D; bsum += T_D;
 	    I_D=r1*(double)*I1+r2*(double)*I2-(double)*D;
 	    /* per-pixel floor (CT_REC_BLACK_THRESH): an opaque pixel must
 	       read as strongly absorbing.  ERROR_VALUE is 0, which the
@@ -316,11 +318,13 @@ void	ReadHiPic(HiPic *hp,int t)
 	   reconstruct from.  The old test used the frame average, which has a
 	   hard floor of (1-coverage)*signal and never reaches the threshold
 	   while open-beam margins remain in the field of view. */
-	if ((double)nclip > black_frac*(double)hp->Nx*(double)hp->Ny){
+	if ((double)nclip > black_frac*(double)hp->Nx*(double)hp->Ny
+	    || BlackMeanHit(bsum, (double)hp->Nx*(double)hp->Ny)) {
 	    (void)fprintf(stderr,
-	        "Warning\t black\t t=%d clipped=%d/%d (%.1f%%, thresh=%.4g)\n",
+	        "Warning\t black\t t=%d clipped=%d/%d (%.1f%%, thresh=%.4g)%s\n",
 	        t, nclip, hp->Nx*hp->Ny,
-	        100.0*(double)nclip/((double)hp->Nx*(double)hp->Ny), black_thresh);
+	        100.0*(double)nclip/((double)hp->Nx*(double)hp->Ny), black_thresh,
+	        BlackMeanNote(bsum, (double)hp->Nx*(double)hp->Ny, bnote, sizeof bnote));
 	    BlackCountProjection();
 	    for (y=0; y<hp->Ny; y++)
 	    for (x=0; x<hp->Nx; x++)
