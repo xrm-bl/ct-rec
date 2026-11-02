@@ -42,11 +42,16 @@ if (-not $Cpu) {
         Fail "nvidia-smi not found. Install the latest NVIDIA driver, or rerun with -Cpu."
     }
     $smiOut = (& nvidia-smi) | Out-String
-    if ($smiOut -match "CUDA Version:\s*([0-9]+)\.([0-9]+)") {
+    # "CUDA Version: 13.2" (wording differs between driver versions, so match loosely)
+    if ($smiOut -match "CUDA[^\r\n:|]*Version[^\r\n:|]*:\s*([0-9]+)\.([0-9]+)") {
         $driverCudaStr = "$($Matches[1]).$($Matches[2])"
         $driverCuda = [int]$Matches[1] * 10 + [int]$Matches[2]
     } else {
-        Fail "Could not read the CUDA version from nvidia-smi."
+        Warn "Could not read the CUDA version from nvidia-smi. Lines containing 'Version':"
+        ($smiOut -split "`r?`n") | Where-Object { $_ -match "Version" } | ForEach-Object { Warn "  $($_.Trim())" }
+        Warn "Trying PyTorch builds from the newest; the GPU test picks one that works."
+        $driverCudaStr = "unknown"
+        $driverCuda = 999
     }
     $gpus = (& nvidia-smi --query-gpu=name,memory.total --format=csv,noheader) -join "; "
     Info "GPU: $gpus"

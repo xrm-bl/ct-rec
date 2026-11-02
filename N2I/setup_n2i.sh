@@ -57,9 +57,17 @@ DRIVER_CUDA=0
 if [ "$CPU" -eq 0 ]; then
     command -v nvidia-smi >/dev/null 2>&1 || \
         fail "nvidia-smi not found. Install the NVIDIA driver (e.g. 'sudo ubuntu-drivers install', then reboot), or use --cpu."
-    ver=$(nvidia-smi 2>/dev/null | grep -oP 'CUDA Version:\s*\K[0-9]+\.[0-9]+' | head -n1)
-    [ -n "$ver" ] || fail "could not read the CUDA version from nvidia-smi (driver loaded? try rebooting)."
-    DRIVER_CUDA=$(( ${ver%%.*} * 10 + ${ver##*.} ))
+    smi_out=$(nvidia-smi 2>&1) || fail "nvidia-smi failed: $smi_out"
+    # "CUDA Version: 13.2" (wording differs between driver versions, so match loosely)
+    ver=$(printf '%s\n' "$smi_out" | grep -oP 'CUDA[^:|\n]*Version[^:|\n]*:\s*\K[0-9]+\.[0-9]+' | head -n1)
+    if [ -n "$ver" ]; then
+        DRIVER_CUDA=$(( ${ver%%.*} * 10 + ${ver##*.} ))
+    else
+        warn "Could not read the CUDA version from nvidia-smi. Lines containing 'Version':"
+        printf '%s\n' "$smi_out" | grep -i "version" | sed 's/^ */  /' | while read -r l; do warn "  $l"; done
+        warn "Trying PyTorch builds from the newest; the GPU test picks one that works."
+        ver="unknown"; DRIVER_CUDA=999
+    fi
     info "GPU: $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader | paste -sd ';' -)"
     info "Driver supports CUDA up to $ver"
 fi
