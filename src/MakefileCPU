@@ -6,7 +6,7 @@ CC      = gcc
 CFLAGS  = -O2 -D_USE_MATH_DEFINES
 OMPF    = -fopenmp
 AVXF    = -mavx2
-# extra flags for tif_mgf only (see the tif_mgf target below)
+# extra flags for tif_mgf and tif2his only (see the tif_mgf target below)
 MGFFLAGS = -O3 -march=native -fno-math-errno
 LIBS    = -lm
 TIFFLIB = -ltiff
@@ -199,7 +199,7 @@ sf_rec_t_c:
 misc: tif_f2i rec_crop rec_sir sinog of_sinog pid stop_watch img_ave \
       spl his_spl_K his_spl_E his_spl_tif rec_stk rhro_stk chk-rc set-rc \
       his2img ct_prj_f ct_sub_f ict_prj_fc ct_prj_fc \
-      tif2hst tif2zar rec_gf hp2DO tif_ave tif_mgf his_ave \
+      tif2hst tif2zar rec_gf hp2DO tif_ave tif_mgf tif2his his_ave \
       q3_ave q4_ave act_spl act_spl2 gf_sd gf_fd his2tif6 ofsfa
 
 tif_f2i:
@@ -272,6 +272,10 @@ tif_ave:
 # binary has to run on a different machine than the one that builds it.
 tif_mgf:
 	$(CC) $(CFLAGS) $(MGFFLAGS) $(OMPF) -o $(EXE_DIR)/tif_mgf tif_mgf.c $(TIFFLIB) $(LIBS)
+# tif2his packs a%06d.tif into a.his with the tif_mgf filter built in: same
+# flags as tif_mgf so that the filtered frames stay bit-identical; no libtiff.
+tif2his:
+	$(CC) $(CFLAGS) $(MGFFLAGS) $(OMPF) -o $(EXE_DIR)/tif2his tif2his.c $(LIBS)
 his_ave:
 	$(CC) $(CFLAGS) -o $(EXE_DIR)/his_ave his_ave.c sif.c $(LIBS)
 q3_ave:
@@ -345,7 +349,7 @@ clean:
 	$(EXE_DIR)/rec_stk $(EXE_DIR)/rhro_stk $(EXE_DIR)/chk-rc $(EXE_DIR)/set-rc $(EXE_DIR)/his2img \
 	$(EXE_DIR)/ct_prj_f $(EXE_DIR)/ct_sub_f $(EXE_DIR)/ict_prj_fc $(EXE_DIR)/ct_prj_fc \
 	$(EXE_DIR)/tf_prj_f $(EXE_DIR)/tif2hst $(EXE_DIR)/tif2zar $(EXE_DIR)/rec_gf \
-	$(EXE_DIR)/hp2DO $(EXE_DIR)/tif_ave $(EXE_DIR)/tif_mgf \
+	$(EXE_DIR)/hp2DO $(EXE_DIR)/tif_ave $(EXE_DIR)/tif_mgf $(EXE_DIR)/tif2his \
 	$(EXE_DIR)/his_ave $(EXE_DIR)/q3_ave $(EXE_DIR)/q4_ave \
 	$(EXE_DIR)/act_spl $(EXE_DIR)/act_spl2 $(EXE_DIR)/gf_sd $(EXE_DIR)/gf_fd \
 	$(EXE_DIR)/his2tif6 $(EXE_DIR)/ofsfa \
