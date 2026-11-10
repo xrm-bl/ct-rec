@@ -3,6 +3,7 @@ Based on Nakano's Software
 
 Uesugi
 
+2026.11.11  ver. 2.9
 2026.10.16  ver. 2.8
 2026.10.08  ver. 2.7
 2026.09.22  ver. 2.6
@@ -13,6 +14,28 @@ Uesugi
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+[ver 2.9 changes]
+  - act_tg_g_F (2f): the 16-bit and 8-bit output TIFFs are now written
+    LZW-compressed (/DLZW in makefileGPU.bat; ofact_srec stays uncompressed).
+    Pixel values and ImageDescription are identical to the uncompressed
+    files, and anything that reads tif_f2i output reads them.  On
+    4096-pixel slices the files are 1.1-1.5x (16 bit) and 1.3-2.4x (8 bit)
+    smaller; writing takes about 0.3 s (16 bit) and 0.1 s (8 bit) per slice
+    on one thread.  Build without /DLZW to get raw strips again.
+  - New ct_gmem_g (1h): run inside the HiPic directory, it estimates the
+    GPU memory one slice of the GPU programs needs, without allocating
+    anything, and compares it with the free memory of the device.  img /
+    tif is taken from the dark file, 180-degree / 360-degree offset from
+    the angles of output.log; for an offset scan the rotation axis is
+    estimated with the one-layer search of his_rec.
+  - New tif2his (6t, 2026-11-02): packs a numbered a%06d.tif series into
+    a.his, optionally applying the median + gaussian filter of tif_mgf.
+  - New his_mgf (6u): applies the median + gaussian filter of tif_mgf to
+    every frame of a his file and writes a new his file.
+  - Windows x64 binaries (exe/) rebuilt with the changes above (new
+    ct_gmem_g.exe, tif2his.exe and his_mgf.exe).  makefileCPU(.bat) gained
+    the tif2his / his_mgf rules and makefileGPU(.bat) the ct_gmem_g rule.
 
 [ver 2.8 changes]
   - New his_rec_P_F, his_srec_P_F, his_DO and his_sg (2g):
@@ -424,6 +447,38 @@ Uesugi
       HPTG_MEM_FRACTION; with the default every process asks for 90% of the
       free memory.
 
+   h. Checking the GPU Memory in Advance
+      ct_gmem_g {layer} {center}
+
+      Run inside the HiPic directory (output.log and dark.img + q????.img,
+      or dark.tif + q????.tif).  It estimates the GPU memory one slice of
+      the GPU programs needs for that data set and compares it with the
+      free memory of the device CUDA_GPU selects; nothing is allocated and
+      nothing is reconstructed.  The first three lines give the rotation
+      angle (180 / 360), the centre of rotation and the memory needed; the
+      details below list the free / total memory of the device with an
+      OK / NOT ENOUGH verdict, the breakdown (buffers of the cbp layer +
+      cuFFT work areas, ring removal), the slice size N x M, the pinned
+      host memory and the data set parameters.
+      img / tif is taken from the dark file (1a), 180-degree / 360-degree
+      offset scan from the angles of output.log (same rule as 2g).  For an
+      offset scan the reconstructed width depends on the axis position, so
+      center is either given or estimated from one row of layer (default:
+      the centre row) with the one-layer search of his_rec (the estimate is
+      shown in the details).  A 180-degree scan does not use the axis.
+      The estimate is what the cbp layer actually allocates in InitCBP
+      (including the cuFFT work areas, cufftEstimate1d) plus the three
+      buffers of the ring removal, and honours PAD_THRESH (1f) and
+      KERNEL_SIZE (1d).  The CUDA context itself (a few hundred MB) is not
+      included.  The per-slice demand is the same for every GPU program
+      built on the cbp layer (ct_rec / hp_tg / act_tg / his_rec / his_srec,
+      ofct_rec / ofct_srec / ofact_srec), so this one program covers them
+      all; whole-volume programs only need more host memory (see the
+      three-argument form of ofct_srec, 3b).
+
+      Example: ct_gmem_g              (axis estimated from the centre row)
+      Example: ct_gmem_g 1024 1900.5  (axis given; layer is not used)
+
 2. 180-degree Scan: Standard Absorption CT Reconstruction
 
    a. Single Slice Reconstruction
@@ -529,6 +584,14 @@ Uesugi
       are identical to what "hp_tg -> tif_f2i" produces.  All environment
       variables of hp_tg apply.  GPU build only; the filter suffix is as
       in hp_tg (act_tg_g_r / act_tg_g_s / act_tg_g_c).
+
+      The rh / ro TIFFs are written LZW-compressed (/DLZW in makefileGPU.bat,
+      as in the distributed exe).  Pixel values and ImageDescription are
+      identical to the uncompressed files, and anything that reads tif_f2i
+      output (libtiff, ImageJ / Fiji, ...) reads them.  On 4096-pixel slices
+      the files are 1.1-1.5x (16 bit) and 1.3-2.4x (8 bit) smaller; writing
+      takes about 0.3 s (16 bit) and 0.1 s (8 bit) per slice on one thread.
+      Build without /DLZW to get raw strips again.
 
       *) As with hp_tg, run one directory above the HiPic directory.
 
@@ -794,6 +857,8 @@ Uesugi
       "ofct_srec -> tif_f2i".  The three-argument form (HiPic Rc Oy) still
       only prints the memory estimate.  GPU build only; the filter suffix
       is as in ofct_srec (ofact_srec_g_r / _s / _c).
+      The output TIFFs stay uncompressed (the LZW compression of act_tg is
+      not applied).
 
 4. Normalization of 32-bit TIFF Images
     tif_f2i bit rec out {LACmin LACmax} {x1 y1 x2 y2}
@@ -1089,3 +1154,39 @@ Uesugi
       Details and measured performance: 20260909_tif2zar.md (Japanese).
 
       example: tif2zar rec rec.zarr --min -0.5 --max 3.0
+
+   t. Pack a Numbered tif Series into a his File
+      tif2his {median_kernel_size} {gaussian_sigma}
+
+      Packs the series starting at a000000.tif or a000001.tif in the
+      current directory (up to the first missing number) into a.his (HiPic
+      format: a 64-byte header + pixels per frame, the frame count in the
+      first header), so that data acquired as tif files can be fed to
+      his_rec / his_srec / his_DO / his_sg (2g) or his_mgf (6u).  Input:
+      uncompressed stripped monochrome 8/16-bit integer TIFF (II or MM).
+      With arguments the median + gaussian filter of tif_mgf (6p) is
+      applied to every frame before packing, bit-identical to running
+      tif_mgf on each file; the arguments have the meaning and range of
+      tif_mgf, but the default is no filter (0 / 0.0).  An existing a.his
+      is not overwritten.  The command is appended to cmd-hst.log.
+      Note: the his_* programs read 16-bit his files only; 8-bit input
+      gives an 8-bit his with a warning.
+
+      Example: tif2his            (no filter)
+      Example: tif2his 3 0.5      (median 3, gaussian sigma 0.5, then pack)
+
+   u. Median + Gaussian Filter on Every Frame of a his File
+      his_mgf input.his output.his median_kernel_size gaussian_sigma
+
+      Applies the median -> gaussian filter of tif_mgf (6p) to every frame
+      of a his file and writes a new his file.  The filter code is that of
+      tif_mgf, so the result is bit-identical to running tif_mgf on each
+      frame.  median_kernel_size 0-25 (0 and 1 = none), gaussian_sigma
+      0.0-100.0 (0.0 = none); all four arguments are required.  The header
+      and comment of every frame are copied as they are and only the pixels
+      are replaced, so the output has the size and layout of the input.
+      8-bit and 16-bit his files are both handled.  An existing output file
+      is not overwritten; on an error the partial output is deleted.  The
+      command is appended to cmd-hst.log.
+
+      Example: his_mgf a.his a_mgf.his 3 0.5

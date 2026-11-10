@@ -191,6 +191,12 @@ extern "C" int get_num_threads_from_env(void)
     return 40; /* kept only for interface compatibility (unused on GPU) */
 }
 
+extern "C" size_t sort_filter_gpu_bytes(unsigned int Nx, unsigned int Ny)
+{
+    if (get_kernel_size_from_env() < 2) return 0;   /* filter off: no buffers */
+    return (size_t)Nx * (size_t)Ny * (2 * sizeof(float) + sizeof(unsigned int));
+}
+
 /*----------------------------------------------------------------------*/
 /* Persistent device buffers.                                            */
 /* The old code did cudaMalloc x4 / cudaFree x4 on every call; hp_tg      */

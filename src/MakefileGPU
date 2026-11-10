@@ -35,10 +35,10 @@ NVCCFLAGS = -O3 -I$(CUDAINCL) $(CUDA_ARCH) -use_fast_math -Xcompiler "-Wno-unuse
 EXE_DIR = ../bin
 
 .PHONY: all clean ct_rec_g hp_tg_g his_g his_rec_g his_srec_g his_DO_g his_tb_g his_tb_rec_g his_tb_srec_g his_n2i_g \
-        ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g act_tg_g ofact_srec_g filters_g
+        ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g act_tg_g ofact_srec_g filters_g ct_gmem_g
 
 all: ct_rec_g hp_tg_g his_g \
-     ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g filters_g
+     ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g filters_g ct_gmem_g
 
 # ---------------------------------------------------------------
 # GPU ring removal object (pure CUDA C; no Thrust, no -lstdc++)
@@ -202,6 +202,12 @@ ofact_srec_g_c: sort_filter_g.o
 	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
 	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofact_srec_g_c ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
 
+# ct_gmem_g: GPU memory check for a data set (img or tif, 180-degree or offset
+# scan; estimates the axis of an offset scan).  Filter-independent.
+ct_gmem_g: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DFOM=float -DFloat=float -o $(EXE_DIR)/ct_gmem_g ct_gmem.c error.c rhp_c.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+
 # oftf_srec_g: oftf_srec_g_r oftf_srec_g_s oftf_srec_g_c
 # 
 # oftf_srec_g_r: sort_filter_g.o
@@ -278,7 +284,7 @@ clean:
 	$(EXE_DIR)/ofct_srec_g_r $(EXE_DIR)/ofct_srec_g_s $(EXE_DIR)/ofct_srec_g_c \
 	$(EXE_DIR)/ofct_rec_g_r  $(EXE_DIR)/ofct_rec_g_s  $(EXE_DIR)/ofct_rec_g_c \
 	$(EXE_DIR)/act_tg_g_r    $(EXE_DIR)/act_tg_g_s    $(EXE_DIR)/act_tg_g_c \
-	$(EXE_DIR)/ofact_srec_g_r $(EXE_DIR)/ofact_srec_g_s $(EXE_DIR)/ofact_srec_g_c \
+	$(EXE_DIR)/ofact_srec_g_r $(EXE_DIR)/ofact_srec_g_s $(EXE_DIR)/ofact_srec_g_c $(EXE_DIR)/ct_gmem_g \
 	$(EXE_DIR)/ofct_DO_g \
 	$(EXE_DIR)/otf_rec_g_r   $(EXE_DIR)/otf_rec_g_s   $(EXE_DIR)/otf_rec_g_c \
 	$(EXE_DIR)/oftf_srec_g_r $(EXE_DIR)/oftf_srec_g_s $(EXE_DIR)/oftf_srec_g_c \

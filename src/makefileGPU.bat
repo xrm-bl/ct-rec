@@ -119,14 +119,19 @@ rem %CC2% /openmp /DUSE_GPU /Feotf_rec_g_c.exe  otf_rec.c error.c sort_filter_g.
 
 rem automatic-CT continuous reconstruction (direct 16bit rh*.tif + 8bit ro*.tif output, no 32bit tiff)
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Feact_tg_g_r.exe act_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+rem act_tg: /DLZW = rh / ro are written LZW-compressed (tifwrite.h); drop it for raw strips. ofact_srec stays raw.
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /DLZW /Feact_tg_g_r.exe act_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /Feofact_srec_g_r.exe ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Feact_tg_g_s.exe act_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /DLZW /Feact_tg_g_s.exe act_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /Feofact_srec_g_s.exe ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
-%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Feact_tg_g_c.exe act_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /DLZW /Feact_tg_g_c.exe act_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /Feofact_srec_g_c.exe ofact_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+
+rem ct_gmem_g: GPU memory check for a data set (img or tif, 180 or offset scan; estimates the axis of an offset scan).
+rem The estimate does not depend on the filter, so the cbp.obj left by the last build above is fine.
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fect_gmem_g.exe ct_gmem.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 
 

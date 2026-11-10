@@ -193,6 +193,9 @@ rem tif_mgf
 rem tif2his (a%06d.tif series -> a.his, optional tif_mgf filter; no libtiff)
 %CC2% /openmp /Fetif2his.exe tif2his.c
 
+rem his_mgf (tif_mgf filter on every frame of a his file; no libtiff)
+%CC2% /openmp /Fehis_mgf.exe his_mgf.c
+
 
 rem his_ave
 %CC2% /Fehis_ave.exe his_ave.c sif.c

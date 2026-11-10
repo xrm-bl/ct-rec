@@ -2,6 +2,7 @@
 
 上杉
 
+2026.11.11  ver. 2.9
 2026.10.16  ver. 2.8
 2026.10.08  ver. 2.7
 2026.09.22  ver. 2.6
@@ -12,6 +13,25 @@
 2026.06.30  ver. 2.1
 2026.06.30  ver. 2.0
 2026.05.04  ver. 1.7
+
+【ver 2.9 の変更点】
+  ・act_tg_g_F(2f): 16bit / 8bit の出力 TIFF を LZW 圧縮で書くようにした
+    (makefileGPU.bat の /DLZW。ofact_srec は非圧縮のまま)。画素値と ImageDescription
+    は非圧縮版と同一で、tif_f2i の出力を読めるソフトはそのまま読める。4096 画素角で
+    ファイルは 16bit で 1.1～1.5 倍、8bit で 1.3～2.4 倍小さくなり、書き出しは
+    1 スライスあたり 16bit 0.3 秒、8bit 0.1 秒程度(1 スレッド)。非圧縮に戻すには
+    /DLZW を外してビルドする。
+  ・ct_gmem_g(1h)を新設。HiPic ディレクトリ内で実行し、1 スライスの再構成に GPU 版が
+    必要とする GPU メモリを、何も確保せずに見積もって GPU の空き容量と比べる。img / tif
+    は dark ファイルで、180° / 360° オフセットは output.log の角度で自動判別し、
+    オフセットでは回転軸も推定する(his_rec と同じ 1 レイヤー探索)。
+  ・tif2his(6t)を新設(2026-11-02)。a%06d.tif の連番を a.his にパックする。パック時に
+    tif_mgf と同じ median + gaussian をかけられる。
+  ・his_mgf(6u)を新設。his の全フレームに tif_mgf と同じ median + gaussian をかけて
+    別の his に書き出す。
+  ・Windows x64 バイナリ(exe/)を上記の変更で再ビルド(ct_gmem_g.exe、tif2his.exe、
+    his_mgf.exe を追加)。makefileCPU(.bat) に tif2his / his_mgf、makefileGPU(.bat) に
+    ct_gmem_g のビルド行を追加。
 
 【ver 2.8 の変更点】
   ・his_rec_P_F、his_srec_P_F、his_DO、his_sg(2g)を新設。a.his から
@@ -341,6 +361,31 @@
       同一ノードで複数プロセスを並走させる場合は HPTG_MEM_FRACTION を
       下げること(既定のままだと全プロセスが空きメモリの9割を要求する)。
 
+   h. GPU メモリの事前確認
+      ct_gmem_g {layer} {center}
+
+      HiPic ディレクトリ(output.log と dark.img + q????.img、または dark.tif +
+      q????.tif)の中で実行し、1 スライスの再構成に GPU 版が必要とする GPU メモリを
+      見積もって、CUDA_GPU が選ぶ GPU の空き容量と比べる。何も確保せず、再構成も
+      しない。先頭 3 行に回転角(180 / 360)、回転軸位置、必要メモリを出し、以下に
+      GPU の空き/総容量と OK / NOT ENOUGH の判定、内訳(cbp 層のバッファ + cuFFT
+      作業領域、リング除去)、スライスの大きさ N x M、ホスト側のピン止めメモリ、
+      データの諸元を列挙する。
+      img / tif は dark ファイルで(1a)、180° / 360° オフセットは output.log の
+      角度で(2g と同じ基準)自動判別する。オフセットスキャンでは再構成幅が回転軸
+      位置で決まるため、center を与えるか、省略時は layer(省略時は中央行)の 1 行
+      から his_rec と同じ 1 レイヤー探索で推定する(推定値は details に表示)。180°
+      では回転軸は見積もりに影響しないので使わない。
+      見積もりは cbp 層が InitCBP で実際に確保する量(cufftEstimate1d の作業領域を
+      含む)とリング除去の 3 面で、PAD_THRESH(1f)と KERNEL_SIZE(1d)の設定を反映
+      する。CUDA コンテキスト自体(数百 MB)は含まない。1 スライスあたりの GPU 需要は
+      cbp 層を使う全 GPU プログラム(ct_rec / hp_tg / act_tg / his_rec / his_srec、
+      ofct_rec / ofct_srec / ofact_srec)で共通なので、この 1 本で足りる(全層再構成
+      はホストメモリだけ余分に要る。3b の 3 引数形式を参照)。
+
+      例: ct_gmem_g              (中央行から軸推定)
+      例: ct_gmem_g 1024 1900.5  (軸を指定。layer は使われない)
+
 2. 180deg scan。標準的な吸収の画像再構成。
 
    a. 1枚だけ再構成
@@ -434,6 +479,13 @@
       規則で、「hp_tg → tif_f2i」で作ったファイルと同一になる。hp_tg の環境変数
       はすべて有効。ビルドは GPU 版のみで、フィルタの接尾辞は hp_tg と同じ
       (act_tg_g_r / act_tg_g_s / act_tg_g_c)。
+
+      rh / ro の TIFF は LZW 圧縮で書く(makefileGPU.bat の /DLZW。配布 exe も同様)。
+      画素値と ImageDescription は非圧縮の場合と同一で、tif_f2i の出力を読める
+      ソフトはそのまま読める(libtiff、ImageJ / Fiji など)。4096 画素角でファイルは
+      16bit で 1.1～1.5 倍、8bit で 1.3～2.4 倍小さくなり、書き出しは 1 スライス
+      あたり 16bit 0.3 秒、8bit 0.1 秒程度(1 スレッド)。非圧縮に戻すには /DLZW を
+      外してビルドする。
 
       *) hp_tg と同じく、HiPic ディレクトリの一つ上で実行する。
 
@@ -658,6 +710,7 @@
       量子化と ImageDescription は tif_f2i と同じ規則で、「ofct_srec → tif_f2i」
       と同一になる。引数 3 個の形(HiPic Rc Oy)は従来どおりメモリ見積もりのみ。
       ビルドは GPU 版のみで、フィルタの接尾辞は ofct_srec と同じ(ofact_srec_g_r / _s / _c)。
+      出力 TIFF は非圧縮のまま(act_tg の LZW 圧縮は適用していない)。
 
 4. 32bit tiff 画像の規格化
     tif_f2i bit rec out {LACmin LACmax} {x1 y1 x2 y2}
@@ -929,3 +982,34 @@
       を参照。
 
       例: tif2zar rec rec.zarr --min -0.5 --max 3.0
+
+   t. tif 連番を his にパック
+      tif2his {median_kernel_size} {gaussian_sigma}
+
+      カレントディレクトリの a000000.tif または a000001.tif から始まる連番
+      (番号が途切れたところまで)を a.his(HiPic 形式、フレームごとに 64 バイト
+      ヘッダ + 画素、先頭ヘッダに総フレーム数)にパックする。tif で連続取得した
+      データを his_rec / his_srec / his_DO / his_sg(2g)や his_mgf(6u)にかける
+      ためのもの。入力は非圧縮・ストリップ形式のモノクロ 8/16bit 整数 TIFF
+      (II / MM どちらも可)。引数を与えると tif_mgf(6p)と同じ median + gaussian を
+      各フレームにかけてからパックし、結果は tif_mgf で 1 枚ずつ処理した場合と
+      ビット一致する。引数の意味と範囲は tif_mgf と同じだが、省略時はフィルタなし
+      (0 / 0.0)。a.his が既にあれば上書きしない。実行内容は cmd-hst.log に追記する。
+      ※ his_* が読めるのは 16bit の his のみ。8bit 入力は 8bit の his になり警告が出る。
+
+      例: tif2his            (フィルタなし)
+      例: tif2his 3 0.5      (median 3、gaussian σ 0.5 をかけてからパック)
+
+   u. his の全フレームに median + gaussian フィルタ
+      his_mgf input.his output.his median_kernel_size gaussian_sigma
+
+      his の各フレームに tif_mgf(6p)と同じ median → gaussian をかけて別の his に
+      書き出す。フィルタ部は tif_mgf のコードそのもので、結果は tif_mgf で 1 枚ずつ
+      処理した場合とビット一致する。median_kernel_size は 0～25(0、1 はかけない)、
+      gaussian_sigma は 0.0～100.0(0.0 はかけない)で、4 引数とも必須。各フレームの
+      ヘッダとコメントはそのままコピーし画素だけ置き換えるので、出力は入力と同じ
+      サイズ・配置になる。8bit / 16bit どちらの his も扱える。出力ファイルが既に
+      あれば上書きせず終了し、途中でエラーになれば書きかけの出力を削除する。
+      実行内容は cmd-hst.log に追記する。
+
+      例: his_mgf a.his a_mgf.his 3 0.5

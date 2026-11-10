@@ -151,14 +151,14 @@ static void Store8TiffFile(char *wname, int wX, int wY, unsigned char *data8, ch
 	TIFFSetField(image, TIFFTAG_IMAGEWIDTH, wX);
 	TIFFSetField(image, TIFFTAG_IMAGELENGTH, wY);
 	TIFFSetField(image, TIFFTAG_BITSPERSAMPLE, 8);
-	TIFFSetField(image, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
 	TIFFSetField(image, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
 	TIFFSetField(image, TIFFTAG_ARTIST, "act_tg");
 
-	ct_write_raw_strips(image, data8, (uint32_t)wX, (uint32_t)wY, sizeof(unsigned char));
+	/* raw strips, or LZW with -DLZW (tifwrite.h) */
+	ct_write_strips(image, data8, (uint32_t)wX, (uint32_t)wY, sizeof(unsigned char), CT_TIF_COMPRESSION);
 
 	TIFFClose(image);
 }
@@ -172,14 +172,14 @@ static void Store16TiffFile(char *wname, int wX, int wY, unsigned short *data16,
 	TIFFSetField(image, TIFFTAG_IMAGEWIDTH, wX);
 	TIFFSetField(image, TIFFTAG_IMAGELENGTH, wY);
 	TIFFSetField(image, TIFFTAG_BITSPERSAMPLE, 16);
-	TIFFSetField(image, TIFFTAG_COMPRESSION, COMPRESSION_NONE);
 	TIFFSetField(image, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
 	TIFFSetField(image, TIFFTAG_SAMPLESPERPIXEL, 1);
 	TIFFSetField(image, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
 	TIFFSetField(image, TIFFTAG_IMAGEDESCRIPTION, wdesc);
 	TIFFSetField(image, TIFFTAG_ARTIST, "act_tg");
 
-	ct_write_raw_strips(image, data16, (uint32_t)wX, (uint32_t)wY, sizeof(unsigned short));
+	/* raw strips, or LZW with -DLZW (tifwrite.h) */
+	ct_write_strips(image, data16, (uint32_t)wX, (uint32_t)wY, sizeof(unsigned short), CT_TIF_COMPRESSION);
 
 	TIFFClose(image);
 }

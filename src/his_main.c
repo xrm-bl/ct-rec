@@ -133,16 +133,7 @@ static const char	*BaseName(const char *p)
 #if defined(HIS_REC) || defined(HIS_SG)
 
 #include "blacklim.h"	/* same per-pixel floor as the readers */
-
-/* ---- rotation axis of an offset scan from one layer ----
-   A one-dimensional version of ofct_DO's search: for every view pair
-   (m, m+M, 180 degrees apart) the -log transmittances of the layer are
-   smoothed with the same Gaussian (OFCT_DO_SMOOTH, default sigma 10),
-   the second one is mirrored, and the mean squared difference over the
-   overlap is accumulated for every shift Dx in [0.5*Nx, Nx-2] (ofct_DO's
-   range, Dy = 0).  The minimum is refined with a parabola and
-   Rc = (Nx + Dx)/2, as in ofct_DO.  Only the rows of that layer are read
-   from a.his, so this costs a few seconds even for thousands of views. */
+#include "axis1.h"	/* the one-layer offset-axis search, shared with ct_gmem */
 
 typedef struct { int q; double c,a; int it; } View;
 
@@ -184,14 +175,51 @@ static int	ReadLog(const char *dir,View **out)
 
 static double	Log0(double d) { return (d>0.0)?log(d):0.0; }
 
+/* row reader for axis1.h: the layer's -log transmittance of sample view
+   "view" (angle order), with the readers' I0 interpolation in time and the
+   same per-pixel floor (blacklim.h) */
+typedef struct {
+	HisSet		*s;
+	long		layer;
+	int		Nx,Ni;
+	View		*V,*I0;
+	unsigned short	*D,*I0row,*T;
+	double		thr;
+} HisAxisCtx;
+
+static void	HisAxisRow(void *vctx,int view,double *out)
+{
+	HisAxisCtx	*c=(HisAxisCtx *)vctx;
+	View		*pv=c->V+view;
+	unsigned short	*Ia,*Ib;
+	double		r1,r2,t_d,i_d;
+	int		j,x,Nx=c->Nx;
+
+	if (!HisHasQ(c->s,pv->q)) { (void)fprintf(stderr,"q%04d is not produced by conv.bat\n",pv->q); exit(1); }
+	HisReadQBand(c->s,pv->q,(int)c->layer,(int)c->layer,c->T);
+	for (j=c->Ni-2; j>0; j--) if (pv->c>=c->I0[j].c) break;
+	r2=(pv->c-c->I0[j].c)/(c->I0[j+1].c-c->I0[j].c); r1=1.0-r2;
+	Ia=c->I0row+(size_t)j*Nx; Ib=c->I0row+(size_t)(j+1)*Nx;
+	for (x=0; x<Nx; x++) {
+	    t_d=(double)c->T[x]-(double)c->D[x];
+	    i_d=r1*(double)Ia[x]+r2*(double)Ib[x]-(double)c->D[x];
+	    if (!(t_d>=c->thr)) t_d=c->thr;
+	    if (!(i_d>=c->thr)) i_d=c->thr;
+	    out[x]=-Log0(t_d/i_d);
+	}
+}
+
+/* ---- rotation axis of an offset scan from one layer (axis1.h) ----
+   Only the rows of that layer are read from a.his, so this costs a few
+   seconds even for thousands of views. */
 static double	EstimateOffsetAxis(const char *dir,long layer)
 {
-	HisSet	*s=HisOpen(dir);
-	View	*v,*I0,*V;
-	int	n,Ni=0,Nt=0,i,m,M,Nx,x,k,r=0,Ox1,Ox2,Ox,X,Rc;
-	unsigned short	*D,*I0row,*T1,*T2;
-	double	*S,*G,*H,*tmp,*ker=NULL,thr,c1,c2,sig,best,result;
-	char	*env;
+	HisSet		*s=HisOpen(dir);
+	View		*v,*I0,*V;
+	HisAxisCtx	c;
+	int		n,Ni=0,Nt=0,i,M,Nx;
+	unsigned short	*D,*I0row,*T;
+	double		c1,c2,result;
 
 	Nx=HisNx(s);
 	if (layer<0 || layer>=HisNy(s)) {
@@ -212,11 +240,7 @@ static double	EstimateOffsetAxis(const char *dir,long layer)
 	/* the layer's row of dark and of every I0 */
 	if ((D=(unsigned short *)malloc(sizeof(unsigned short)*(size_t)Nx))==NULL ||
 	    (I0row=(unsigned short *)malloc(sizeof(unsigned short)*(size_t)Nx*(size_t)(Ni+1)))==NULL ||
-	    (T1=(unsigned short *)malloc(sizeof(unsigned short)*(size_t)Nx))==NULL ||
-	    (T2=(unsigned short *)malloc(sizeof(unsigned short)*(size_t)Nx))==NULL ||
-	    (G=(double *)malloc(sizeof(double)*(size_t)Nx))==NULL ||
-	    (H=(double *)malloc(sizeof(double)*(size_t)Nx))==NULL ||
-	    (tmp=(double *)malloc(sizeof(double)*(size_t)Nx))==NULL) Fail("no memory.");
+	    (T=(unsigned short *)malloc(sizeof(unsigned short)*(size_t)Nx))==NULL) Fail("no memory.");
 	HisReadDarkBand(s,(int)layer,(int)layer,D);
 	for (i=0; i<Ni; i++) {
 	    if (!HisHasQ(s,I0[i].q)) { (void)fprintf(stderr,"q%04d is not produced by conv.bat\n",I0[i].q); exit(1); }
@@ -228,84 +252,12 @@ static double	EstimateOffsetAxis(const char *dir,long layer)
 	    for (i=0; i<Nt; i++) { if (V[i].c<c1) c1=V[i].c; if (V[i].c>c2) c2=V[i].c; }
 	    I0[1]=I0[0]; I0[0].c=c1-1e-9; I0[1].c=c2+1e-9; Ni=2;
 	}
-	thr=BlackThresh();
+	c.s=s; c.layer=layer; c.Nx=Nx; c.Ni=Ni; c.V=V; c.I0=I0; c.D=D; c.I0row=I0row; c.T=T;
+	c.thr=BlackThresh();
 
-	/* Gaussian kernel of ofct_DO (OFCT_DO_SMOOTH, default 10; 0 = off) */
-	sig=((env=getenv("OFCT_DO_SMOOTH"))!=NULL)?atof(env):10.0;
-	if (sig>0.0) {
-	    double	sm=0.0;
-	    r=(int)ceil(3.0*sig);
-	    if ((ker=(double *)malloc(sizeof(double)*(size_t)(2*r+1)))==NULL) Fail("no memory.");
-	    for (k=-r; k<=r; k++) { ker[k+r]=exp(-0.5*(double)k*k/(sig*sig)); sm+=ker[k+r]; }
-	    for (k=0; k<2*r+1; k++) ker[k]/=sm;
-	}
+	result=EstimateOffsetAxis1(Nx,M,layer,HisAxisRow,&c);
 
-	Ox1=(int)ceil(0.5*Nx); Ox2=Nx-2; Ox=Ox2-Ox1+1;
-	if ((S=(double *)calloc((size_t)Ox,sizeof(double)))==NULL) Fail("no memory.");
-
-	for (m=0; m<M; m++) {
-	    int		j,p;
-	    double	r1,r2,t_d,i_d;
-	    double	*row[2]={G,H};
-	    View	*pv[2]={V+m,V+m+M};
-
-	    for (p=0; p<2; p++) {
-		unsigned short	*T=(p==0)?T1:T2,*Ia,*Ib;
-
-		if (!HisHasQ(s,pv[p]->q)) { (void)fprintf(stderr,"q%04d is not produced by conv.bat\n",pv[p]->q); exit(1); }
-		HisReadQBand(s,pv[p]->q,(int)layer,(int)layer,T);
-		for (j=Ni-2; j>0; j--) if (pv[p]->c>=I0[j].c) break;
-		r2=(pv[p]->c-I0[j].c)/(I0[j+1].c-I0[j].c); r1=1.0-r2;
-		Ia=I0row+(size_t)j*Nx; Ib=I0row+(size_t)(j+1)*Nx;
-		for (x=0; x<Nx; x++) {
-		    t_d=(double)T[x]-(double)D[x];
-		    i_d=r1*(double)Ia[x]+r2*(double)Ib[x]-(double)D[x];
-		    if (!(t_d>=thr)) t_d=thr;
-		    if (!(i_d>=thr)) i_d=thr;
-		    if (p==0) G[x]=-Log0(t_d/i_d); else H[Nx-1-x]=-Log0(t_d/i_d);
-		}
-		if (sig>0.0) {	/* same truncated, border-renormalised kernel as ofct_DO */
-		    double	*F=row[p],sum,w;
-		    for (x=0; x<Nx; x++) {
-			sum=w=0.0;
-			for (k=-r; k<=r; k++) if (x+k>=0 && x+k<Nx) { sum+=F[x+k]*ker[k+r]; w+=ker[k+r]; }
-			tmp[x]=sum/w;
-		    }
-		    memcpy(F,tmp,sizeof(double)*(size_t)Nx);
-		}
-	    }
-	    for (k=0; k<Ox; k++) {		/* G(x) vs mirrored H(x-Dx) over the overlap */
-		/* keep the smoothing radius r away from both ends of the overlap:
-		   there the truncated, re-normalised kernel distorts the profiles
-		   asymmetrically and biases the minimum (about +0.6 px with the
-		   default sigma 10 on test data; exact without smoothing) */
-		int	Dx=Ox1+k,x1=Dx+r,x2=Nx-r;
-		double	d,ssd=0.0;
-		if (x2-x1<8) { x1=Dx; x2=Nx; }
-		for (x=x1; x<x2; x++) { d=G[x]-H[x-Dx]; ssd+=d*d; }
-		S[k]+=ssd/(double)(x2-x1);
-	    }
-	}
-
-	best=S[X=0];
-	for (k=1; k<Ox; k++) if (S[k]<best) { best=S[k]; X=k; }
-	{
-	    double	dx=0.0,a,b,c,den,centerf;
-	    if (X>=1 && X<=Ox-2) {
-		a=S[X-1]; b=S[X]; c=S[X+1]; den=a-2.0*b+c;
-		if (den>0.0) { dx=0.5*(a-c)/den; if (dx<-1.0) dx=-1.0; if (dx>1.0) dx=1.0; }
-	    }
-	    centerf=((double)(Nx+Ox1+X)+dx)/2.0;
-	    Rc=(int)floor(centerf+0.5);
-	    (void)fprintf(stderr,"offset axis estimate at layer %ld: %d view pairs, shift %d%+.3f -> centre %.3f (Rc %d)\n",
-			  layer,M,Ox1+X,dx,centerf,Rc);
-	    result=centerf;
-	    if (X==0 || X==Ox-1)
-		(void)fprintf(stderr,"warning: the minimum lies at the edge of the search range (centre %d .. %d, as ofct_DO); "
-			      "the estimate is unreliable - give center explicitly.\n",(Nx+Ox1)/2,(Nx+Ox2)/2);
-	}
-
-	free(S); free(ker); free(tmp); free(H); free(G); free(T2); free(T1); free(I0row); free(D);
+	free(T); free(I0row); free(D);
 	free(V); free(I0); free(v);
 	HisClose(s);
 	return result;

@@ -25,6 +25,9 @@ int get_num_threads_from_env(void);
  * of the same or smaller size (3 * Nx * Ny * 4 bytes stay allocated).
  * Call this to free them early; they are also released at process exit. */
 void sort_filter_gpu_release(void);
+/* device memory the ring removal keeps for an Nx x Ny sinogram (3 buffers of
+   4 bytes per element), 0 when KERNEL_SIZE turns it off; nothing is allocated */
+size_t sort_filter_gpu_bytes(unsigned int Nx, unsigned int Ny);
 
 /* Pinned (page-locked) host memory for image_data / result_data: makes the
  * host<->device copies inside sort_filter_restore_gpu() run at full PCIe

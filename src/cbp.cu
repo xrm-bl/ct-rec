@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 #include <cufft.h>
 #include "cu.h"
 #include "cbp.h"
@@ -272,6 +273,55 @@ __global__ void	PadPQ(int L,int Nn,int W,int L1f2,float *PQf)
 	row[L+Nn-1+k]=row[L+Nn-1]*w;
 }
 
+/* ---- GPU 側バッファの需要 (バイト) ----
+   InitCBP と同じ規則で L, L1, L2, MOmax, batch, tail を n, m から求め、
+   G + PQ + F + SC + cuFFT ワークスペース (cufftEstimate1d: プランは作らず
+   GPU メモリも使わない) を合計する。InitCBP の事前見積もりと ct_gmem が使う。
+   静的変数には触れないので、InitCBP の前後どちらでも呼べる。 */
+EXTERN size_t	EstimateCBPMemory(int n,int m)
+{
+	int	l,l1,l2,bt,tl,nl=(PadThreshold()>0.0)?n+n/2:n;
+	size_t	mo,need,ws;
+
+	for (l=1; l<nl; l*=2) ;
+	l1=l+1; l2=l*2;
+#ifdef	WAI
+	mo=(size_t)m*(size_t)NAI(m,(double)(n-1)/2.0);
+#else
+	mo=(size_t)m;
+#endif
+	bt=(int)(CUFFT_LIMIT/(size_t)l2);
+	if (bt<1) bt=1;
+	if (bt>m) bt=m;
+	tl=m%bt;
+
+	need=sizeof(float2)*(size_t)l1			/* G  */
+	    +sizeof(float2)*(size_t)l1*mo		/* PQ */
+	    +sizeof(float)*(size_t)n*(size_t)n		/* F  */
+	    +sizeof(float2)*mo;				/* SC */
+	if (cufftEstimate1d(l2,CUFFT_R2C,bt,&ws)==CUFFT_SUCCESS) need+=ws;
+	if (cufftEstimate1d(l2,CUFFT_C2R,bt,&ws)==CUFFT_SUCCESS) need+=ws;
+	if (tl) {
+	    if (cufftEstimate1d(l2,CUFFT_R2C,tl,&ws)==CUFFT_SUCCESS) need+=ws;
+	    if (cufftEstimate1d(l2,CUFFT_C2R,tl,&ws)==CUFFT_SUCCESS) need+=ws;
+	}
+	return need;
+}
+
+/* ---- CUDA_GPU が選ぶデバイスの名前と空き/総メモリ (ct_gmem 用) ---- */
+EXTERN int	CBPDeviceInfo(char *name,int len,size_t *freeB,size_t *totalB)
+{
+	cudaDeviceProp	dp;
+	int		dev;
+
+	SETUP_CUDA_GPU();
+	if (cudaGetDevice(&dev)!=cudaSuccess ||
+	    cudaGetDeviceProperties(&dp,dev)!=cudaSuccess ||
+	    cudaMemGetInfo(freeB,totalB)!=cudaSuccess) return 1;
+	if (name!=NULL && len>0) { (void)strncpy(name,dp.name,(size_t)len-1); name[len-1]='\0'; }
+	return 0;
+}
+
 EXTERN Float	**InitCBP(int n,int m)
 {
 	SETUP_CUDA_GPU();
@@ -325,24 +375,11 @@ EXTERN Float	**InitCBP(int n,int m)
 	   空き容量と比べ、不足見込みなら警告する。最近の Windows ドライバは
 	   VRAM が尽きてもエラーを出さずシステム RAM へ退避する(大幅に遅く
 	   なるだけ)ため、この警告が不足を知る唯一の手掛かりになる。
-	   Linux では超過分の cudaMalloc が "out of memory" で停止する。 */
+	   Linux では超過分の cudaMalloc が "out of memory" で停止する。
+	   需要の計算は EstimateCBPMemory() (ct_gmem も使う) に共通化。 */
 	{
-	    size_t	need,ws,freeB,totalB;
+	    size_t	need=EstimateCBPMemory(N,M),freeB,totalB;
 
-	    need=sof2_L1			/* G  */
-		+sof2_L1*MOmax			/* PQ */
-		+sof_N*(size_t)N		/* F  */
-		+sizeof(float2)*MOmax;		/* SC */
-	    if (cufftEstimate1d(L2,CUFFT_R2C,batch,&ws)==CUFFT_SUCCESS)
-		need+=ws;
-	    if (cufftEstimate1d(L2,CUFFT_C2R,batch,&ws)==CUFFT_SUCCESS)
-		need+=ws;
-	    if (tail) {
-		if (cufftEstimate1d(L2,CUFFT_R2C,tail,&ws)==CUFFT_SUCCESS)
-		    need+=ws;
-		if (cufftEstimate1d(L2,CUFFT_C2R,tail,&ws)==CUFFT_SUCCESS)
-		    need+=ws;
-	    }
 	    if (cudaMemGetInfo(&freeB,&totalB)==cudaSuccess && need>freeB)
 		(void)fprintf(stderr,
 		    "cbp.cu: GPU buffers need ~%.0f MiB but only %.0f MiB is "

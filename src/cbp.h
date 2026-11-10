@@ -22,6 +22,12 @@ EXTERN void	PrepareCBP();
 EXTERN void	ExecuteCBP(double dr,double r0,double t0);
 EXTERN void	BeginCBP(double dr,double r0,double t0);
 EXTERN void	TermCBP();
+/* GPU build only (cbp.cu): device memory the CBP buffers of one slice of N x M
+   need (G, PQ, F, SC and the cuFFT work areas), without allocating anything;
+   InitCBP uses it for its own warning.  CBPDeviceInfo reports the device
+   chosen by CUDA_GPU (name, free and total memory); returns 0 on success. */
+EXTERN size_t	EstimateCBPMemory(int N,int M);
+EXTERN int	CBPDeviceInfo(char *name,int len,size_t *freeB,size_t *totalB);
 
 #ifndef	M_PI
 #define M_PI	3.14159265358979323846
