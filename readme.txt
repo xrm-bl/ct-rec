@@ -32,6 +32,11 @@
   ・Windows x64 バイナリ(exe/)を上記の変更で再ビルド(ct_gmem_g.exe、tif2his.exe、
     his_mgf.exe を追加)。makefileCPU(.bat) に tif2his / his_mgf、makefileGPU(.bat) に
     ct_gmem_g のビルド行を追加。
+  ・Fiji-plugins/ を新設。Fiji で HIS / IMG / KIF / FPI をドラッグ＆ドロップで開くための
+    SciJava IOPlugin(jars/SP8CT_IO-0.1.0.jar、ソースと pom.xml は src/)と、
+    plugins/ に置く SP8CT_Plugins.jar、導入手順 plugin_setup.md(ImageJ と Fiji で置く
+    ファイルが異なる点、Use SCIFIO の設定、Bio-Formats の HIS を外す手順)。ImageJ 1.x
+    向けは従来どおり imagej-plugins/。
 
 【ver 2.8 の変更点】
   ・his_rec_P_F、his_srec_P_F、his_DO、his_sg(2g)を新設。a.his から

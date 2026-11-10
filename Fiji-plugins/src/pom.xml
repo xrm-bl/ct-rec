@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!-- SciJava 共通の親POM。依存ライブラリのバージョンはここで一括管理される -->
+  <parent>
+    <groupId>org.scijava</groupId>
+    <artifactId>pom-scijava</artifactId>
+    <version>40.0.0</version>
+    <relativePath />
+  </parent>
+
+  <groupId>jp.spring8.sp8ct</groupId>
+  <artifactId>SP8CT_IO</artifactId>
+  <version>0.1.0</version>
+  <name>SP8CT IO</name>
+  <description>Fiji (ImageJ2) reader for HIS / IMG / KIF / FPI files. Delegates to Open_HIS_IMG in SP8CT_Plugins.jar.</description>
+
+  <properties>
+    <!-- pom-scijava が要求する公開用メタデータ（licenses, developers 等）のチェックを省略 -->
+    <enforcer.skip>true</enforcer.skip>
+    <license.skip>true</license.skip>
+  </properties>
+
+  <repositories>
+    <repository>
+      <id>scijava.public</id>
+      <url>https://maven.scijava.org/content/groups/public</url>
+    </repository>
+  </repositories>
+
+  <!-- いずれも Fiji に同梱済みなので、jar には含めない（provided） -->
+  <dependencies>
+    <dependency>
+      <groupId>org.scijava</groupId>
+      <artifactId>scijava-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.imagej</groupId>
+      <artifactId>imagej-common</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.imagej</groupId>
+      <artifactId>ij</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.imglib2</groupId>
+      <artifactId>imglib2-ij</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+</project>

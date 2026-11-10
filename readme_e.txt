@@ -36,6 +36,11 @@ Uesugi
   - Windows x64 binaries (exe/) rebuilt with the changes above (new
     ct_gmem_g.exe, tif2his.exe and his_mgf.exe).  makefileCPU(.bat) gained
     the tif2his / his_mgf rules and makefileGPU(.bat) the ct_gmem_g rule.
+  - New Fiji-plugins/: a SciJava IOPlugin (jars/SP8CT_IO-0.1.0.jar, source
+    and pom.xml in src/) that lets Fiji open HIS / IMG / KIF / FPI files by
+    drag and drop, the SP8CT_Plugins.jar for plugins/, and plugin_setup.md
+    (which files go where in ImageJ vs Fiji, the "Use SCIFIO" option, and
+    disabling Bio-Formats' HIS reader).  imagej-plugins/ stays for ImageJ 1.x.
 
 [ver 2.8 changes]
   - New his_rec_P_F, his_srec_P_F, his_DO and his_sg (2g):
