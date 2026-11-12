@@ -41,6 +41,18 @@ Uesugi
     drag and drop, the SP8CT_Plugins.jar for plugins/, and plugin_setup.md
     (which files go where in ImageJ vs Fiji, the "Use SCIFIO" option, and
     disabling Bio-Formats' HIS reader).  imagej-plugins/ stays for ImageJ 1.x.
+  - New hp_tg_g_F_n2i (2b) and ofct_srec_g_F_n2i (3b): the Noise2Inverse view
+    split of his_srec_g_F_n2i on q????.img / q????.tif data sets (the bodies
+    are hp_tg / ofct_srec unchanged; the front end n2i.h / n2i_main.c and the
+    RHIS_VIEWS filter rhp_views.h are shared with his_srec_g_F_n2i).  The
+    ofct_srec_g / ofct_DO_g / ofct_rec_g rules missing from MakefileGPU since
+    ver 2.8 are restored.  Six new .exe in exe/.
+  - p_rec (2c) and sf_rec (6c) now take RA0 in degrees (it used to be passed
+    to the back-projection unconverted, i.e. as radians).  The in-plane
+    rotation angle is now in degrees for every reconstruction program
+    (offsetangle of ct_rec / ofct_rec / his_rec, RA0 of hp_tg / act_tg /
+    ofct_srec / ofact_srec / his_srec / p_rec / sf_rec).  Only runs with
+    RA0 != 0 are affected.  RA0 in the TIFF ImageDescription stays in radians.
 
 [ver 2.8 changes]
   - New his_rec_P_F, his_srec_P_F, his_DO and his_sg (2g):
@@ -503,7 +515,7 @@ Uesugi
       HiPic: Directory containing q????.img or q????.tif files (no trailing /)
       Dr: Pixel size (um)
       RC: Rotation axis position
-      RA0: Rotation axis origin offset
+      RA0: Rotation axis origin offset (degrees)
       rec: Output directory for reconstructed images (must be created
            before execution)
 
@@ -516,11 +528,26 @@ Uesugi
       C1: Rotation axis position at L1
       L2: End layer
       C2: Rotation axis position at L2
-      RA0: Rotation axis origin offset
+      RA0: Rotation axis origin offset (degrees)
       rec: Output directory for reconstructed images (no trailing /.
            Must be created before execution.)
 
       *) Run one directory above the directory containing q????.img files.
+
+      hp_tg_g_F_n2i HiPic Dr RC RA0 rec K                    (GPU)
+      hp_tg_g_F_n2i HiPic Dr L1 C1 L2 C2 RA0 rec K
+      hp_tg for Noise2Inverse: the sample views (in angle order) are split
+      into K = 2 or 4 interleaved subsets (k, k+K, k+2K, ...) and each subset
+      is reconstructed as hp_tg into rec/k, with RA0 shifted by the angle of
+      the subset's first view (taken from output.log) so that the K volumes
+      share one geometry; RC and Dr are the same for every subset.  The
+      number of sample views must be a multiple of K.  The subsets run one
+      after another as child processes of the program; each child is an
+      ordinary hp_tg run with the environment variable RHIS_VIEWS=k/K, which
+      can also be set by hand with hp_tg to reconstruct a single subset.
+      cmd-hst.log carries "% RHIS_VIEWS=k/K".  This is his_srec_g_F_n2i (2g)
+      for q????.img / q????.tif data; ofct_srec_g_F_n2i (3b) is the
+      360-degree offset counterpart.
 
    c. Continuous Reconstruction from p-images
       p_rec_P_F p rec Dr RC RA0
@@ -532,7 +559,7 @@ Uesugi
            before execution)
       Dr: Pixel size (um)
       RC: Rotation axis position
-      RA0: Rotation axis origin offset
+      RA0: Rotation axis origin offset (degrees)
 
       p_rec_P_F p rec Dr L1 C1 L2 C2 RA0
       (When the rotation axis is tilted.)
@@ -545,7 +572,7 @@ Uesugi
       C1: Rotation axis position at L1
       L2: End layer
       C2: Rotation axis position at L2
-      RA0: Rotation axis origin offset
+      RA0: Rotation axis origin offset (degrees)
 
    d. Continuous Reconstruction by Running ct_rec in Parallel
       ct_rec_loop.bat HiPic Dr RC RA0 rec {Njobs}            (Windows)
@@ -720,6 +747,8 @@ Uesugi
       environment variable RHIS_VIEWS=k/K, which can also be set by hand
       with his_srec to reconstruct a single subset.  cmd-hst.log carries
       "% RHIS_VIEWS=k/K".  RHIS_SCAN and RHIS_TB apply to every subset.
+      For q????.img / q????.tif data sets use hp_tg_g_F_n2i (2b) /
+      ofct_srec_g_F_n2i (3b): the same front end on hp_tg / ofct_srec.
 
       Z scans.  When a.his holds M scans of L frames each (L = the highest
       frame number conv.bat names, M = frames / L; the layout spl /
@@ -791,6 +820,14 @@ Uesugi
             width N, the padded length L, the number of view pairs M and
             the size of the projection buffer 4*N*L*M in GB, as a check
             before a large run)
+      ofct_srec_g_F_n2i HiPic Rc Oy rangeList Dr RA0 rec K          (GPU)
+      ofct_srec_g_F_n2i HiPic L1 C1 L2 C2 Oy rangeList Dr RA0 rec K
+           (Noise2Inverse: the sample views, in angle order, are split into
+            K = 2 or 4 interleaved subsets and each is reconstructed as
+            ofct_srec into rec/0 .. rec/K-1.  The number of sample views must
+            be a multiple of 2K, so that the opposing views m and m+Nt/2 fall
+            into the same subset.  Otherwise as hp_tg_g_F_n2i in 2b; there is
+            no three-argument check form.)
 
       HiPic: Directory containing q????.img or q????.tif files (no trailing /)
       Rc: Rotation axis position (pixels from left edge).  May be
@@ -924,7 +961,7 @@ Uesugi
       output: Output as float TIFF
       Dr: Pixel size
       RC: Rotation axis position
-      RA0: Rotation axis origin offset
+      RA0: Rotation axis origin offset (degrees)
 
    d. Average img Images
       img_ave file1 file2... output

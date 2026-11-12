@@ -35,10 +35,11 @@ NVCCFLAGS = -O3 -I$(CUDAINCL) $(CUDA_ARCH) -use_fast_math -Xcompiler "-Wno-unuse
 EXE_DIR = ../bin
 
 .PHONY: all clean ct_rec_g hp_tg_g his_g his_rec_g his_srec_g his_DO_g his_tb_g his_tb_rec_g his_tb_srec_g his_n2i_g \
-        ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g act_tg_g ofact_srec_g filters_g ct_gmem_g
+        ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g act_tg_g ofact_srec_g filters_g ct_gmem_g \
+        n2i_g hp_tg_g_n2i ofct_srec_g_n2i
 
 all: ct_rec_g hp_tg_g his_g \
-     ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g filters_g ct_gmem_g
+     ofct_srec_g ofct_rec_g ofct_DO_g p_rec_g act_g filters_g ct_gmem_g n2i_g
 
 # ---------------------------------------------------------------
 # GPU ring removal object (pure CUDA C; no Thrust, no -lstdc++)
@@ -175,6 +176,70 @@ his_DO_g: his_rhis_hp_d.o
 	nvcc $(NVCCFLAGS) -Xcompiler -fopenmp -DHIS_INPUT -DHIS_DO -DONLY_CT_VIEWS -o $(EXE_DIR)/his_DO_g ofct_DO.cu his_main.c hp2DO.c rhis.c error.c his_rhis_hp_d.o $(TIFFLIB) -lgomp
 
 # ---------------------------------------------------------------
+# Offset CT reconstruction (GPU)
+# ---------------------------------------------------------------
+ofct_srec_g: ofct_srec_g_r ofct_srec_g_s ofct_srec_g_c
+
+ofct_srec_g_r: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofct_srec_g_r ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofct_srec_g_s: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofct_srec_g_s ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofct_srec_g_c: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofct_srec_g_c ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+
+# offset-CT rotation-axis finder (GPU); img/tif auto-detect via rhp_c.c (FOM=double)
+ofct_DO_g:
+	nvcc $(NVCCFLAGS) -o $(EXE_DIR)/ofct_DO_g ofct_DO.cu rhp_c.c error.c $(TIFFLIB) $(LIBS)
+
+ofct_rec_g: ofct_rec_g_r ofct_rec_g_s ofct_rec_g_c
+
+ofct_rec_g_r: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofct_rec_g_r ofct_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofct_rec_g_s: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofct_rec_g_s ofct_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofct_rec_g_c: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -o $(EXE_DIR)/ofct_rec_g_c ofct_rec.c error.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+
+# ---------------------------------------------------------------
+# Noise2Inverse on q????.img / .tif (GPU): the front end of
+# his_srec_g_F_n2i (n2i.h, here via n2i_main.c) in front of the unchanged
+# hp_tg (180 deg) / ofct_srec (360 deg offset) bodies, main() renamed with
+# -DN2I.  rhp_c.c honours RHIS_VIEWS=k/K (rhp_views.h) like rhis_hp.c.
+# Both bodies are compiled with -DONLY_CT_VIEWS as in his_srec, so the
+# children read the views the front end counted.
+#   hp_tg_g_F_n2i     HiPic Dr RC RA0 rec K                 (also L1 C1 L2 C2)
+#   ofct_srec_g_F_n2i HiPic Rc Oy rangeList Dr RA0 rec K   (also L1 C1 L2 C2 Oy ...)
+# ---------------------------------------------------------------
+n2i_g: hp_tg_g_n2i ofct_srec_g_n2i
+hp_tg_g_n2i: hp_tg_g_r_n2i hp_tg_g_s_n2i hp_tg_g_c_n2i
+ofct_srec_g_n2i: ofct_srec_g_r_n2i ofct_srec_g_s_n2i ofct_srec_g_c_n2i
+
+hp_tg_g_r_n2i: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DFOM=float -DFloat=float -DN2I -DN2I_HP_TG -o $(EXE_DIR)/hp_tg_g_r_n2i n2i_main.c hp_tg_ku.c error.c rhp_c.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+hp_tg_g_s_n2i: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DFOM=float -DFloat=float -DN2I -DN2I_HP_TG -o $(EXE_DIR)/hp_tg_g_s_n2i n2i_main.c hp_tg_ku.c error.c rhp_c.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+hp_tg_g_c_n2i: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DFOM=float -DFloat=float -DN2I -DN2I_HP_TG -o $(EXE_DIR)/hp_tg_g_c_n2i n2i_main.c hp_tg_ku.c error.c rhp_c.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofct_srec_g_r_n2i: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Ramachandran -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DN2I -DN2I_OFCT_SREC -o $(EXE_DIR)/ofct_srec_g_r_n2i n2i_main.c ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofct_srec_g_s_n2i: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Shepp -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DN2I -DN2I_OFCT_SREC -o $(EXE_DIR)/ofct_srec_g_s_n2i n2i_main.c ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+ofct_srec_g_c_n2i: sort_filter_g.o
+	nvcc $(NVCCFLAGS) cbp.cu -DFloat=float -c -DFilter=Chesler -o cbp.o
+	$(CC) $(CFLAGS) $(OMPF) -DUSE_GPU -DONLY_CT_VIEWS -DN2I -DN2I_OFCT_SREC -o $(EXE_DIR)/ofct_srec_g_c_n2i n2i_main.c ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.o $(TIFFLIB) cbp.o $(CUFFT) $(CUDART) -lstdc++ $(LIBS)
+
+# ---------------------------------------------------------------
 # Automatic-CT continuous reconstruction (GPU):
 # hp_tg / ofct_srec with direct 16bit (rh*.tif) + 8bit (ro*.tif) output,
 # normalization range on the command line; no 32bit float tiff stage.
@@ -282,6 +347,8 @@ clean:
 	$(EXE_DIR)/his_srec_g_r_n2i $(EXE_DIR)/his_srec_g_s_n2i $(EXE_DIR)/his_srec_g_c_n2i \
 	$(EXE_DIR)/tf_tg_g_r  $(EXE_DIR)/tf_tg_g_s  $(EXE_DIR)/tf_tg_g_c \
 	$(EXE_DIR)/ofct_srec_g_r $(EXE_DIR)/ofct_srec_g_s $(EXE_DIR)/ofct_srec_g_c \
+	$(EXE_DIR)/hp_tg_g_r_n2i $(EXE_DIR)/hp_tg_g_s_n2i $(EXE_DIR)/hp_tg_g_c_n2i \
+	$(EXE_DIR)/ofct_srec_g_r_n2i $(EXE_DIR)/ofct_srec_g_s_n2i $(EXE_DIR)/ofct_srec_g_c_n2i \
 	$(EXE_DIR)/ofct_rec_g_r  $(EXE_DIR)/ofct_rec_g_s  $(EXE_DIR)/ofct_rec_g_c \
 	$(EXE_DIR)/act_tg_g_r    $(EXE_DIR)/act_tg_g_s    $(EXE_DIR)/act_tg_g_c \
 	$(EXE_DIR)/ofact_srec_g_r $(EXE_DIR)/ofact_srec_g_s $(EXE_DIR)/ofact_srec_g_c $(EXE_DIR)/ct_gmem_g \

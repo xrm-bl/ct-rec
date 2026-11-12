@@ -41,7 +41,10 @@ rem hp_tg wants FOM=float and ofct_srec FOM=double, so those objects and rhis_hp
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_SREC /Fehis_srec_g_r.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_REC /DHIS_TB /Fehis_tb_rec_g_r.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_g.obj %SIF_F% %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_SREC /DHIS_TB /Fehis_tb_srec_g_r.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+rem hp_tg_g_F_n2i / ofct_srec_g_F_n2i (below): the same Noise2Inverse front end (n2i.h via n2i_main.c) on q????.img / .tif;
+rem the bodies are compiled with /DONLY_CT_VIEWS as in his_srec, rhp_c.c honours RHIS_VIEWS (rhp_views.h).
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_N2I /Fehis_srec_g_r_n2i.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /DN2I /DN2I_HP_TG /Fehp_tg_g_r_n2i.exe n2i_main.c hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
 rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_r.exe tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
@@ -60,6 +63,7 @@ rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_REC /DHIS_TB /Fehis_tb_rec_g_s.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_g.obj %SIF_F% %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_SREC /DHIS_TB /Fehis_tb_srec_g_s.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_N2I /Fehis_srec_g_s_n2i.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /DN2I /DN2I_HP_TG /Fehp_tg_g_s_n2i.exe n2i_main.c hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
 rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_s.exe  tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
@@ -78,6 +82,7 @@ rem %CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /Fetf_tg_g
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_REC /DHIS_TB /Fehis_tb_rec_g_c.exe his_main.c ct_rec_c.c ofct_rec.c rhis.c error.c sort_filter_g.obj %SIF_F% %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_SREC /DHIS_TB /Fehis_tb_srec_g_c.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 %CC2% /openmp /DUSE_GPU /DHIS_INPUT /DHIS_N2I /Fehis_srec_g_c_n2i.exe his_main.c rhis.c error.c rl.c his_hp_tg_g.obj his_ofct_srec_g.obj his_rhis_hp_f.obj his_rhis_hp_d.obj sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DFOM=float /DFloat=float /DN2I /DN2I_HP_TG /Fehp_tg_g_c_n2i.exe n2i_main.c hp_tg_ku.c error.c rhp_c.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 rem %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
 rem %CC2% /openmp /DUSE_GPU /Fetf_rec_g_c.exe  tf_rec.c error.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
@@ -91,12 +96,15 @@ rem GPU
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Ramachandran
 %CC2% /openmp /DUSE_GPU /Feofct_srec_g_r.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DN2I /DN2I_OFCT_SREC /Feofct_srec_g_r_n2i.exe n2i_main.c ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Shepp
 %CC2% /openmp /DUSE_GPU /Feofct_srec_g_s.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DN2I /DN2I_OFCT_SREC /Feofct_srec_g_s_n2i.exe n2i_main.c ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 %NVCC% cbp.cu -DFloat=float -c -DFilter=Chesler
 %CC2% /openmp /DUSE_GPU /Feofct_srec_g_c.exe ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
+%CC2% /openmp /DUSE_GPU /DONLY_CT_VIEWS /DN2I /DN2I_OFCT_SREC /Feofct_srec_g_c_n2i.exe n2i_main.c ofct_srec.c error.c rhp_c.c rl.c sort_filter_g.obj %TIFFLIB% %CUFFT% %CUDART% cbp.obj
 
 
 rem offset-CT rotation-axis finder (GPU); img/tif auto-detect via rhp_c.c (FOM=double)

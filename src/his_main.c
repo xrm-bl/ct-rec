@@ -47,10 +47,12 @@
  *            subsets (k, k+K, ...) and each is reconstructed as his_srec
  *            into rec/k with RA0 shifted by the angle of its first view,
  *            so the K volumes share one geometry.  Every subset runs in a
- *            child process of this program (RHIS_VIEWS=k/K, see rhis_hp.c),
- *            because hp_tg keeps static state for one run.  On an offset
- *            scan the number of views must be a multiple of 2K, so that
- *            the opposing views (m, m+Nt/2) fall into the same subset.
+ *            child process of this program (n2i.h; RHIS_VIEWS=k/K, see
+ *            rhp_views.h), because hp_tg keeps static state for one run.
+ *            On an offset scan the number of views must be a multiple of
+ *            2K, so that the opposing views (m, m+Nt/2) fall into the same
+ *            subset.  hp_tg_g_F_n2i / ofct_srec_g_F_n2i (n2i_main.c) are
+ *            the same front end on q????.img / .tif data sets.
  *
  * Z scans: when a.his holds M scans of L frames (L = the highest frame
  *   conv.bat names, the layout his_spl_E splits into 001/raw .. 00M/raw)
@@ -352,127 +354,8 @@ extern int	hp_tg_main(int argc,char **argv);
 extern int	ofct_srec_main(int argc,char **argv);
 
 #ifdef HIS_N2I
-#ifdef WINDOWS
-#include <process.h>
-#include <direct.h>
-#define MKDIR(p)	_mkdir(p)
-#define SETENV(n,v)	_putenv_s(n,v)
-#else
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#define MKDIR(p)	mkdir(p,0777)
-#define SETENV(n,v)	setenv(n,v,1)
-#endif
-
-/* angles of the sample views listed before the first blank line of
-   <dir>/output.log (or RHP_O), sorted ascending; returns their number */
-static int	SampleAngles(const char *dir,double **angles)
-{
-	char	path[LEN],str[LEN],*env;
-	FILE	*f;
-	int	q,it,n=0,cap=1024,i,j;
-	double	c,a,*v=(double *)malloc(sizeof(double)*(size_t)cap),t;
-
-	if (v==NULL) Fail("no memory.");
-	if ((env=getenv("RHP_O"))!=NULL && *env!='\0') (void)snprintf(path,LEN,"%s",env);
-	else if (snprintf(path,LEN,"%s/output.log",dir)>=LEN) Fail("output.log : path too long.");
-	if ((f=fopen(path,"r"))==NULL) { (void)fprintf(stderr,"%s : file not open.\n",path); exit(1); }
-	while (fgets(str,LEN,f)!=NULL) {
-	    if (sscanf(str,"%d %lf %lf %d",&q,&c,&a,&it)!=4) break;	/* ONLY_CT_VIEWS */
-	    if (it!=1) continue;
-	    if (n==cap && (v=(double *)realloc(v,sizeof(double)*(size_t)(cap*=2)))==NULL) Fail("no memory.");
-	    v[n++]=a;
-	}
-	(void)fclose(f);
-	for (i=1; i<n; i++) { t=v[i]; for (j=i; j>0 && v[j-1]>t; j--) v[j]=v[j-1]; v[j]=t; }
-	*angles=v;
-	return n;
-}
-
-/* run this program once per subset as a child process */
-static int	RunChild(char **args)
-{
-#ifdef WINDOWS
-	char	**qa;
-	int	i,n,st;
-
-	for (n=0; args[n]!=NULL; n++) ;
-	if ((qa=(char **)malloc(sizeof(char *)*(size_t)(n+1)))==NULL) Fail("no memory.");
-	for (i=0; i<n; i++) {		/* the CRT joins the arguments with blanks and does not quote */
-	    if (strchr(args[i],' ')!=NULL) {
-		size_t	l=strlen(args[i]);
-		if ((qa[i]=(char *)malloc(l+3))==NULL) Fail("no memory.");
-		qa[i][0]='"'; memcpy(qa[i]+1,args[i],l); qa[i][l+1]='"'; qa[i][l+2]='\0';
-	    }
-	    else qa[i]=args[i];
-	}
-	qa[n]=NULL;
-	st=(int)_spawnvp(_P_WAIT,args[0],(const char *const *)qa);
-	return st;
-#else
-	pid_t	pid=fork();
-	int	st=0;
-
-	if (pid<0) Fail("fork failed.");
-	if (pid==0) { execvp(args[0],args); perror(args[0]); _exit(127); }
-	if (waitpid(pid,&st,0)<0) Fail("waitpid failed.");
-	return WIFEXITED(st)?WEXITSTATUS(st):128;
-#endif
-}
-
-static int	N2iParent(int argc,char **argv)
-{
-	char	views[32],ra[32],rec[LEN],*args[12];
-	const char	*prog=BaseName(argv[0]);
-	double	*a,ra0;
-	int	K,k,Nt,i,n,ira,irec,st,offset;
-
-	if (argc!=7 && argc!=10) {
-	    (void)fprintf(stderr,
-		"usage : %s HiPic Dr RC RA0 rec K\n"
-		"usage : %s HiPic Dr L1 C1 L2 C2 RA0 rec K\n"
-		"        Noise2Inverse: the sample views are split into K (2 or 4)\n"
-		"        interleaved subsets and each is reconstructed as his_srec into\n"
-		"        rec/0 .. rec/K-1, RA0 shifted by the angle of the subset's first\n"
-		"        view so that the K volumes share one geometry.  The number of\n"
-		"        sample views must be a multiple of K (of 2K on a 360-degree offset\n"
-		"        scan, so that opposing views fall into the same subset).\n",
-		argv[0],argv[0]);
-	    return 1;
-	}
-	K=atoi(argv[argc-1]);
-	if (K!=2 && K!=4) Fail("K must be 2 or 4.");
-	offset=IsOffsetScan(argv[1],prog);
-	ira=argc-3; irec=argc-2;		/* RA0 and rec are the two arguments before K */
-	Nt=SampleAngles(argv[1],&a);
-	if (Nt%K!=0 || (offset && Nt%(2*K)!=0)) {
-	    (void)fprintf(stderr,"%s: %d sample views are not a multiple of %d%s.\n",prog,Nt,
-			  offset?2*K:K,offset?" (2K: the opposing views of an offset scan must fall into the same subset)":"");
-	    return 1;
-	}
-	ra0=atof(argv[ira]);
-	(void)MKDIR(argv[irec]);
-	(void)fprintf(stderr,"%s: %d sample views, K=%d -> %d views per subset, angle step %.5f deg\n",
-		      prog,Nt,K,Nt/K,(Nt>1)?(a[1]-a[0])*K:0.0);
-	for (k=0; k<K; k++) {
-	    (void)snprintf(views,sizeof(views),"%d/%d",k,K);
-	    (void)snprintf(ra,sizeof(ra),"%.6f",ra0+(a[k]-a[0]));
-	    if (snprintf(rec,LEN,"%s/%d",argv[irec],k)>=LEN) Fail("rec : path too long.");
-	    (void)MKDIR(rec);
-	    SETENV("RHIS_VIEWS",views); SETENV("RHIS_N2I_CHILD","1");
-	    for (n=0, i=0; i<argc-1; i++) args[n++]=(i==ira)?ra:(i==irec)?rec:argv[i];
-	    args[n]=NULL;
-	    (void)fprintf(stderr,"==== subset %d / %d: RA0 %s -> %s ====\n",k,K,ra,rec);
-	    if ((st=RunChild(args))!=0) {
-		(void)fprintf(stderr,"%s: subset %d failed (status %d).\n",prog,k,st);
-		free(a); return st;
-	    }
-	}
-	free(a);
-	(void)fprintf(stderr,"%s: done, %d subsets in %s/0 .. %s/%d\n",prog,K,argv[irec],argv[irec],K-1);
-	return 0;
-}
+#include "n2i.h"	/* the Noise2Inverse front end, shared with hp_tg_g_F_n2i / ofct_srec_g_F_n2i (n2i_main.c) */
+static const N2iSpec	N2iHis={"his_srec","HiPic Dr RC RA0 rec","HiPic Dr L1 C1 L2 C2 RA0 rec",7,10,0,IsOffsetScan};
 #endif	/* HIS_N2I */
 
 int	main(int argc,char **argv)
@@ -481,7 +364,7 @@ int	main(int argc,char **argv)
 	int	i;
 
 #ifdef HIS_N2I
-	if (getenv("RHIS_N2I_CHILD")==NULL) return N2iParent(argc,argv);
+	if (getenv("RHIS_N2I_CHILD")==NULL) return N2iParent(argc,argv,&N2iHis);
 #endif
 	if (argc!=6 && argc!=9) {
 	    (void)fprintf(stderr,

@@ -63,6 +63,9 @@ extern void	Error(char *msg);
 #define main hp_tg_main		/* his_main.c: 180-degree scan -> here, 360 -> ofct_srec_main */
 #else
 #define PROG_NAME	"hp_tg"
+#ifdef N2I
+#define main hp_tg_main		/* n2i_main.c: hp_tg_g_F_n2i, Noise2Inverse subsets */
+#endif
 #endif
 
 #ifdef	_WIN32
@@ -540,6 +543,8 @@ int	main(int argc,char **argv)
 	fprintf(f,"   %% chunks %d",nchunks);
 #ifdef HIS_INPUT
 	{ extern const char *HisScanNote(void); fprintf(f,"%s",HisScanNote()); }
+#else
+	{ const char *v=getenv("RHIS_VIEWS"); if (v!=NULL && *v!='\0') fprintf(f,"   %% RHIS_VIEWS=%.12s",v); }
 #endif
 	fprintf(f,"\n");
 	fclose(f);

@@ -717,9 +717,13 @@ def train(a):
         raise SystemExit(f"--pz must be a multiple of {m}")
     L = footprint(a.mode, a.s, a.pz)
     vb = max(L, a.nval)                       # contiguous held-out z block
-    if z1 - z0 < vb + L + 1:
-        raise SystemExit(f"training range too small ({z1 - z0} slices, need >= {vb + L + 1}); "
-                         f"free memory/disk, raise --mem-frac or set --train-slices")
+    # the held-out block sits in the middle; at least one side must hold a whole training sample
+    need = vb + 2 * L - 1
+    if z1 - z0 < need:
+        raise SystemExit(f"training range too small ({z1 - z0} slices, need >= {need} for mode {a.mode}"
+                         f"{' with --pz ' + str(a.pz) if a.mode == '3d' else ''} and --nval {a.nval}); "
+                         f"use more slices (--train-slices / --start --stop, more memory or disk), "
+                         f"or lower --nval{' / --pz' if a.mode == '3d' else ''}")
 
     vol = Volume(a.splits, a.cache, zr=(z0, z1), build=True, crop=box)
     N = vol.N
@@ -727,6 +731,9 @@ def train(a):
     v0 = (lo + hi - vb) // 2
     v1 = v0 + vb
     starts = [z for z in range(lo, hi - L + 1) if z + L <= v0 or z >= v1]
+    if not starts:
+        raise SystemExit(f"no training position left outside the validation block ({N} slices, sample depth {L}, "
+                         f"{vb} held out): use more slices or lower --nval")
 
     rng = np.random.default_rng(0)
     samp = rng.choice(np.arange(lo, hi), min(20, hi - lo), replace=False)
@@ -764,7 +771,7 @@ def train(a):
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, a.iters)
     bs = max(1, a.batch // a.ppr)
     dl = DataLoader(Patches(vol, starts, a, mean, std, a.iters * bs + bs), batch_size=bs,
-                    num_workers=a.workers, pin_memory=True, persistent_workers=a.workers > 0)
+                    num_workers=a.workers, pin_memory=dev.type == "cuda", persistent_workers=a.workers > 0)
     amp = dict(device_type=dev.type, dtype=dt or torch.float32, enabled=dt is not None)
 
     def save(path):
@@ -1314,7 +1321,7 @@ details of each command:
   %(prog)s infer -h
   %(prog)s bench          time the network on the GPU (memory layout / padding variants)
   %(prog)s bench --train  the same for one training step""")
-    sp = ap.add_subparsers(dest="cmd", metavar="{train,infer}")
+    sp = ap.add_subparsers(dest="cmd", metavar="{train,infer,bench}")
     for name, hlp in (("train", "train a denoising model"), ("infer", "denoise slices with a trained model")):
         q = sp.add_parser(name, help=hlp)
         q.add_argument("--splits", nargs="+", default=None,

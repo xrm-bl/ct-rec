@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# re-run with bash when started as "sh script.sh" (sh is dash on Ubuntu and lacks bash features)
+if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 # setup_n2i.sh -- set up a Python venv with CUDA-enabled PyTorch for n2i_v4.py on Ubuntu.
 #
 #   1. checks the NVIDIA driver (nvidia-smi) and the highest CUDA version it supports
@@ -17,8 +19,10 @@
 #   bash setup_n2i.sh --cpu                # CPU-only PyTorch
 #   bash setup_n2i.sh --reinstall          # reinstall PyTorch
 #   bash setup_n2i.sh --link               # also link the launcher to ~/.local/bin/n2i
+#   bash setup_n2i.sh --proxy http://proxy.example.jp:8080   # download through a proxy
 
 set -u
+PROXY=""
 
 INSTALL_DIR="$HOME/n2i"
 CUDA_TAG=""
@@ -31,7 +35,7 @@ info() { printf '\033[36m[n2i]\033[0m %s\n' "$*"; }
 warn() { printf '\033[33m[n2i]\033[0m %s\n' "$*"; }
 fail() { printf '\033[31m[n2i] ERROR:\033[0m %s\n' "$*"; exit 1; }
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '4,23p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -42,6 +46,7 @@ while [ $# -gt 0 ]; do
         --reinstall)    REINSTALL=1; shift ;;
         --install-deps) INSTALL_DEPS=1; shift ;;
         --link)         LINK=1; shift ;;
+        --proxy)        PROXY="$2"; shift 2 ;;
         -h|--help)      usage; exit 0 ;;
         *)              warn "unknown option: $1"; usage; exit 1 ;;
     esac
@@ -51,6 +56,12 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 mkdir -p "$INSTALL_DIR" || fail "cannot create $INSTALL_DIR"
 INSTALL_DIR="$(cd "$INSTALL_DIR" && pwd)"
+
+# proxy: --proxy URL, or http(s)_proxy already set in the environment (curl and pip use them)
+if [ -n "${PROXY:-}" ]; then
+    export http_proxy="$PROXY" https_proxy="$PROXY" HTTP_PROXY="$PROXY" HTTPS_PROXY="$PROXY"
+    info "Using proxy $PROXY"
+fi
 
 # ------------------------------------------------------------------ 1. GPU / driver
 DRIVER_CUDA=0
@@ -75,7 +86,7 @@ fi
 # ------------------------------------------------------------------ 2. Python
 if [ "$INSTALL_DEPS" -eq 1 ]; then
     info "Installing python3, python3-venv, python3-pip with apt (sudo) ..."
-    sudo apt-get update && sudo apt-get install -y python3 python3-venv python3-pip || fail "apt install failed."
+    sudo -E apt-get update && sudo -E apt-get install -y python3 python3-venv python3-pip || fail "apt install failed."
 fi
 command -v "$PYTHON" >/dev/null 2>&1 || fail "$PYTHON not found. Install it ('sudo apt install python3') or use --install-deps."
 PYVER=$("$PYTHON" -c 'import sys,struct; ok=sys.version_info>=(3,10) and struct.calcsize("P")==8; print("%d.%d"%sys.version_info[:2]); sys.exit(0 if ok else 3)') \

@@ -307,14 +307,14 @@ int	main(int argc, char *argv[])
 	Dr = atof(argv[3]);
 	if (argc == 6) {
 		RC = atof(argv[4]);
-		RA0 = atof(argv[5]);
+		RA0 = atof(argv[5])*(3.14159265358979323846/180.0);	/* degrees on the command line, as hp_tg / ofct_srec (radians until 2026-11-12) */
 	}
 	else {
 		z1 = atoi(argv[4]);
 		RC = atof(argv[5]);
 		z2 = atoi(argv[6]);
 		Ct = (atof(argv[7])-atof(argv[5]))/(double)(z2-z1);
-		RA0 = atof(argv[8]);
+		RA0 = atof(argv[8])*(3.14159265358979323846/180.0);	/* degrees on the command line, as hp_tg / ofct_srec (radians until 2026-11-12) */
 	}
 	if (z1<0) z1=0;
 	if (z2>Ny) z2=Ny;

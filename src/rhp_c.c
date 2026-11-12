@@ -27,6 +27,7 @@
 #include "tiffio.h"
 #include "rhp.h"
 #include "blacklim.h"
+#include "rhp_views.h"
 
 /* selected input format: 0 = HiPic .img, 1 = TIFF .tif. Set in
  * InitReadHiPic, read by ReadHiPic (one dataset per process). */
@@ -381,6 +382,8 @@ void	InitReadHiPic(char *dir,HiPic *hp)
 	Read(dir,dark,hp->Nx,hp->Ny,hp->D);
 
 	qsort(hp->OL,hp->Nq+1,sizeof(OutputLog),(int (*)(const void *,const void *))Compare);
+
+	SelectViews(hp);	/* RHIS_VIEWS=k/K, Noise2Inverse (rhp_views.h; hp_tg_g_F_n2i / ofct_srec_g_F_n2i) */
 
 	OL=hp->OL+hp->Nt;
 	for (i=0; i<hp->Ni; i++) {

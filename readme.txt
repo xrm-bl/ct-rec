@@ -37,6 +37,16 @@
     plugins/ に置く SP8CT_Plugins.jar、導入手順 plugin_setup.md(ImageJ と Fiji で置く
     ファイルが異なる点、Use SCIFIO の設定、Bio-Formats の HIS を外す手順)。ImageJ 1.x
     向けは従来どおり imagej-plugins/。
+  ・hp_tg_g_F_n2i(2b)と ofct_srec_g_F_n2i(3b)を新設。his_srec_g_F_n2i と同じ
+    Noise2Inverse 用のビュー分割を q????.img / q????.tif のデータに対して行う(本体は
+    hp_tg / ofct_srec そのもの。前段 n2i.h / n2i_main.c と RHIS_VIEWS の間引き
+    rhp_views.h を his_srec_g_F_n2i と共有)。MakefileGPU で ver 2.8 から抜けていた
+    ofct_srec_g / ofct_DO_g / ofct_rec_g の規則を復元。exe/ に 6 本の .exe を追加。
+  ・p_rec(2c)と sf_rec(6c)の RA0 を度として扱うよう修正(従来は変換せずラジアン
+    として逆投影に渡していた)。これで再構成プログラムの面内回転角(ct_rec / ofct_rec /
+    his_rec の offsetangle、hp_tg / act_tg / ofct_srec / ofact_srec / his_srec / p_rec /
+    sf_rec の RA0)はすべて度。RA0 ≠ 0 で実行した場合だけ結果が変わる。TIFF の
+    ImageDescription の RA0 は従来どおりラジアン。
 
 【ver 2.8 の変更点】
   ・his_rec_P_F、his_srec_P_F、his_DO、his_sg(2g)を新設。a.his から
@@ -410,7 +420,7 @@
       HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名。(/ は不要)
       Dr: 画素サイズ (um)
       RC: 回転軸の位置
-      RA0: 回転軸の原点オフセット
+      RA0: 回転軸の原点オフセット(度)
       rec: 再構成画像を出力するディレクトリ(計算前に作成すること)
       
       hp_tg_P_F HiPic Dr L1 C1 L2 C2 RA0 rec
@@ -422,10 +432,22 @@
       C1: L1での回転軸の位置
       L2: 計算終了レイヤー
       C2: L2での回転軸の位置
-      RA0: 回転軸の原点オフセット
+      RA0: 回転軸の原点オフセット(度)
       rec: 再構成画像を出力するディレクトリ(/ は不要。計算前に作成すること)
    
       *) q????.img があるディレクトリの一つ上で実行する。
+
+      hp_tg_g_F_n2i HiPic Dr RC RA0 rec K                    (GPU)
+      hp_tg_g_F_n2i HiPic Dr L1 C1 L2 C2 RA0 rec K
+      Noise2Inverse 用の hp_tg。試料像を角度順に K = 2 または 4 組に交互分割し
+      (k, k+K, k+2K, …)、各組を hp_tg として rec/k に再構成する。RA0 には組の最初
+      のビューの角度(output.log から)を加えるので K 枚の像は同じ幾何になり、RC と
+      Dr は全組共通。試料像の枚数は K の倍数でなければならない。各組はこのプロ
+      グラムの子プロセスとして順に実行され、子は環境変数 RHIS_VIEWS=k/K を持つ
+      通常の hp_tg なので、手で RHIS_VIEWS を設定して hp_tg を実行すれば 1 組だけ
+      再構成できる。cmd-hst.log に「% RHIS_VIEWS=k/K」が付く。a.his から直接行う
+      his_srec_g_F_n2i(2g)の q????.img / q????.tif 版で、360° オフセットスキャン
+      には ofct_srec_g_F_n2i(3b)を使う。
 
    c. p画像からの連続再構成
       p_rec_P_F p rec Dr RC RA0
@@ -436,7 +458,7 @@
       rec: 再構成画像を出力するディレクトリ(計算前に作成すること)
       Dr: 画素サイズ (um)
       RC: 回転軸の位置
-      RA0: 回転軸の原点オフセット
+      RA0: 回転軸の原点オフセット(度)
       
       p_rec_P_F p rec Dr L1 C1 L2 C2 RA0
       (回転軸が傾いている場合)
@@ -448,7 +470,7 @@
       C1: L1での回転軸の位置
       L2: 計算終了レイヤー
       C2: L2での回転軸の位置
-      RA0: 回転軸の原点オフセット
+      RA0: 回転軸の原点オフセット(度)
 
    d. ct_rec の並列実行による連続再構成
       ct_rec_loop.bat HiPic Dr RC RA0 rec {Njobs}            (Windows)
@@ -593,6 +615,8 @@
       RHIS_VIEWS=k/K を持つ通常の his_srec なので、手で RHIS_VIEWS を設定して
       his_srec を実行すれば 1 組だけ再構成できる。cmd-hst.log に「% RHIS_VIEWS=k/K」
       が付く。RHIS_SCAN と RHIS_TB は全組に効く。
+      q????.img / q????.tif のデータには、同じ前段を hp_tg / ofct_srec に付けた
+      hp_tg_g_F_n2i(2b)/ ofct_srec_g_F_n2i(3b)を使う。
 
       Z スキャン。a.his に L 枚のスキャンが M 本入っている場合(L は conv.bat が
       参照する最大フレーム番号、M = 総フレーム数 / L。spl / his_spl_E が同じ
@@ -659,6 +683,12 @@
            (第 3 の形式は再構成せず、貼り合わせ幅 N、パディング後の長さ L、
             対向ビュー対の数 M と投影バッファの大きさ 4*N*L*M を GB で表示する。
             大きな計算の前の確認用)
+      ofct_srec_g_F_n2i HiPic Rc Oy rangeList Dr RA0 rec K          (GPU)
+      ofct_srec_g_F_n2i HiPic L1 C1 L2 C2 Oy rangeList Dr RA0 rec K
+           (Noise2Inverse 用。試料像を角度順に K = 2 または 4 組に交互分割し、各組
+            を ofct_srec として rec/0～rec/K-1 に再構成する。対向ビュー m と m+Nt/2
+            が同じ組に入るよう、試料像の枚数は 2K の倍数でなければならない。動作
+            は 2b の hp_tg_g_F_n2i と同じ。3 引数の確認用の形は無い)
       
       HiPic: q????.img もしくは q????.tif が格納されているディレクトリ名(/ は不要)
       Rc: 回転軸の位置(左端からの画素数)。小数も可(ver 2.8)。貼り合わせの枠は
@@ -767,7 +797,7 @@
       output: float tiff で出力
       Dr: 画素サイズ
       RC: 回転軸の位置
-      RA0: 回転軸の原点オフセット
+      RA0: 回転軸の原点オフセット(度)
 
    d. img 画像平均
       img_ave file1 file2... output

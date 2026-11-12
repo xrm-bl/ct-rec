@@ -16,7 +16,7 @@ Noise2Inverse による CT 像のノイズ除去ツール n2i_v4.py の使い方
 |---|---|
 | ディスク（キャッシュ） | K × 学習スライス数 × 切り出しサイズ² × 4 バイト。既定（最大 512 枚、最大 1024×1024）では K=2 で最大約 4.3 GB、K=4 で最大約 8.6 GB。ローカル SSD に置く |
 | ディスク（出力） | スライス数 × H × W × 4 バイト（入力の 1 分割分） |
-| GPU メモリ | 2.5D の既定設定で、学習時 7 GB 程度。推論は `--tile` の大きさによる。不足時は自動で対処される（「トラブル対応」を参照） |
+| GPU メモリ | 2.5D の既定設定で、学習時 8〜9 GB 程度。推論は `--tile` の大きさによる。不足時は自動で対処される（「トラブル対応」を参照） |
 | RAM | 2D／2.5D は数 GB 程度。3D 推論は K × (slab + 2×ov_z) × H × W × 4 バイト（K=4、2048×2048 画像、既定値で約 6.4 GB） |
 
 大きなデータ（4k × 4k 級）は [n2i_large_volume.md](n2i_large_volume.md) を参照。
@@ -89,11 +89,11 @@ preprocessing on the GPU
 
 ## 引数なしでの起動
 
-`C:\n2i\n2i.bat` を `train`／`infer` なしで実行すると、ヘルプ（基本の使い方）を表示して終了する。各コマンドのオプション一覧は `train -h`、`infer -h` で表示される。
+`C:\n2i\n2i.bat` を `train`／`infer`／`bench` なしで実行すると、ヘルプ（基本の使い方）を表示して終了する。各コマンドのオプション一覧は `train -h`、`infer -h`、`bench -h` で表示される。
 
 ## Ubuntu での実行
 
-Ubuntu では次のように読み替える。ランチャーは `~/n2i/n2i`（セットアップ時に `--link` を付けた場合は `n2i` だけでよい）、パスの区切りは `/`。
+Ubuntu では次のように読み替える。ランチャーは `~/n2i/n2i`（セットアップ時に `--link` を付けた場合は `n2i` だけでよい）、パスの区切りは `/`。ポータブル版では、展開したフォルダの `n2i_portable/n2i` がランチャー、`n2i_portable/python/bin/python3` が Python になる。
 
 ```bash
 # 1. 学習
@@ -107,6 +107,16 @@ Ubuntu では次のように読み替える。ランチャーは `~/n2i/n2i`（�
 ```
 
 以降の節のコマンド例は Windows 形式で書いてあるので、同じように読み替える（`rem` で始まる行はコメント。bash では `#`）。
+
+## 複数の GPU がある場合
+
+n2i_v4.py は 1 枚の GPU（既定では 0 番）だけを使う。別の GPU を使うときは、環境変数 `CUDA_VISIBLE_DEVICES` で番号を指定する。
+
+```bash
+CUDA_VISIBLE_DEVICES=1 ~/n2i/n2i train
+```
+
+Windows のコマンドプロンプトでは、実行前に `set CUDA_VISIBLE_DEVICES=1` とする。ジョブスケジューラ（Slurm など）が GPU を割り当てる計算機では、スケジューラがこの変数を設定するので、何も指定しなくてよい。
 
 ## 開始と終了
 
@@ -186,8 +196,8 @@ Ubuntu では次のように読み替える。ランチャーは `~/n2i/n2i`（�
 | `--outdir` | denoised | 出力フォルダ。元と同じファイル名で書き出す |
 | `--crop` | 0 | 指定した大きさ（画素）の範囲だけを処理する（`0` は全体）。出力は切り出した大きさになる。モデルの比較などに使う |
 | `--crop-center` | 画像の中心 | `--crop` の中心 `y,x`（画素） |
-| `--tile` | 2D: `1024 1024`／3D: `64 256 256` | 推論タイルの大きさ（2D は y x、3D は z y x） |
-| `--ov` | 2D: `64 64`／3D: `16 32 32` | タイルの重なり幅 |
+| `--tile` | 2D: `1024 1024`／3D: `64 256 256` | 推論タイルの最大の大きさ（2D は y x、3D は z y x）。実際のタイルは、これ以下の大きさで必要最小限の枚数を等間隔に並べるよう自動で決まる |
+| `--ov` | 2D: `64 64`／3D: `16 32 32` | タイルの重なり幅の下限 |
 | `--slab` | 64 | 3D で一度に処理するスライス数 |
 | `--fp32` | なし | 32 ビットで推論する（既定は 16 ビット） |
 | `--pre` | auto | 入力の前処理（正規化、K 通りの入力の作成、タイルの切り出し）を行う場所。`auto` は GPU（ブロックが大きすぎる場合だけ CPU）、`gpu`、`cpu` |
@@ -241,7 +251,7 @@ infer_check\000200.tif
 - **書式**：通常の推論と同じく 16 ビットで計算し、TIFF タグも引き継ぐ（ct-rec 形式の最小値・最大値も更新）。
 - **見方**：Fiji で `infer_check` を連番として開くと、学習が進むにつれて画像がどう変わるかを順に見られる。`average.tif` との差分画像も作れる。ノイズが減らなくなった回、または細部が削られ始めた回が、学習を打ち切る目安になる。
 - **表示**：ログの行の末尾に `[check 000100.tif]` と出る。GPU メモリ不足などで推論できなかった場合は `[check skipped: ...]` と出て、学習はそのまま続く。
-- **時間**：1 枚の推論は数秒程度で、学習全体の時間はわずかに増えるだけ。不要なら `--no-check` で無効にする。
+- **時間**：1 回の推論チェックは数秒程度。4096×4096 の画像では 2000 回の学習時間の約 1 割を占める（学習の最後に表示される時間の内訳で確認できる）。減らしたい場合は `--log` の間隔を広げるか、`--no-check` で無効にする。
 
 ## 計算精度
 
@@ -355,6 +365,10 @@ C:\n2i\n2i.bat infer --train-dir training_3d --outdir denoised_3d
 
 **TDR（GPU のタイムアウト）**：画面表示も担当している GPU（WDDM モード）では、1 回の GPU 処理が約 2 秒を超えると Windows がドライバをリセットし、プログラムが表示なしで終了することがある。推論の `--tile` を小さくする（`2048 2048` や既定の 1024）。それでも起きる場合は、レジストリ `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\GraphicsDrivers` に DWORD 値 `TdrDelay`（例：60 秒）を追加して再起動する（管理者権限が必要。所内の管理ルールに従うこと）。
 
+**学習範囲が小さすぎる（`training range too small`）**
+
+検証用のスライスを中央から除いたうえで、その片側に学習用の 1 サンプル分の厚さが必要になる。必要な枚数は「検証用の枚数 ＋ 2 × サンプルの厚さ − 1」（検証用の枚数は `--nval` とサンプルの厚さの大きいほう。サンプルの厚さは 2D が 1、2.5D が 2s+1、3D が `--pz`）で、既定値では 2D が 9 枚、2.5D が 17 枚、3D が 95 枚。足りない場合は、スライスを増やす（`--train-slices`、`--start`／`--stop`）か、`--nval` を小さくする（3D は `--pz` も）。
+
 **分割が見つからない・番号が飛んでいる**
 
 `rec` の中に `0`、`1` … のサブディレクトリがあるか確認する。古い分割の残り（例：`0`、`1`、`3`）があると停止するので、整理するか `--splits` で個別に指定する。
@@ -380,6 +394,7 @@ C:\n2i\n2i.bat infer --train-dir training_3d --outdir denoised_3d
 - 検出器起因のリングなど、分割間で共通のノイズは除去されない。
 - 2.5D／3D では、ボリュームの最上端・最下端の数枚は隣接スライスが足りないため、端のスライスを繰り返して代用している。この数枚はわずかに質が落ちる可能性がある。
 - 学習範囲から離れたスライス（上端・中央・下端など）や、切り出し範囲の外（試料の周辺部）も、差分画像で確認しておくとよい。
+- ノイズの量と分解能を数値で評価したい場合や、再構成フィルタ・分割数・投影フィルタの条件を比べたい場合は、評価用スクリプト n2i_eval_all.py が使える（[n2i_eval.md](n2i_eval.md) を参照）。
 
 ## モデルの使い回し
 
@@ -430,9 +445,13 @@ v2 の `--amp`、`--fp16` は既定の動作になったので、付けても付
 | n2i_v4.py | 本体（学習 `train`／推論 `infer`／計測 `bench`） |
 | setup_n2i.bat / setup_n2i.ps1 | Windows 用セットアップ |
 | setup_n2i.sh | Ubuntu 用セットアップ |
+| make_n2i_portable.sh | ポータブル版（インターネットにつながらない Linux 計算機用の一式）の作成 |
+| n2i.def | コンテナ（Apptainer／Singularity）の定義ファイル |
+| n2i_eval_all.py | 投影フィルタ・再構成フィルタ・分割数の条件を比べる評価用スクリプト（計算と分析） |
+| n2i_eval.md | n2i_eval_all.py の使い方 |
 | n2i_v4_usage.md | 本書 |
 | n2i_large_volume.md | 大容量データ（4k × 4k × 2.3k 級）の処理 |
-| N2I_install.md | a.his から分割再構成して N2I を行う手順（BL47XU の再構成ソフト his_rec_g_c／his_srec_g_c_n2i を使う場合） |
+| N2I_install.md | a.his から分割再構成して N2I を行う手順（BL47XU の再構成ソフト his_rec_g_c／his_srec_g_c_n2i（q????.img なら hp_tg_g_c_n2i／ofct_srec_g_c_n2i）を使う場合） |
 | README.md | 概要 |
 
 必要なライブラリは PyTorch、NumPy、tifffile のみ。Noise2Inverse の手法を独自に実装したもので、公式実装（[ahendriksen/noise2inverse](https://github.com/ahendriksen/noise2inverse)）や、それが依存する msd_pytorch は使っていない。論文・報告書では「Noise2Inverse 法を独自に実装して適用した」と記述し、手法の原著論文を引用する。
@@ -465,6 +484,7 @@ setup_n2i.bat -InstallDir D:\n2i -InstallPython
 | `-InstallPython` | Python が無ければ winget で Python 3.12 を入れる |
 | `-Cpu` | GPU なしの PC 用（CPU 版 PyTorch） |
 | `-Reinstall` | PyTorch を入れ直す |
+| `-Proxy <URL>` | ダウンロードをプロキシ経由にする（例 `-Proxy http://proxy.example.jp:8080`） |
 
 実行は `C:\n2i\n2i.bat train` のようにランチャー経由で行う（仮想環境のアクティベートや実行ポリシーの変更は不要）。
 
@@ -486,15 +506,47 @@ bash setup_n2i.sh --install-deps --link
 | `--reinstall` | PyTorch を入れ直す |
 | `--link` | `~/.local/bin/n2i` にリンクを作り、`n2i train` で実行できるようにする |
 | `--python <コマンド>` | 使う Python を指定（例 `python3.12`） |
+| `--proxy <URL>` | ダウンロードをプロキシ経由にする（例 `--proxy http://proxy.example.jp:8080`） |
 
-実行は `~/n2i/n2i train` のようにランチャー経由で行う。
+実行は `~/n2i/n2i train` のようにランチャー経由で行う。`sh setup_n2i.sh` で起動しても、自動で bash に切り替わる。
+
+### ポータブル版（インターネットにつながらない Linux 計算機）
+
+計算ノードからインターネットに出られない計算機では、インターネットにつながる Linux PC（x86_64）で一式をまとめた圧縮ファイルを作り、それを持ち込んで展開する。展開先には何もインストールしない。
+
+```bash
+# インターネットにつながる PC で（n2i_v4.py と同じフォルダで実行）
+bash make_n2i_portable.sh
+
+# 計算機に n2i_portable.tar.gz をコピーして
+tar -xzf n2i_portable.tar.gz
+./n2i_portable/check.sh        # GPU のあるノードで動作確認
+./n2i_portable/n2i train       # rec/0、rec/1 … のあるディレクトリで
+./n2i_portable/n2i infer
+```
+
+圧縮ファイルには、どこに置いても動く Python 本体（python-build-standalone）、PyTorch（CUDA 版）、NumPy、tifffile、n2i_v4.py、ランチャー（`n2i`）、動作確認用の `check.sh` が入る。大きさは数 GB。
+
+| オプション | 内容 |
+|---|---|
+| `--cuda-tag cu126` | PyTorch の CUDA ビルド（既定 `cu128`）。計算機の `nvidia-smi` に表示される CUDA Version 以下のものを選ぶ |
+| `--python 3.11` | Python の版（既定 3.12） |
+| `--out <名前>` | 出力するフォルダ名（既定 `n2i_portable`） |
+| `--proxy <URL>` | ダウンロードをプロキシ経由にする |
+
+動作条件は、計算機が Linux x86_64 で glibc 2.28 以上（RHEL 8 相当以降）、NVIDIA ドライバが入っていること。`check.sh` は glibc の版、各ライブラリの版、GPU での計算の可否、学習で自動選択される計算精度を表示する。
+
+### コンテナ（Apptainer／Singularity）
+
+n2i.def は、PyTorch の公式イメージに tifffile と n2i_v4.py を加えるコンテナの定義ファイル。`apptainer build n2i.sif n2i.def` で作り、`apptainer run --nv n2i.sif train` のように実行する。イメージの CUDA 版（定義ファイルの `From:` の行）は、計算機のドライバが対応する版以下にする。この方法は GPU 上での動作を確認していないので、通常はポータブル版を使う。
 
 ### インストール時の注意
 
 - **ファイル名**：`n2i_v4.py` という名前でセットアップスクリプトと同じフォルダに置く。ダウンロード時に名前が変わっている（`n2iv4.py`、`n2i_v4 (1).py`、`n2i_v4.py.txt` など）とコピーされない。Windows ではエクスプローラーで拡張子を表示する設定にしておくとよい。
 - **ドライバ**：`nvidia-smi` が動かない場合は NVIDIA ドライバを入れる（Ubuntu では `sudo ubuntu-drivers install` の後に再起動）。
-- **Python（Ubuntu）**：`python3-venv` が入っていないと仮想環境の作成で止まる。`--install-deps` を付けるか `sudo apt install python3-venv` を実行する。
-- **プロキシ**：プロキシ経由の接続が必要な環境では、実行前に設定する（Windows：`set HTTPS_PROXY=http://proxy:port`、Ubuntu：`export https_proxy=http://proxy:port`）。
+- **Python（Ubuntu）**：`python3-venv` が入っていないと仮想環境の作成で止まる（Ubuntu 24.04 の標準の状態では入っていない）。`--install-deps` を付けるか、`sudo apt install python3-venv`（Ubuntu 24.04 では `python3.12-venv`）を実行する。
+- **プロキシ**：プロキシ経由の接続が必要な環境では、`-Proxy`（Windows）／`--proxy`（Ubuntu、ポータブル版の作成）で指定する。実行前に環境変数で設定してもよい（Windows：`set HTTPS_PROXY=http://proxy:port`、Ubuntu：`export https_proxy=http://proxy:port`）。認証が必要な場合は `http://ユーザー名:パスワード@proxy:port` の形にする。Windows の `-InstallPython`（winget）と Ubuntu の `--install-deps`（apt）は、それぞれ OS 側のプロキシ設定に従う。
+- **ダウンロード先**：セットアップでは pypi.org・files.pythonhosted.org（pip、NumPy、tifffile）と download.pytorch.org（PyTorch）に接続する。ポータブル版の作成では、これに加えて github.com（Python 本体）に接続する。n2i_v4.py 自体は、実行中にインターネットへ接続しない。
 - **改行コード（Ubuntu）**：`setup_n2i.sh` を Windows で編集・保存すると CRLF になり、`$'\r': command not found` で止まる。`sed -i 's/\r$//' setup_n2i.sh` で直す。
 - **CUDA ビルドの一覧**：試す CUDA ビルドはスクリプト冒頭の `$TorchTags`（Windows）／`TORCH_TAGS`（Ubuntu）に書いてある。PyTorch 側で新しいビルドが追加・削除された場合はこの行を編集する（存在しないビルドは自動でスキップされる）。
 - **計算精度**：セットアップの最後に、学習で自動選択される精度（bf16 または fp16）が表示される。

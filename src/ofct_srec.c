@@ -26,6 +26,9 @@ extern void	Error(char *msg),
 #define main ofct_srec_main	/* his_main.c: 360-degree offset scan -> here, 180 -> hp_tg_main */
 #else
 #define PROG_NAME	"ofct_srec"
+#ifdef N2I
+#define main ofct_srec_main	/* n2i_main.c: ofct_srec_g_F_n2i, Noise2Inverse subsets */
+#endif
 #endif
 
 /* スライスごとのオーバーヘッド削減(2026-10、hp_tg_ku.c と同じ変更):
@@ -631,6 +634,8 @@ int	main(int argc,char **argv)
 	fprintf(f,"   %% bands %d",nbands);
 #ifdef HIS_INPUT
 	{ extern const char *HisScanNote(void); fprintf(f,"%s",HisScanNote()); }
+#else
+	{ const char *v=getenv("RHIS_VIEWS"); if (v!=NULL && *v!='\0') fprintf(f,"   %% RHIS_VIEWS=%.12s",v); }
 #endif
 	fprintf(f,"\n");
 	fclose(f);

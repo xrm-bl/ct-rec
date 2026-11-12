@@ -16,14 +16,16 @@ Noise2Inverse 法を PyTorch で独自に実装した、CT 再構成像のノイ
 - **学習の進み具合を画像で確認**：一定間隔ごとにモデルを保存し、学習していないスライス 1 枚を推論して `infer_check` に残します。
 - **GPU メモリ不足への自動対処**：学習はバッチを分割し、推論はタイルを縮小して続行します。
 - **実行ログ**：コマンド、環境、出力、異常終了時の状況を `n2i.log` に追記します。
-- **セットアップスクリプト**：Windows と Ubuntu で、CUDA 対応 PyTorch を含む環境を自動で構築します。
+- **セットアップスクリプト**：Windows と Ubuntu で、CUDA 対応 PyTorch を含む環境を自動で構築します（プロキシ経由にも対応）。インターネットにつながらない Linux 計算機には、持ち込んで展開するだけのポータブル版を作れます。
+- **条件の評価**：投影へのフィルタ、再構成フィルタ、分割数の組み合わせを一括で計算し、ノイズと分解能を数値とグラフで比べる評価用スクリプトがあります。
 
 ## 動作確認環境
 
 | OS | GPU | 備考 |
 | --- | --- | --- |
-| Windows 11 | NVIDIA Quadro RTX 8000（48 GB） | 2.5D で学習・推論を確認（fp16 混合精度） |
-| Ubuntu <バージョン> | <GPU> | <確認状況> |
+| Windows 11 | NVIDIA Quadro RTX 8000（48 GB） | setup_n2i.bat でセットアップ。2.5D で学習・推論を確認（fp16 混合精度） |
+| Ubuntu 24.04 | NVIDIA RTX A6000（48 GB） | setup_n2i.sh でセットアップ。学習・推論を確認 |
+| Linux（計算機センター） | NVIDIA A100 | ポータブル版（make_n2i_portable.sh）で学習・推論を確認 |
 
 NVIDIA ドライバが必要です。CUDA Toolkit は不要です（PyTorch が CUDA ランタイムを同梱しています）。GPU なしでも動きますが、実用的な速度は出ません。
 
@@ -34,19 +36,23 @@ NVIDIA ドライバが必要です。CUDA Toolkit は不要です（PyTorch が 
 | [n2i_v4.py](n2i_v4.py) | 本体（学習 `train`／推論 `infer`／計測 `bench`） |
 | [setup_n2i.bat](setup_n2i.bat), [setup_n2i.ps1](setup_n2i.ps1) | Windows 用セットアップ |
 | [setup_n2i.sh](setup_n2i.sh) | Ubuntu 用セットアップ |
+| [make_n2i_portable.sh](make_n2i_portable.sh) | ポータブル版（インターネットにつながらない Linux 計算機用の一式）の作成 |
+| [n2i.def](n2i.def) | コンテナ（Apptainer／Singularity）の定義ファイル |
+| [n2i_eval_all.py](n2i_eval_all.py) | 条件の評価用スクリプト（投影フィルタ × 再構成フィルタ × 分割数の計算と分析） |
 | [n2i_v4_usage.md](n2i_v4_usage.md) | 詳しい使い方、引数一覧、インストール方法、手法と実装の詳細、引用文献 |
+| [n2i_eval.md](n2i_eval.md) | 評価用スクリプトの使い方と、レポートの読み方 |
 | [n2i_large_volume.md](n2i_large_volume.md) | 大容量データ（4k × 4k × 2.3k 級）の処理 |
-| [N2I_install.md](N2I_install.md) | a.his から分割再構成して N2I を行う手順（BL47XU の再構成ソフト `his_rec_g_c`／`his_srec_g_c_n2i` を使う場合） |
+| [N2I_install.md](N2I_install.md) | a.his から分割再構成して N2I を行う手順（[ct-rec](https://github.com/xrm-bl/ct-rec) の `his_rec`／`his_srec_*_n2i`（q????.img なら `hp_tg_*_n2i`／`ofct_srec_*_n2i`）を使う場合） |
 
 ## 入力データの準備
 
-1. 投影データを角度インデックスでインターリーブ分割します（i mod K、K は 2 または 4 を推奨）。
+1. 投影データを角度インデックスでインターリーブ分割します（i mod K。K は 2 以上で、通常は 2 または 4）。
 2. 各組を同じ条件（回転中心、フィルタ、画素サイズ、スライス範囲）で再構成し、組ごとに `rec\0`、`rec\1`（、`rec\2`、`rec\3` …）へ 32bit float TIFF の連番として保存します。この名前にしておくと、分割数が自動で判定されます。
 3. ファイル名はゼロ埋めしてください（例：`rec_0001.tif`）。ファイル名順がスライス順として扱われます。
 
 連続した角度ブロックで分割すると、組ごとに限定角度のアーチファクトが異なり、うまく学習できません。
 
-BL47XU の a.his から処理する場合は、分割再構成から推論までの手順を [N2I_install.md](N2I_install.md) にまとめています。
+BL47XU の a.his から処理する場合は、分割再構成から推論までの手順を [N2I_install.md](N2I_install.md) にまとめています。分割数や再構成フィルタなどの条件のどれが良いかは、試料や測定条件によって変わります。[n2i_eval.md](n2i_eval.md) の評価用スクリプトで比べられます。
 
 ## 使い方（概略）
 
@@ -59,7 +65,7 @@ C:\n2i\n2i.bat infer
 
 `train` で学習し（モデルは `training\`、途中経過の推論画像は `infer_check\` に保存）、`infer` で `training\best.pt` を使って全スライスをノイズ除去します（出力は `denoised\`）。
 
-インストール方法と詳しい使い方は [n2i_v4_usage.md](n2i_v4_usage.md) を参照してください。
+Ubuntu では `~/n2i/n2i train`、ポータブル版では `./n2i_portable/n2i train` のように実行します。インストール方法と詳しい使い方は [n2i_v4_usage.md](n2i_v4_usage.md) を参照してください。
 
 ## 注意事項
 

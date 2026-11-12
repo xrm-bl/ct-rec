@@ -17,6 +17,7 @@
   powershell -ExecutionPolicy Bypass -File setup_n2i.ps1 -CudaTag cu126
   powershell -ExecutionPolicy Bypass -File setup_n2i.ps1 -InstallPython
   powershell -ExecutionPolicy Bypass -File setup_n2i.ps1 -Cpu
+  powershell -ExecutionPolicy Bypass -File setup_n2i.ps1 -Proxy http://proxy.example.jp:8080
 #>
 param(
     [string]$InstallDir    = "C:\n2i",
@@ -24,10 +25,16 @@ param(
     [string]$CudaTag       = "",      # force a PyTorch wheel tag, e.g. cu130 / cu126
     [switch]$InstallPython,           # install Python with winget if it is not found
     [switch]$Cpu,                     # CPU-only PyTorch (no NVIDIA GPU)
-    [switch]$Reinstall                # reinstall PyTorch even if a working one exists
+    [switch]$Reinstall,               # reinstall PyTorch even if a working one exists
+    [string]$Proxy         = ""       # proxy for downloads, e.g. http://proxy.example.jp:8080
 )
 
 $ErrorActionPreference = "Continue"
+# Proxy: -Proxy, or HTTPS_PROXY / HTTP_PROXY already set in the environment (pip uses them)
+if ($Proxy) {
+    $env:HTTPS_PROXY = $Proxy
+    $env:HTTP_PROXY  = $Proxy
+}
 function Info($m) { Write-Host "[n2i] $m" -ForegroundColor Cyan }
 function Warn($m) { Write-Host "[n2i] $m" -ForegroundColor Yellow }
 function Fail($m) { Write-Host "[n2i] ERROR: $m" -ForegroundColor Red; exit 1 }

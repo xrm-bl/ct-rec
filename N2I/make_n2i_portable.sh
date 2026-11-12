@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# re-run with bash when started as "sh script.sh" (sh is dash on Ubuntu and lacks bash features)
+if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
 # make_n2i_portable.sh -- build a portable n2i bundle on an internet-connected Linux PC.
 #
 # The bundle contains a relocatable Python (python-build-standalone), PyTorch (CUDA build),
@@ -13,8 +15,10 @@
 #   bash make_n2i_portable.sh --cuda-tag cu126    # other CUDA build
 #   bash make_n2i_portable.sh --python 3.11       # other Python minor version
 #   bash make_n2i_portable.sh --out mydir         # output directory name
+#   bash make_n2i_portable.sh --proxy http://proxy.example.jp:8080   # download through a proxy
 
 set -u
+PROXY=""
 CUDA_TAG="cu128"
 PYMINOR="3.12"
 OUT="n2i_portable"
@@ -28,7 +32,8 @@ while [ $# -gt 0 ]; do
         --cuda-tag) CUDA_TAG="$2"; shift 2 ;;
         --python)   PYMINOR="$2"; shift 2 ;;
         --out)      OUT="$2"; shift 2 ;;
-        -h|--help)  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --proxy)        PROXY="$2"; shift 2 ;;
+        -h|--help)  sed -n '4,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)          fail "unknown option: $1" ;;
     esac
 done
@@ -39,6 +44,12 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 command -v curl >/dev/null || fail "curl not found (sudo apt install curl)."
 command -v python3 >/dev/null || fail "python3 not found (needed only to read the release list)."
 [ -e "$OUT" ] && fail "$OUT already exists; remove it or use --out."
+
+# proxy: --proxy URL, or http(s)_proxy already set in the environment (curl and pip use them)
+if [ -n "${PROXY:-}" ]; then
+    export http_proxy="$PROXY" https_proxy="$PROXY" HTTP_PROXY="$PROXY" HTTPS_PROXY="$PROXY"
+    info "Using proxy $PROXY"
+fi
 
 # ------------------------------------------------------------------ 1. standalone Python
 info "Looking up the latest python-build-standalone release (Python $PYMINOR) ..."

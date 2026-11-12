@@ -216,7 +216,7 @@ int	main(int argc, char *argv[])
 		if (argc == 6) {
 			Dr = atof(argv[3]);
 			RC = atof(argv[4]);
-			RA0 = atof(argv[5]);
+			RA0 = atof(argv[5])*(3.14159265358979323846/180.0);	/* degrees on the command line, as hp_tg / ofct_srec (radians until 2026-11-12) */
 		}
 	}
 	else {
