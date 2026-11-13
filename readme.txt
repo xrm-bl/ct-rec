@@ -37,6 +37,9 @@
     plugins/ に置く SP8CT_Plugins.jar、導入手順 plugin_setup.md(ImageJ と Fiji で置く
     ファイルが異なる点、Use SCIFIO の設定、Bio-Formats の HIS を外す手順)。ImageJ 1.x
     向けは従来どおり imagej-plugins/。
+    2026-11-13 に scripts/Plugins/AutoRun/Fast_Image_Sequence_Hook.js を追加。Fiji の
+    scripts/Plugins/AutoRun/ に置くと、Use SCIFIO をオンにしたままでも連番画像(Image
+    Sequence、フォルダーのドロップ)は ImageJ1 のリーダーで速く読める(plugin_setup.md)。
   ・hp_tg_g_F_n2i(2b)と ofct_srec_g_F_n2i(3b)を新設。his_srec_g_F_n2i と同じ
     Noise2Inverse 用のビュー分割を q????.img / q????.tif のデータに対して行う(本体は
     hp_tg / ofct_srec そのもの。前段 n2i.h / n2i_main.c と RHIS_VIEWS の間引き

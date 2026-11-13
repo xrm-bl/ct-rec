@@ -41,6 +41,10 @@ Uesugi
     drag and drop, the SP8CT_Plugins.jar for plugins/, and plugin_setup.md
     (which files go where in ImageJ vs Fiji, the "Use SCIFIO" option, and
     disabling Bio-Formats' HIS reader).  imagej-plugins/ stays for ImageJ 1.x.
+    Added 2026-11-13: scripts/Plugins/AutoRun/Fast_Image_Sequence_Hook.js.
+    Copied to scripts/Plugins/AutoRun/ of Fiji, it makes image sequences
+    (Import > Image Sequence, a dropped folder) use the ImageJ1 reader again,
+    which is fast, while "Use SCIFIO" stays on (see plugin_setup.md).
   - New hp_tg_g_F_n2i (2b) and ofct_srec_g_F_n2i (3b): the Noise2Inverse view
     split of his_srec_g_F_n2i on q????.img / q????.tif data sets (the bodies
     are hp_tg / ofct_srec unchanged; the front end n2i.h / n2i_main.c and the
