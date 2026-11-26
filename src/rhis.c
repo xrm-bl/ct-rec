@@ -311,24 +311,77 @@ static int	FrameIndex(HisSet *s,const char *tok,int lineno)
    multiple M > 1 of L frames, RHIS_SCAN = 1..M selects the block and
    every frame number of conv.bat is offset by (M-1)*L.  Such a file is
    refused without RHIS_SCAN: the first block is never used silently. */
-static int	Tokenize(char *line,char **tok,int maxtok);	/* defined below */
+/* One line of conv.bat, of any length, split into words.  img_ave lists every
+   frame it averages on one line, so a line easily exceeds a fixed buffer (204
+   names of the form a0001.img already fill 2048 bytes; cmd.exe accepts 8191
+   characters).  Returns the number of words (0 for an empty line), -1 at the
+   end of the file.  The words point into cl->buf and stay valid until the
+   next call. */
+typedef struct {
+	char	*buf,**tok;
+	size_t	cap;
+	int	tokcap;
+} ConvLine;
+
+static int	ConvGetLine(FILE *f,ConvLine *cl)
+{
+	size_t	len=0;
+	int	c,n=0;
+	char	*p;
+
+	if (cl->buf==NULL) {
+	    cl->cap=LEN; cl->tokcap=64;
+	    if ((cl->buf=(char *)malloc(cl->cap))==NULL ||
+		(cl->tok=(char **)malloc(sizeof(char *)*(size_t)cl->tokcap))==NULL)
+		HisError("conv.bat","no memory.");
+	}
+	if ((c=getc(f))==EOF) return -1;
+	for (; c!=EOF && c!='\n'; c=getc(f)) {
+	    if (len+1>=cl->cap) {
+		cl->cap*=2;
+		if ((cl->buf=(char *)realloc(cl->buf,cl->cap))==NULL) HisError("conv.bat","no memory.");
+	    }
+	    cl->buf[len++]=(char)c;
+	}
+	cl->buf[len]='\0';
+
+	for (p=cl->buf; *p; ) {
+	    while (*p && isspace((unsigned char)*p)) p++;
+	    if (!*p) break;
+	    if (n>=cl->tokcap) {
+		cl->tokcap*=2;
+		if ((cl->tok=(char **)realloc(cl->tok,sizeof(char *)*(size_t)cl->tokcap))==NULL)
+		    HisError("conv.bat","no memory.");
+	    }
+	    cl->tok[n++]=p;
+	    while (*p && !isspace((unsigned char)*p)) p++;
+	    if (*p) *p++='\0';
+	}
+	return n;
+}
+
+static void	ConvFreeLine(ConvLine *cl)
+{
+	free(cl->buf); free(cl->tok); cl->buf=NULL; cl->tok=NULL;
+}
 
 /* the highest frame number conv.bat uses (= frames per scan), 0 if none */
 static long	HisConvMaxFrame(HisSet *s)
 {
 	FILE	*f;
-	char	line[LEN],*tok[LEN/2],path[LEN],c;
+	ConvLine	cl={NULL,NULL,0,0};
+	char	path[LEN],c,**tok;
 	int	ntok,i;
 	long	n,L=0;
 
 	if (snprintf(path,LEN,"%s/%s",s->dir,s->conv)>=LEN) HisError(s->conv,"path too long.");
 	if ((f=fopen(path,"r"))==NULL) HisError(path,"file not open.");
-	while (fgets(line,LEN,f)!=NULL) {
-	    line[strcspn(line,"\r\n")]='\0';
-	    if ((ntok=Tokenize(line,tok,LEN/2))<0) HisError(s->conv,"too many words on one line.");
+	while ((ntok=ConvGetLine(f,&cl))>=0) {
+	    tok=cl.tok;
 	    for (i=1; i<ntok; i++)
 		if (ParseImgName(tok[i],&c,&n) && c!='q' && n>L) L=n;
 	}
+	ConvFreeLine(&cl);
 	(void)fclose(f);
 	return L;
 }
@@ -376,27 +429,6 @@ static long	QIndex(const char *tok)
 	return (ParseImgName(tok,&c,&n) && c=='q')?n:-1L;
 }
 
-typedef struct {
-	int	cmd;		/* 0 skip, 1 his2img, 2 img_ave, 3 ren, 4 copy */
-	int	ntok;
-	char	*tok[LEN/2];
-} ConvLine;
-
-static int	Tokenize(char *line,char **tok,int maxtok)
-{
-	int	n=0;
-
-	while (*line) {
-	    while (*line && isspace((unsigned char)*line)) line++;
-	    if (!*line) break;
-	    if (n>=maxtok) return -1;
-	    tok[n++]=line;
-	    while (*line && !isspace((unsigned char)*line)) line++;
-	    if (*line) *line++='\0';
-	}
-	return n;
-}
-
 static void	HisDefineQ(HisSet *s,long q,int lineno,HisQ *def)
 {
 	HisQ	*Q;
@@ -424,7 +456,8 @@ static void	HisDefineQ(HisSet *s,long q,int lineno,HisQ *def)
 static void	HisReadConv(HisSet *s)
 {
 	FILE	*f;
-	char	line[LEN],line2[LEN],*tok[LEN/2],path[LEN];
+	ConvLine	cl={NULL,NULL,0,0};
+	char	path[LEN],**tok;
 	int	ntok,lineno=0,pass,*list=NULL,nlist,i;
 	long	q,maxq=-1;
 
@@ -435,12 +468,9 @@ static void	HisReadConv(HisSet *s)
 	   pass 1: build the table */
 	for (pass=0; pass<2; pass++) {
 	    rewind(f); lineno=0;
-	    while (fgets(line,LEN,f)!=NULL) {
+	    while ((ntok=ConvGetLine(f,&cl))>=0) {
 		lineno++;
-		line[strcspn(line,"\r\n")]='\0';
-		strcpy(line2,line);
-		if ((ntok=Tokenize(line2,tok,LEN/2))<0)
-		    HisError(s->conv,"too many words on one line.");
+		tok=cl.tok;
 		if (ntok==0) continue;
 
 		if (StrCaseEq(tok[0],"rem") || !strncmp(tok[0],"::",2) ||
@@ -555,6 +585,7 @@ static void	HisReadConv(HisSet *s)
 		for (q=0; q<s->Nq; q++) s->Q[q].cy1=s->Q[q].cy2=(-1);
 	    }
 	}
+	ConvFreeLine(&cl);
 	(void)fclose(f);
 
 	if (s->dark.kind==HQ_NONE) HisError(s->conv,"dark.img is not produced by conv.bat.");
@@ -647,7 +678,7 @@ static HisSet	*HisOpenHeaders(const char *dir)
 	   quick pre-scan of conv.bat here. */
 	{
 	    FILE	*f;
-	    char	line[LEN],*tok[LEN/2];
+	    ConvLine	cl={NULL,NULL,0,0};
 	    int	ntok;
 
 	    if ((env=getenv("RHIS_H"))!=NULL && *env!='\0')
@@ -655,12 +686,11 @@ static HisSet	*HisOpenHeaders(const char *dir)
 	    else {
 		if (snprintf(path,LEN,"%s/%s",dir,s->conv)>=LEN) HisError(s->conv,"path too long.");
 		if ((f=fopen(path,"r"))==NULL) HisError(path,"file not open.");
-		while (fgets(line,LEN,f)!=NULL) {
-		    line[strcspn(line,"\r\n")]='\0';
-		    if ((ntok=Tokenize(line,tok,LEN/2))>=2 && IsHis2img(tok[0])) {
-			(void)snprintf(his_name,LEN,"%s",tok[1]); break;
+		while ((ntok=ConvGetLine(f,&cl))>=0)
+		    if (ntok>=2 && IsHis2img(cl.tok[0])) {
+			(void)snprintf(his_name,LEN,"%s",cl.tok[1]); break;
 		    }
-		}
+		ConvFreeLine(&cl);
 		(void)fclose(f);
 	    }
 	}

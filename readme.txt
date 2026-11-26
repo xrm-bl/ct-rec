@@ -50,6 +50,11 @@
     his_rec の offsetangle、hp_tg / act_tg / ofct_srec / ofact_srec / his_srec / p_rec /
     sf_rec の RA0)はすべて度。RA0 ≠ 0 で実行した場合だけ結果が変わる。TIFF の
     ImageDescription の RA0 は従来どおりラジアン。
+  ・his_* 全般(rhis.c、2026-11-26): conv.bat の 1 行の長さの制限(2047 バイト)を
+    撤廃。img_ave は平均するフレームを 1 行に並べるので、a0001.img 形式で 204 枚以上を
+    平均する conv.bat では行が途中で切れ、「img_ave destination 'a0204.img' is neither
+    dark.img nor q<N>.img」で停止していた。行の長さと語数は無制限になった。短い行の
+    conv.bat では結果は従来とビット一致。his_* の .exe 31 本を再ビルド。
 
 【ver 2.8 の変更点】
   ・his_rec_P_F、his_srec_P_F、his_DO、his_sg(2g)を新設。a.his から

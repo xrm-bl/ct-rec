@@ -57,6 +57,13 @@ Uesugi
     (offsetangle of ct_rec / ofct_rec / his_rec, RA0 of hp_tg / act_tg /
     ofct_srec / ofact_srec / his_srec / p_rec / sf_rec).  Only runs with
     RA0 != 0 are affected.  RA0 in the TIFF ImageDescription stays in radians.
+  - All his_* programs (rhis.c, 2026-11-26): the limit on the length of a
+    conv.bat line (2047 bytes) is gone.  img_ave lists every frame it averages
+    on one line, so a conv.bat averaging 204 or more frames named a0001.img
+    was cut in the middle and stopped with "img_ave destination 'a0204.img'
+    is neither dark.img nor q<N>.img".  Lines and word counts are now
+    unlimited.  Results for a conv.bat with short lines are bit-identical.
+    The 31 his_* .exe are rebuilt.
 
 [ver 2.8 changes]
   - New his_rec_P_F, his_srec_P_F, his_DO and his_sg (2g):
